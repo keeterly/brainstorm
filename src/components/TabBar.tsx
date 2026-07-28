@@ -1,15 +1,15 @@
 import { NavLink, useLocation } from 'react-router-dom'
 
+// Vision v2 navigation: Collect · Think · Current · Memory.
 const TABS = [
-  { to: '/', label: 'Capture', icon: '✎' },
-  { to: '/brain', label: 'Brain', icon: '◉' },
-  { to: '/focus', label: 'Focus', icon: '▸' },
-  { to: '/settings', label: 'More', icon: '⋯' },
+  { to: '/', label: 'Collect', icon: '✎' },
+  { to: '/think', label: 'Think', icon: '◉' },
+  { to: '/current', label: 'Current', icon: '▸' },
+  { to: '/memory', label: 'Memory', icon: '◍' },
 ]
 
 export function TabBar() {
   const { pathname } = useLocation()
-  // The Brain canvas is fullscreen; keep the bar so users can leave it.
   return (
     <nav
       aria-label="Primary"
@@ -21,14 +21,19 @@ export function TabBar() {
         height: 'calc(var(--tabbar-h) + var(--sab))',
         paddingBottom: 'var(--sab)',
         display: 'flex',
-        background: 'var(--bg-raised)',
-        borderTop: '1px solid var(--line)',
+        background: 'rgba(10, 13, 22, 0.85)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderTop: '0.5px solid rgba(180, 215, 255, 0.12)',
         zIndex: 100,
       }}
     >
       {TABS.map((t) => {
         const active =
-          t.to === '/' ? pathname === '/' : pathname.startsWith(t.to) || (t.to === '/settings' && ['/runs', '/import'].some((p) => pathname.startsWith(p)))
+          t.to === '/'
+            ? pathname === '/'
+            : pathname.startsWith(t.to) ||
+              (t.to === '/memory' && ['/runs', '/import', '/settings'].some((p) => pathname.startsWith(p)))
         return (
           <NavLink
             key={t.to}

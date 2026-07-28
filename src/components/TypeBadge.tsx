@@ -1,22 +1,23 @@
 import type { ThoughtType } from '@/domain/types'
 
-const LOOK: Record<ThoughtType, { label: string; bg: string; fg: string }> = {
-  note: { label: 'Note', bg: 'var(--bg-sunken)', fg: 'var(--ink-soft)' },
-  idea: { label: 'Idea', bg: '#eef2ee', fg: 'var(--map-1)' },
-  task: { label: 'Task', bg: 'var(--bg-sunken)', fg: 'var(--ink-soft)' },
-  action: { label: 'Action', bg: '#e9eef4', fg: 'var(--map-4)' },
-  question: { label: 'Question', bg: '#f2ecdd', fg: 'var(--warn)' },
-  problem: { label: 'Problem', bg: 'var(--danger-soft)', fg: 'var(--danger)' },
-  goal: { label: 'Goal', bg: 'var(--accent-soft)', fg: 'var(--accent-ink)' },
-  decision: { label: 'Decision', bg: '#efe9f3', fg: 'var(--map-5)' },
-  reference: { label: 'Reference', bg: 'var(--bg-sunken)', fg: 'var(--ink-faint)' },
-  constraint: { label: 'Constraint', bg: 'var(--bg-sunken)', fg: 'var(--ink-soft)' },
-  inspiration: { label: 'Inspiration', bg: '#f3ede4', fg: 'var(--map-3)' },
-  concept: { label: 'Theme', bg: '#e9efef', fg: 'var(--map-6)' },
+// Type chips over the dark world — mineral tints on glass.
+const LABEL: Record<ThoughtType, string> = {
+  note: 'Note',
+  idea: 'Idea',
+  task: 'Task',
+  action: 'Action',
+  question: 'Question',
+  problem: 'Problem',
+  goal: 'Goal',
+  decision: 'Decision',
+  reference: 'Reference',
+  constraint: 'Constraint',
+  inspiration: 'Inspiration',
+  concept: 'Theme',
 }
 
 export function TypeBadge({ type, ai }: { type: ThoughtType; ai?: boolean }) {
-  const look = LOOK[type] ?? LOOK.note
+  const tint = `var(--tint-${type}, var(--ink-soft))`
   return (
     <span
       className="mono"
@@ -25,16 +26,17 @@ export function TypeBadge({ type, ai }: { type: ThoughtType; ai?: boolean }) {
         display: 'inline-flex',
         alignItems: 'center',
         gap: 4,
-        padding: '2px 8px',
+        padding: '2px 9px',
         borderRadius: 'var(--r-full)',
-        background: look.bg,
-        color: look.fg,
+        border: `0.5px solid color-mix(in srgb, ${tint} 55%, transparent)`,
+        background: `color-mix(in srgb, ${tint} 12%, transparent)`,
+        color: tint,
         fontSize: 'var(--fs-caption)',
         textTransform: 'uppercase',
-        letterSpacing: '0.04em',
+        letterSpacing: '0.05em',
       }}
     >
-      {look.label}
+      {LABEL[type] ?? type}
       {ai && <span aria-hidden>·ai</span>}
     </span>
   )

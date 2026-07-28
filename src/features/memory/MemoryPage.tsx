@@ -1,3 +1,5 @@
+// Memory — everything the water keeps: the ocean of finished work, the
+// editable facts the AI knows about you, and the app's few quiet controls.
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
@@ -6,8 +8,9 @@ import { useAction } from '@/ai/useAction'
 import type { DistillOutput } from '@shared/ai/actions/distill-memory'
 import { exportMarkdown } from '@/domain/export-markdown'
 import { clearSnapshot } from '@/lib/idb'
+import { TypeBadge } from '@/components/TypeBadge'
 
-export default function SettingsPage() {
+export default function MemoryPage() {
   const profile = useGraph((s) => s.profile)
   const memories = useGraph((s) => s.memories)
   const thoughts = useGraph((s) => s.thoughts)
@@ -18,6 +21,7 @@ export default function SettingsPage() {
   const updateMemory = useGraph((s) => s.updateMemory)
   const deleteMemory = useGraph((s) => s.deleteMemory)
   const updateProfileSettings = useGraph((s) => s.updateProfileSettings)
+  const toggleDone = useGraph((s) => s.toggleDone)
 
   const [newMem, setNewMem] = useState('')
   const [distillText, setDistillText] = useState('')
@@ -25,9 +29,12 @@ export default function SettingsPage() {
   const distill = useAction<DistillOutput>('distill_memory')
 
   const autonomy = profile?.settings.autonomy ?? 'suggest'
+  const ocean = thoughts
+    .filter((t) => t.status === 'done')
+    .sort((a, b) => ((a.completed_at ?? '') < (b.completed_at ?? '') ? 1 : -1))
+    .slice(0, 30)
 
   useEffect(() => {
-    // This month's AI spend from agent_runs (best-effort).
     const since = new Date()
     since.setDate(1)
     since.setHours(0, 0, 0, 0)
@@ -62,33 +69,15 @@ export default function SettingsPage() {
 
   return (
     <div className="page">
-      <h1 className="page-title">Settings</h1>
+      <div className="eyebrow" style={{ marginBottom: 6 }}>
+        Memory
+      </div>
+      <h1 className="page-title">What the water keeps</h1>
 
       <section className="card" style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>AI autonomy</h2>
+        <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>Known about you</h2>
         <p className="muted" style={{ fontSize: 'var(--fs-label)', marginBottom: 10 }}>
-          How much should Brainstorm do on its own?
-        </p>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            className={`chip ${autonomy === 'suggest' ? 'chip--on' : ''}`}
-            onClick={() => updateProfileSettings({ autonomy: 'suggest' })}
-          >
-            Suggest only
-          </button>
-          <button
-            className={`chip ${autonomy === 'organize' ? 'chip--on' : ''}`}
-            onClick={() => updateProfileSettings({ autonomy: 'organize' })}
-          >
-            Organize automatically
-          </button>
-        </div>
-      </section>
-
-      <section className="card" style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>Memory</h2>
-        <p className="muted" style={{ fontSize: 'var(--fs-label)', marginBottom: 10 }}>
-          Everything the AI knows about you long-term. Fully yours — edit or delete anything.
+          Fully yours — edit or delete anything. It shapes every AI suggestion.
         </p>
         <div style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
           {memories.map((m) => (
@@ -100,9 +89,13 @@ export default function SettingsPage() {
               onDelete={() => deleteMemory(m.id)}
             />
           ))}
-          {memories.length === 0 && <p className="faint" style={{ fontSize: 'var(--fs-label)' }}>Nothing remembered yet.</p>}
+          {memories.length === 0 && (
+            <p className="faint" style={{ fontSize: 'var(--fs-label)' }}>
+              Nothing remembered yet.
+            </p>
+          )}
         </div>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
           <input
             placeholder="Add a fact, preference, or constraint…"
             value={newMem}
@@ -113,7 +106,7 @@ export default function SettingsPage() {
                 setNewMem('')
               }
             }}
-            style={{ flex: 1, minHeight: 40, padding: '0 12px', border: '1px solid var(--line-mid)', borderRadius: 'var(--r-md)' }}
+            style={inputStyle}
           />
           <button
             className="btn btn--sm"
@@ -134,8 +127,8 @@ export default function SettingsPage() {
             value={distillText}
             onChange={(e) => setDistillText(e.target.value)}
             rows={4}
-            placeholder="Paste notes, an email, a bio — the AI extracts durable facts for your review."
-            style={{ width: '100%', marginTop: 8, padding: 12, border: '1px solid var(--line-mid)', borderRadius: 'var(--r-md)', resize: 'vertical' }}
+            placeholder="Paste notes, an email, a bio — durable facts are extracted for your review."
+            style={{ ...inputStyle, width: '100%', marginTop: 8, padding: 12, resize: 'vertical', minHeight: 90 }}
           />
           <button
             className="btn btn--sm btn--accent"
@@ -152,14 +145,80 @@ export default function SettingsPage() {
       </section>
 
       <section className="card" style={{ marginBottom: 16 }}>
+        <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>The ocean</h2>
+        <p className="muted" style={{ fontSize: 'var(--fs-label)', marginBottom: 10 }}>
+          Finished work settles here. Tap to reopen.
+        </p>
+        {ocean.length === 0 && (
+          <p className="faint" style={{ fontSize: 'var(--fs-label)' }}>
+            Still empty — completed thoughts will collect below.
+          </p>
+        )}
+        <div style={{ display: 'grid', gap: 6 }}>
+          {ocean.map((t) => (
+            <div key={t.id} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <button
+                aria-label="Reopen"
+                onClick={() => toggleDone(t.id)}
+                style={{
+                  width: 18,
+                  height: 18,
+                  borderRadius: '50%',
+                  background: 'var(--ok)',
+                  flexShrink: 0,
+                  opacity: 0.7,
+                }}
+              />
+              <Link
+                to={`/thought/${t.id}`}
+                style={{
+                  flex: 1,
+                  fontSize: 'var(--fs-label)',
+                  color: 'var(--ink-soft)',
+                  textDecoration: 'none',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {t.title || t.raw_content.slice(0, 80)}
+              </Link>
+              <TypeBadge type={t.type} />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="card" style={{ marginBottom: 16 }}>
+        <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>How much the AI does</h2>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            className={`chip ${autonomy === 'suggest' ? 'chip--on' : ''}`}
+            onClick={() => updateProfileSettings({ autonomy: 'suggest' })}
+          >
+            Suggest only
+          </button>
+          <button
+            className={`chip ${autonomy === 'organize' ? 'chip--on' : ''}`}
+            onClick={() => updateProfileSettings({ autonomy: 'organize' })}
+          >
+            Organize automatically
+          </button>
+        </div>
+      </section>
+
+      <section className="card" style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>Data</h2>
         <div style={{ display: 'grid', gap: 8 }}>
-          <button className="btn btn--ghost" onClick={download}>⬇ Export everything as Markdown</button>
+          <button className="btn btn--ghost" onClick={download}>
+            ⬇ Export everything as Markdown
+          </button>
           <Link to="/import" className="btn btn--ghost" style={{ textDecoration: 'none' }}>
             ⇪ Import from VENIA Brainstorm
           </Link>
           <Link to="/runs" className="btn btn--ghost" style={{ textDecoration: 'none' }}>
-            ⚙ AI activity {spend != null && <span className="mono faint">(${spend.toFixed(2)} this month)</span>}
+            ⚙ AI activity{' '}
+            {spend != null && <span className="mono faint">(${spend.toFixed(2)} this month)</span>}
           </Link>
         </div>
       </section>
@@ -175,6 +234,16 @@ export default function SettingsPage() {
       </button>
     </div>
   )
+}
+
+const inputStyle: React.CSSProperties = {
+  flex: 1,
+  minHeight: 40,
+  padding: '0 12px',
+  border: '0.5px solid rgba(255,255,255,0.22)',
+  borderRadius: 'var(--r-md)',
+  background: 'rgba(255,255,255,0.05)',
+  color: 'var(--ink)',
 }
 
 function MemoryRow({
@@ -193,11 +262,7 @@ function MemoryRow({
   if (editing) {
     return (
       <div style={{ display: 'flex', gap: 6 }}>
-        <input
-          value={v}
-          onChange={(e) => setV(e.target.value)}
-          style={{ flex: 1, minHeight: 36, padding: '0 10px', border: '1px solid var(--line-mid)', borderRadius: 'var(--r-sm)' }}
-        />
+        <input value={v} onChange={(e) => setV(e.target.value)} style={inputStyle} />
         <button
           className="btn btn--sm"
           onClick={() => {
@@ -215,8 +280,12 @@ function MemoryRow({
       <button onClick={() => setEditing(true)} style={{ flex: 1, textAlign: 'left', fontSize: 'var(--fs-label)' }}>
         {content}
       </button>
-      <span className="mono faint" style={{ fontSize: 'var(--fs-caption)' }}>{source}</span>
-      <button aria-label="Delete memory" className="faint" onClick={onDelete}>×</button>
+      <span className="mono faint" style={{ fontSize: 'var(--fs-caption)' }}>
+        {source}
+      </span>
+      <button aria-label="Delete memory" className="faint" onClick={onDelete}>
+        ×
+      </button>
     </div>
   )
 }

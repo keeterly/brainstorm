@@ -1,16 +1,21 @@
+// Collect — capture anything, decide nothing. Thoughts splash out of the
+// water; the AI quietly classifies and, at most, asks one good question.
 import { useCallback, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useGraph } from '@/store/graph'
 import { parseCapture } from '@/domain/parse-blocks'
 import { runAction } from '@/ai/client'
 import type { ClassifyOutput } from '@shared/ai/actions/classify-thought'
 import { TypeBadge } from '@/components/TypeBadge'
-import { useVoice } from './useVoice'
+import { useVoice } from '@/features/capture/useVoice'
+import { splashAt } from '@/world/Atmosphere'
+import { nextBest } from '@/world/interaction'
 import type { Thought } from '@/domain/types'
 
-export default function CapturePage() {
+export default function CollectPage() {
   const navigate = useNavigate()
   const thoughts = useGraph((s) => s.thoughts)
+  const relationships = useGraph((s) => s.relationships)
   const addThought = useGraph((s) => s.addThought)
   const addRelationship = useGraph((s) => s.addRelationship)
   const updateThought = useGraph((s) => s.updateThought)
@@ -18,7 +23,7 @@ export default function CapturePage() {
   const offline = useGraph((s) => s.offline)
 
   const [text, setText] = useState('')
-  const [questions, setQuestions] = useState<Record<string, string>>({}) // thoughtId -> clarifying q
+  const [question, setQuestion] = useState<{ id: string; q: string } | null>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
 
   const voice = useVoice(
@@ -29,7 +34,6 @@ export default function CapturePage() {
 
   const classify = useCallback(
     async (thought: Thought) => {
-      // AI understanding is additive — capture already succeeded.
       try {
         const { output } = await runAction<ClassifyOutput>('classify_thought', {
           raw_content: thought.raw_content,
@@ -42,11 +46,10 @@ export default function CapturePage() {
         }
         if (output.suggestedDue && !thought.due_date) patch.due_date = output.suggestedDue
         updateThought(thought.id, patch)
-        if (output.clarifyingQuestion) {
-          setQuestions((q) => ({ ...q, [thought.id]: output.clarifyingQuestion! }))
-        }
+        // One good question — never an interview.
+        if (output.clarifyingQuestion) setQuestion({ id: thought.id, q: output.clarifyingQuestion })
       } catch {
-        /* thought stays a plain note — user can classify manually */
+        /* stays a plain note — the world is fully usable without AI */
       }
     },
     [updateThought],
@@ -58,21 +61,21 @@ export default function CapturePage() {
     const blocks = parseCapture(v)
     for (const b of [...blocks].reverse()) {
       if (b.children.length) {
-        const goal = addThought({
-          raw_content: b.title,
-          title: b.title,
-          type: 'goal',
-          due_date: b.due,
-        })
+        const goal = addThought({ raw_content: b.title, title: b.title, type: 'goal', due_date: b.due })
         for (const c of b.children) {
           const child = addThought({ raw_content: c, title: c, type: 'action' })
           addRelationship(child.id, goal.id, 'part_of')
         }
       } else {
-        const t = addThought({ raw_content: b.body, due_date: b.due, source: voice.listening ? 'voice' : 'text' })
+        const t = addThought({
+          raw_content: b.body,
+          due_date: b.due,
+          source: voice.listening ? 'voice' : 'text',
+        })
         if (!offline) void classify(t)
       }
     }
+    splashAt(window.innerWidth * (0.25 + Math.random() * 0.5), window.innerHeight - 150)
     setText('')
     if (taRef.current) {
       taRef.current.style.height = 'auto'
@@ -80,12 +83,14 @@ export default function CapturePage() {
     }
   }, [text, addThought, addRelationship, classify, offline, voice.listening])
 
-  const recent = thoughts.filter((t) => t.status !== 'archived').slice(0, 12)
-  const rec = profile?.settings.recommended_action
-  const recThought = rec ? thoughts.find((t) => t.id === rec.id && t.status === 'open') : null
+  const recent = thoughts.filter((t) => t.status !== 'archived').slice(0, 10)
+  const best = nextBest(thoughts, relationships, profile)
 
   return (
     <div className="page">
+      <div className="eyebrow" style={{ marginBottom: 6 }}>
+        Collect
+      </div>
       <h1 className="page-title">What is on your mind?</h1>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -123,7 +128,7 @@ export default function CapturePage() {
             justifyContent: 'space-between',
             alignItems: 'center',
             padding: 'var(--sp-2) var(--sp-3)',
-            borderTop: '1px solid var(--line)',
+            borderTop: '0.5px solid rgba(255,255,255,0.09)',
           }}
         >
           {voice.supported ? (
@@ -143,25 +148,57 @@ export default function CapturePage() {
         </div>
       </div>
 
-      {recThought && rec && (
-        <Link to="/focus" style={{ textDecoration: 'none' }}>
-          <div className="card" style={{ marginTop: 'var(--sp-4)', borderColor: 'var(--accent)' }}>
-            <div className="mono" style={{ color: 'var(--accent-ink)', marginBottom: 4 }}>
-              NEXT ACTION
-            </div>
-            <div style={{ fontWeight: 600 }}>{recThought.title || recThought.raw_content}</div>
-            <p className="muted" style={{ marginTop: 4, fontSize: 'var(--fs-label)' }}>
-              {rec.why}
-            </p>
+      {question && (
+        <div className="card" style={{ marginTop: 'var(--sp-4)', borderColor: 'rgba(122,215,255,0.4)' }}>
+          <div className="eyebrow" style={{ color: 'var(--water)', marginBottom: 6 }}>
+            One question
           </div>
-        </Link>
+          <p style={{ fontWeight: 550 }}>{question.q}</p>
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <button className="btn btn--sm btn--ghost" onClick={() => navigate(`/thought/${question.id}`)}>
+              Answer on the thought
+            </button>
+            <button className="btn btn--sm btn--ghost" onClick={() => setQuestion(null)}>
+              Not now
+            </button>
+          </div>
+        </div>
+      )}
+
+      {best.kind === 'rain' && (
+        <button
+          onClick={() => navigate('/think')}
+          className="card"
+          style={{ marginTop: 'var(--sp-4)', width: '100%', textAlign: 'left', borderColor: 'rgba(122,215,255,0.4)' }}
+        >
+          <div className="eyebrow" style={{ color: 'var(--water)', marginBottom: 4 }}>
+            Saturated
+          </div>
+          <div style={{ fontWeight: 600 }}>“{best.cloud.title}” is ready to rain</div>
+          <p className="muted" style={{ fontSize: 'var(--fs-label)', marginTop: 4 }}>
+            Open the sky and turn it into actions.
+          </p>
+        </button>
+      )}
+      {best.kind === 'action' && (
+        <button
+          onClick={() => navigate('/current')}
+          className="card"
+          style={{ marginTop: 'var(--sp-4)', width: '100%', textAlign: 'left', borderColor: 'rgba(122,215,255,0.4)' }}
+        >
+          <div className="eyebrow" style={{ color: 'var(--water)', marginBottom: 4 }}>
+            Next in the current
+          </div>
+          <div style={{ fontWeight: 600 }}>{best.thought.title || best.thought.raw_content}</div>
+          <p className="muted" style={{ fontSize: 'var(--fs-label)', marginTop: 4 }}>
+            {best.why}
+          </p>
+        </button>
       )}
 
       <h2 style={{ fontSize: 'var(--fs-md)', margin: 'var(--sp-6) 0 var(--sp-3)' }}>Recent</h2>
       {recent.length === 0 && (
-        <p className="faint">
-          Nothing captured yet. Try typing an idea, a worry, half a plan — anything.
-        </p>
+        <p className="faint">Nothing captured yet. An idea, a worry, half a plan — anything.</p>
       )}
       <div style={{ display: 'grid', gap: 8 }}>
         {recent.map((t) => (
@@ -173,9 +210,9 @@ export default function CapturePage() {
               display: 'grid',
               gap: 4,
               padding: 'var(--sp-3)',
-              border: '1px solid var(--line)',
+              border: '0.5px solid var(--glass-line)',
               borderRadius: 'var(--r-md)',
-              background: 'var(--bg-raised)',
+              background: 'var(--glass)',
               opacity: t.status === 'done' ? 0.55 : 1,
             }}
           >
@@ -187,22 +224,9 @@ export default function CapturePage() {
                 </span>
               )}
             </div>
-            <div
-              style={{
-                fontWeight: 500,
-                textDecoration: t.status === 'done' ? 'line-through' : 'none',
-              }}
-            >
+            <div style={{ fontWeight: 500, textDecoration: t.status === 'done' ? 'line-through' : 'none' }}>
               {t.title || t.raw_content.slice(0, 140)}
             </div>
-            {questions[t.id] && (
-              <div
-                className="chip chip--ai"
-                style={{ justifySelf: 'start', whiteSpace: 'normal', height: 'auto', padding: '4px 10px' }}
-              >
-                {questions[t.id]}
-              </div>
-            )}
           </button>
         ))}
       </div>

@@ -14,8 +14,8 @@ export default defineConfig({
         short_name: 'Brainstorm',
         description:
           'AI Thinking OS — turn scattered thoughts into connected ideas, visual maps, and actionable plans.',
-        theme_color: '#0e0e0e',
-        background_color: '#fafaf8',
+        theme_color: '#04050a',
+        background_color: '#04050a',
         display: 'standalone',
         start_url: '/',
         icons: [

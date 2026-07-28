@@ -28,6 +28,7 @@ export interface NewThought {
   due_date?: string | null
   project_id?: string | null
   effort?: number | null
+  bucket?: Bucket | null
   extra?: Record<string, unknown>
   created_at?: string
 }
@@ -176,7 +177,7 @@ export const useGraph = create<GraphState>((set, get) => ({
       summary: input.summary ?? null,
       type: input.type ?? 'note',
       status: 'open',
-      bucket: null,
+      bucket: input.bucket ?? null,
       source: input.source ?? 'text',
       confidence: null,
       urgency: null,

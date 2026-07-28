@@ -1,0 +1,238 @@
+/* The Think world — droplets and clouds over dark water. */
+.think-stage {
+  position: fixed;
+  inset: 0;
+  bottom: calc(var(--tabbar-h) + var(--sab));
+  overflow: hidden;
+  touch-action: none;
+  z-index: 1;
+}
+
+.think-goo {
+  position: absolute;
+  inset: 0;
+  filter: url(#bs-gooey)
+    drop-shadow(0 0 1.4px rgba(190, 225, 255, 0.34))
+    drop-shadow(-1.6px 0.5px 1.3px rgba(122, 215, 255, 0.16))
+    drop-shadow(1.6px -0.5px 1.3px rgba(255, 190, 130, 0.09));
+}
+.think-goo.flash {
+  filter: url(#bs-gooey)
+    drop-shadow(0 0 2.5px rgba(122, 215, 255, 0.95))
+    drop-shadow(0 0 16px rgba(122, 215, 255, 0.4));
+  transition: filter 120ms;
+}
+.think-core {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  background: var(--glass-solid);
+  will-change: transform;
+}
+.think-core--cloud {
+  background: var(--cloud);
+}
+
+.think-gloss {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.think-tether {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.think-tether path {
+  fill: none;
+  stroke: rgba(122, 215, 255, 0.16);
+  stroke-width: 1;
+  stroke-dasharray: 2 5;
+}
+
+.think-bub {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  will-change: transform;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.think-bub::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle 9% at 33% 22%, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.08) 55%, transparent 70%),
+    radial-gradient(ellipse 60% 30% at 50% 15%, transparent 60%, rgba(210, 235, 255, 0.1) 66%, transparent 72%),
+    radial-gradient(ellipse 55% 28% at 50% 89%, transparent 58%, rgba(150, 210, 255, 0.1) 64%, transparent 70%),
+    radial-gradient(circle at 50% 118%, rgba(122, 215, 255, 0.13), transparent 58%),
+    radial-gradient(circle at 50% 26%, rgba(220, 240, 255, 0.05), transparent 55%);
+}
+.think-bub::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 108%, var(--tint, transparent), transparent 52%);
+  opacity: 0.15;
+}
+.think-bub .txt {
+  position: relative;
+  z-index: 1;
+  width: 74%;
+  font-size: 13px;
+  line-height: 1.35;
+  font-weight: 400;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.85);
+}
+.think-bub .kind {
+  position: absolute;
+  z-index: 1;
+  bottom: 16%;
+  left: 0;
+  right: 0;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--tint, var(--ink-soft));
+  opacity: 0.85;
+}
+.think-bub.pop {
+  animation: think-pop 520ms cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+@keyframes think-pop {
+  from {
+    scale: 0.15;
+    opacity: 0;
+  }
+  to {
+    scale: 1;
+    opacity: 1;
+  }
+}
+
+.think-cloudlabel {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+.think-cloudlabel .name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.9);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.think-cloudlabel .meta {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.think-cloudlabel .meta.ready {
+  color: var(--water);
+}
+
+.think-raindrop {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 5px;
+  height: 11px;
+  border-radius: 50% 50% 60% 60% / 40% 40% 60% 60%;
+  background: linear-gradient(rgba(190, 230, 255, 0.15), rgba(122, 215, 255, 0.75));
+  will-change: transform;
+  pointer-events: none;
+}
+
+.think-meter {
+  position: fixed;
+  z-index: 5;
+  transform: translate(-50%, -50%);
+  font-size: 58px;
+  font-weight: 200;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  text-shadow: 0 0 24px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 160ms;
+}
+.think-meter.on {
+  opacity: 1;
+}
+.think-meter.zero {
+  color: var(--water);
+}
+
+.think-top {
+  position: fixed;
+  z-index: 6;
+  top: calc(var(--sat) + 14px);
+  left: 0;
+  right: 0;
+  text-align: center;
+  pointer-events: none;
+}
+.think-top .weather {
+  margin-top: 5px;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  transition: color 400ms;
+}
+
+.think-quick {
+  position: fixed;
+  z-index: 6;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--tabbar-h) + var(--sab) + 16px);
+  width: min(88vw, 430px);
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+.think-quick .chip {
+  pointer-events: auto;
+  box-shadow: var(--shadow-pop);
+}
+
+.think-bar {
+  position: fixed;
+  z-index: 7;
+  left: 8px;
+  right: 8px;
+  bottom: calc(var(--tabbar-h) + var(--sab) + 8px);
+  background: var(--sheet);
+  border: 0.5px solid var(--glass-line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: var(--sp-3);
+}

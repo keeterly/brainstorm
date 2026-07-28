@@ -2,26 +2,32 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { AuthGate } from '@/features/auth/AuthGate'
 import { TabBar } from '@/components/TabBar'
 import { OfflineBanner } from '@/components/OfflineBanner'
-import CapturePage from '@/features/capture/CapturePage'
-import BrainPage from '@/features/brain/BrainPage'
-import FocusPage from '@/features/focus/FocusPage'
+import { Atmosphere } from '@/world/Atmosphere'
+import CollectPage from '@/features/collect/CollectPage'
+import ThinkPage from '@/features/think/ThinkPage'
+import CurrentPage from '@/features/current/CurrentPage'
+import MemoryPage from '@/features/memory/MemoryPage'
 import ThoughtPage from '@/features/thought/ThoughtPage'
-import SettingsPage from '@/features/settings/SettingsPage'
 import RunsPage from '@/features/runs/RunsPage'
 import ImportPage from '@/features/importer/ImportPage'
 
 export default function App() {
   return (
     <AuthGate>
+      <Atmosphere />
       <OfflineBanner />
       <Routes>
-        <Route path="/" element={<CapturePage />} />
-        <Route path="/brain" element={<BrainPage />} />
-        <Route path="/focus" element={<FocusPage />} />
+        <Route path="/" element={<CollectPage />} />
+        <Route path="/think" element={<ThinkPage />} />
+        <Route path="/current" element={<CurrentPage />} />
+        <Route path="/memory" element={<MemoryPage />} />
         <Route path="/thought/:id" element={<ThoughtPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
         <Route path="/runs" element={<RunsPage />} />
         <Route path="/import" element={<ImportPage />} />
+        {/* pre-v2 paths */}
+        <Route path="/brain" element={<Navigate to="/think" replace />} />
+        <Route path="/focus" element={<Navigate to="/current" replace />} />
+        <Route path="/settings" element={<Navigate to="/memory" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <TabBar />
