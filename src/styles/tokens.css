@@ -1,0 +1,87 @@
+/* Brainstorm design tokens — calm, editorial, premium-minimal.
+   A neutral identity of its own (deliberately not VENIA-branded):
+   warm paper ground, near-black ink, one restrained sage accent. */
+:root {
+  /* surfaces */
+  --bg: #fafaf8;
+  --bg-raised: #ffffff;
+  --bg-sunken: #f1f1ee;
+  --bg-inverse: #0e0e0e;
+
+  /* ink */
+  --ink: #141412;
+  --ink-soft: #55554f;
+  --ink-faint: #8b8b83;
+  --ink-on-inverse: #fafaf8;
+
+  /* lines */
+  --line: #e4e4df;
+  --line-mid: #c9c9c2;
+  --line-strong: #141412;
+
+  /* accent — sage; used sparingly for AI presence + primary actions */
+  --accent: #4a6353;
+  --accent-soft: #e8ede9;
+  --accent-ink: #32463a;
+
+  /* semantic */
+  --danger: #a03d32;
+  --danger-soft: #f4e7e5;
+  --warn: #8a6d2f;
+  --warn-soft: #f2ecdd;
+  --ok: #3d6a4e;
+
+  /* node/edge palette for the Visual Brain (muted, print-like) */
+  --map-1: #3f6a50;
+  --map-2: #9e3b34;
+  --map-3: #a67b2c;
+  --map-4: #3b5876;
+  --map-5: #6b4a7a;
+  --map-6: #4a6b6b;
+
+  /* type */
+  --font-display: 'Archivo', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-body: 'Archivo', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: 'DM Mono', 'SF Mono', Menlo, monospace;
+
+  --fs-caption: 0.6875rem; /* 11 */
+  --fs-label: 0.75rem; /* 12 */
+  --fs-body: 0.9375rem; /* 15 */
+  --fs-md: 1.0625rem; /* 17 */
+  --fs-lg: 1.375rem; /* 22 */
+  --fs-xl: 1.75rem; /* 28 */
+  --fs-2xl: 2.25rem; /* 36 */
+
+  /* space (4px scale) */
+  --sp-1: 0.25rem;
+  --sp-2: 0.5rem;
+  --sp-3: 0.75rem;
+  --sp-4: 1rem;
+  --sp-5: 1.5rem;
+  --sp-6: 2rem;
+  --sp-7: 3rem;
+  --sp-8: 4rem;
+
+  /* shape — softly squared: quiet, not sharp-corporate, not bubbly */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
+  --r-full: 999px;
+
+  /* motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 140ms;
+  --dur-med: 240ms;
+
+  /* elevation */
+  --shadow-sheet: 0 -8px 40px rgba(20, 20, 18, 0.14);
+  --shadow-pop: 0 4px 24px rgba(20, 20, 18, 0.1);
+
+  /* iOS safe areas */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+
+  /* layout */
+  --maxw-page: 44rem;
+  --tabbar-h: 56px;
+}
