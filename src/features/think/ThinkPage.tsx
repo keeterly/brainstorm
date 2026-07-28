@@ -68,9 +68,11 @@ export default function ThinkPage() {
   const meterRef = useRef<HTMLDivElement>(null)
 
   // ---------- derive the model from the graph ----------
+  // Only the newest few thoughts float — the rest wait beneath the surface.
+  const allLoose = useMemo(() => looseDroplets(thoughts, relationships), [thoughts, relationships])
   const model: Model = useMemo(() => {
-    const loose = looseDroplets(thoughts, relationships)
-      .slice(0, 40)
+    const loose = allLoose
+      .slice(0, 8)
       .map((t) => {
         const label = t.title || t.raw_content.slice(0, 90)
         return { id: t.id, label, kind: t.type, r: radiusFor(label) }
@@ -94,7 +96,8 @@ export default function ThinkPage() {
       .filter((r) => (r.type === 'relates_to' || r.type === 'inspired_by') && looseIds.has(r.from_id) && looseIds.has(r.to_id))
       .map((r) => ({ a: r.from_id, b: r.to_id }))
     return { drops: loose, clouds, tethers }
-  }, [thoughts, relationships])
+  }, [allLoose, thoughts, relationships])
+  const beneath = Math.max(0, allLoose.length - 8)
 
   const modelRef = useRef(model)
   modelRef.current = model
@@ -180,10 +183,11 @@ export default function ThinkPage() {
     [addRelationship],
   )
 
-  const condenseBest = useCallback(() => {
-    const loose = modelRef.current.drops
+  // Mist only forms when the world actually sees a theme — the condense
+  // affordance does not exist otherwise. Remove decisions, never add them.
+  const mist = useMemo(() => {
     const buckets = new Map<string, string[]>()
-    for (const d of loose) {
+    for (const d of model.drops) {
       const words = new Set(d.label.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 4 && !STOP.has(w)))
       for (const w of words) {
         if (!buckets.has(w)) buckets.set(w, [])
@@ -192,13 +196,14 @@ export default function ThinkPage() {
     }
     let best: { w: string; ids: string[] } | null = null
     for (const [w, ids] of buckets) if (ids.length >= 3 && (!best || ids.length > best.ids.length)) best = { w, ids }
-    if (!best) {
-      setNotice('nothing wants to condense yet — connect thoughts by dragging them together')
-      return
-    }
-    for (let i = 1; i < best.ids.length; i++) addRelationship(best.ids[0], best.ids[i], 'relates_to')
-    condenseGroup(best.ids)
-  }, [addRelationship, condenseGroup])
+    return best
+  }, [model.drops])
+
+  const condenseBest = useCallback(() => {
+    if (!mist) return
+    for (let i = 1; i < mist.ids.length; i++) addRelationship(mist.ids[0], mist.ids[i], 'relates_to')
+    condenseGroup(mist.ids)
+  }, [mist, addRelationship, condenseGroup])
 
   const rainFrom = useCallback(
     (cloudId: string) => {
@@ -313,7 +318,8 @@ export default function ThinkPage() {
         }
         n.r = d.r
         n.el.style.setProperty('--tint', `var(--tint-${d.kind}, var(--ink-soft))`)
-        n.el.innerHTML = `<div class="txt"></div><div class="kind">${d.kind}</div>`
+        // quiet by default: the tint carries the kind; words stay short
+        n.el.innerHTML = `<div class="txt"></div>`
         n.el.querySelector('.txt')!.textContent = d.label
         const dia = `${d.r * 2}px`
         n.coreEl.style.width = n.coreEl.style.height = dia
@@ -357,9 +363,10 @@ export default function ThinkPage() {
             n.cores.push(core)
           }
         }
+        // clouds stay silent unless they have something to say
         n.el.innerHTML =
           `<div class="name"></div>` +
-          `<div class="meta ${c.saturated ? 'ready' : ''}">${c.saturated ? '● saturated — tap to rain' : `${c.membersOpen} thought${c.membersOpen === 1 ? '' : 's'}`}</div>`
+          (c.saturated ? `<div class="meta ready">● tap to rain</div>` : '')
         n.el.querySelector('.name')!.textContent = c.name
         n.el.style.width = `${c.w}px`
         n.el.style.height = `${c.w * 0.55}px`
@@ -597,16 +604,20 @@ export default function ThinkPage() {
       </div>
 
       <div className="think-top">
-        <div className="eyebrow" style={{ color: 'var(--ink)' }}>
-          Think
-        </div>
         <div className="weather">{notice ?? weather}</div>
+        {beneath > 0 && (
+          <div className="weather" style={{ opacity: 0.6 }}>
+            +{beneath} beneath the surface
+          </div>
+        )}
       </div>
 
-      <div className="think-quick">
-        <button className="chip chip--ai" onClick={condenseBest}>
-          ✦ Condense
-        </button>
+      <div className="think-quick" style={{ justifyContent: 'center' }}>
+        {mist && !selectedThought && (
+          <button className="chip chip--ai" onClick={condenseBest}>
+            ✦ mist is forming — condense “{mist.w}”
+          </button>
+        )}
         {model.drops.length === 0 && model.clouds.length === 0 && (
           <button className="chip" onClick={() => navigate('/')}>
             Collect a thought

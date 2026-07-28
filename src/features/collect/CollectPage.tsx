@@ -1,15 +1,15 @@
-// Collect — capture anything, decide nothing. Thoughts splash out of the
-// water; the AI quietly classifies and, at most, asks one good question.
+// Collect — capture. Nothing else. One field, at most one quiet card below
+// it, and a single faint line telling you the sky exists.
 import { useCallback, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGraph } from '@/store/graph'
 import { parseCapture } from '@/domain/parse-blocks'
 import { runAction } from '@/ai/client'
 import type { ClassifyOutput } from '@shared/ai/actions/classify-thought'
-import { TypeBadge } from '@/components/TypeBadge'
 import { useVoice } from '@/features/capture/useVoice'
 import { splashAt } from '@/world/Atmosphere'
 import { nextBest } from '@/world/interaction'
+import { looseDroplets, isCloudType } from '@/world/engine'
 import type { Thought } from '@/domain/types'
 
 export default function CollectPage() {
@@ -46,10 +46,9 @@ export default function CollectPage() {
         }
         if (output.suggestedDue && !thought.due_date) patch.due_date = output.suggestedDue
         updateThought(thought.id, patch)
-        // One good question — never an interview.
         if (output.clarifyingQuestion) setQuestion({ id: thought.id, q: output.clarifyingQuestion })
       } catch {
-        /* stays a plain note — the world is fully usable without AI */
+        /* stays a plain note — the world works without AI */
       }
     },
     [updateThought],
@@ -83,15 +82,24 @@ export default function CollectPage() {
     }
   }, [text, addThought, addRelationship, classify, offline, voice.listening])
 
-  const recent = thoughts.filter((t) => t.status !== 'archived').slice(0, 10)
   const best = nextBest(thoughts, relationships, profile)
+  const loose = looseDroplets(thoughts, relationships).length
+  const clouds = thoughts.filter((t) => t.status === 'open' && isCloudType(t)).length
+  const skyline =
+    loose + clouds === 0
+      ? null
+      : [
+          loose ? `${loose} thought${loose === 1 ? '' : 's'}` : null,
+          clouds ? `${clouds} cloud${clouds === 1 ? '' : 's'}` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ') + ' in the sky'
 
   return (
-    <div className="page">
-      <div className="eyebrow" style={{ marginBottom: 6 }}>
-        Collect
-      </div>
-      <h1 className="page-title">What is on your mind?</h1>
+    <div className="page" style={{ paddingTop: 'calc(var(--sat) + 14vh)' }}>
+      <h1 className="page-title" style={{ marginBottom: 'var(--sp-4)' }}>
+        What is on your mind?
+      </h1>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <textarea
@@ -109,7 +117,7 @@ export default function CollectPage() {
               capture()
             }
           }}
-          placeholder={'Anything — messy is fine.\nA heading with bullet lines becomes a plan. "by friday" sets a date.'}
+          placeholder="Anything — messy is fine."
           rows={3}
           style={{
             width: '100%',
@@ -137,7 +145,7 @@ export default function CollectPage() {
               onClick={voice.listening ? voice.stop : voice.start}
               aria-pressed={voice.listening}
             >
-              {voice.listening ? '● Listening…' : '🎤 Voice'}
+              {voice.listening ? '● Listening…' : '🎤'}
             </button>
           ) : (
             <span />
@@ -148,88 +156,53 @@ export default function CollectPage() {
         </div>
       </div>
 
-      {question && (
-        <div className="card" style={{ marginTop: 'var(--sp-4)', borderColor: 'rgba(122,215,255,0.4)' }}>
-          <div className="eyebrow" style={{ color: 'var(--water)', marginBottom: 6 }}>
-            One question
-          </div>
+      {/* one quiet card — a question if the AI just asked one, else the single
+          next thing, else nothing at all */}
+      {question ? (
+        <div className="card" style={{ marginTop: 'var(--sp-5)', borderColor: 'rgba(122,215,255,0.4)' }}>
           <p style={{ fontWeight: 550 }}>{question.q}</p>
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
             <button className="btn btn--sm btn--ghost" onClick={() => navigate(`/thought/${question.id}`)}>
-              Answer on the thought
+              Answer
             </button>
             <button className="btn btn--sm btn--ghost" onClick={() => setQuestion(null)}>
               Not now
             </button>
           </div>
         </div>
-      )}
-
-      {best.kind === 'rain' && (
+      ) : best.kind === 'rain' ? (
         <button
           onClick={() => navigate('/think')}
           className="card"
-          style={{ marginTop: 'var(--sp-4)', width: '100%', textAlign: 'left', borderColor: 'rgba(122,215,255,0.4)' }}
+          style={{ marginTop: 'var(--sp-5)', width: '100%', textAlign: 'left', borderColor: 'rgba(122,215,255,0.4)' }}
         >
-          <div className="eyebrow" style={{ color: 'var(--water)', marginBottom: 4 }}>
-            Saturated
-          </div>
           <div style={{ fontWeight: 600 }}>“{best.cloud.title}” is ready to rain</div>
           <p className="muted" style={{ fontSize: 'var(--fs-label)', marginTop: 4 }}>
-            Open the sky and turn it into actions.
+            Open the sky when you're ready.
           </p>
         </button>
-      )}
-      {best.kind === 'action' && (
+      ) : best.kind === 'action' ? (
         <button
           onClick={() => navigate('/current')}
           className="card"
-          style={{ marginTop: 'var(--sp-4)', width: '100%', textAlign: 'left', borderColor: 'rgba(122,215,255,0.4)' }}
+          style={{ marginTop: 'var(--sp-5)', width: '100%', textAlign: 'left', borderColor: 'rgba(122,215,255,0.4)' }}
         >
-          <div className="eyebrow" style={{ color: 'var(--water)', marginBottom: 4 }}>
-            Next in the current
-          </div>
           <div style={{ fontWeight: 600 }}>{best.thought.title || best.thought.raw_content}</div>
           <p className="muted" style={{ fontSize: 'var(--fs-label)', marginTop: 4 }}>
             {best.why}
           </p>
         </button>
-      )}
+      ) : null}
 
-      <h2 style={{ fontSize: 'var(--fs-md)', margin: 'var(--sp-6) 0 var(--sp-3)' }}>Recent</h2>
-      {recent.length === 0 && (
-        <p className="faint">Nothing captured yet. An idea, a worry, half a plan — anything.</p>
+      {skyline && (
+        <button
+          onClick={() => navigate('/think')}
+          className="faint"
+          style={{ display: 'block', margin: 'var(--sp-6) auto 0', fontSize: 'var(--fs-label)' }}
+        >
+          ◉ {skyline}
+        </button>
       )}
-      <div style={{ display: 'grid', gap: 8 }}>
-        {recent.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => navigate(`/thought/${t.id}`)}
-            style={{
-              textAlign: 'left',
-              display: 'grid',
-              gap: 4,
-              padding: 'var(--sp-3)',
-              border: '0.5px solid var(--glass-line)',
-              borderRadius: 'var(--r-md)',
-              background: 'var(--glass)',
-              opacity: t.status === 'done' ? 0.55 : 1,
-            }}
-          >
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <TypeBadge type={t.type} ai={t.confidence != null} />
-              {t.due_date && (
-                <span className="mono faint" style={{ fontSize: 'var(--fs-caption)' }}>
-                  due {t.due_date}
-                </span>
-              )}
-            </div>
-            <div style={{ fontWeight: 500, textDecoration: t.status === 'done' ? 'line-through' : 'none' }}>
-              {t.title || t.raw_content.slice(0, 140)}
-            </div>
-          </button>
-        ))}
-      </div>
     </div>
   )
 }

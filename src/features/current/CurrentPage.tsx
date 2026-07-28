@@ -1,5 +1,5 @@
-// The Current — today's flow, not a task list. One recommended action pinned;
-// only Now and Next are visible. Everything else stays in the world.
+// The Current — one meaningful action, large. Everything else stays folded
+// until asked for. Never a task list first.
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGraph } from '@/store/graph'
@@ -8,7 +8,7 @@ import { useAction } from '@/ai/useAction'
 import type { PrioritizeOutput } from '@shared/ai/actions/prioritize'
 import { evaporateAt } from '@/world/Atmosphere'
 import { FocusOverlay } from './FocusOverlay'
-import type { Bucket, Thought } from '@/domain/types'
+import type { Thought } from '@/domain/types'
 
 export default function CurrentPage() {
   const navigate = useNavigate()
@@ -24,23 +24,13 @@ export default function CurrentPage() {
   const ai = useAction<PrioritizeOutput>('prioritize')
   const [suggestion, setSuggestion] = useState<PrioritizeOutput | null>(null)
   const [focusId, setFocusId] = useState<string | null>(null)
+  const [showAll, setShowAll] = useState(false)
 
   const today = todayISO()
   const prepass = useMemo(
     () => prioritizePrepass(thoughts, relationships, today),
     [thoughts, relationships, today],
   )
-
-  const lanes = useMemo(() => {
-    const m = new Map<Bucket, Thought[]>([
-      ['now', []],
-      ['next', []],
-      ['later', []],
-      ['waiting', []],
-    ])
-    for (const t of prepass.visible) m.get(prepass.buckets.get(t.id) ?? 'later')!.push(t)
-    return m
-  }, [prepass])
 
   const goalTitle = useMemo(() => {
     const partOf = new Map(
@@ -52,6 +42,24 @@ export default function CurrentPage() {
       return g ? (byId.get(g)?.title ?? null) : null
     }
   }, [relationships, thoughts])
+
+  // Exactly one primary action; the rest wait behind a fold.
+  const rec = profile?.settings.recommended_action
+  const recThought = rec ? prepass.visible.find((t) => t.id === rec.id) : null
+  const flow = prepass.visible.filter((t) => {
+    const b = prepass.buckets.get(t.id)
+    return b === 'now' || b === 'next'
+  })
+  const primary = recThought ?? flow[0] ?? prepass.visible[0] ?? null
+  const primaryWhy = recThought && rec
+    ? rec.why
+    : primary?.due_date
+      ? `Due ${primary.due_date <= today ? 'now' : primary.due_date} — the water goes here first.`
+      : primary
+        ? 'The oldest thing waiting — a place to start.'
+        : ''
+  const rest = flow.filter((t) => t.id !== primary?.id)
+  const elsewhere = prepass.visible.length - (primary ? 1 : 0) - rest.length
 
   async function decideFirst() {
     const candidates = prepass.visible.slice(0, 80).map((t) => ({
@@ -80,50 +88,24 @@ export default function CurrentPage() {
     setSuggestion(null)
   }
 
-  const rec = profile?.settings.recommended_action
-  const recThought = rec ? thoughts.find((t) => t.id === rec.id && t.status === 'open') : null
   const focusThought = focusId ? thoughts.find((t) => t.id === focusId) : null
-  const now = lanes.get('now')!
-  const next = lanes.get('next')!
-  const restCount = lanes.get('later')!.length + lanes.get('waiting')!.length
-
   const complete = (t: Thought) => {
     toggleDone(t.id)
     evaporateAt()
+    if (rec?.id === t.id) updateProfileSettings({ recommended_action: null })
   }
 
   return (
-    <div className="page">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <div>
-          <div className="eyebrow" style={{ marginBottom: 6 }}>
-            Current
-          </div>
-          <h1 className="page-title">Today’s flow</h1>
-        </div>
-        <button
-          className="btn btn--sm btn--ghost"
-          onClick={decideFirst}
-          disabled={ai.status === 'running' || offline || prepass.visible.length === 0}
-        >
-          {ai.status === 'running' ? 'Thinking…' : '✦ Decide'}
-        </button>
-      </div>
-
-      {ai.status === 'error' && (
-        <div className="card" style={{ borderColor: 'rgba(255,105,97,0.4)', marginBottom: 'var(--sp-4)' }}>
-          <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-label)' }}>{ai.error}</p>
-          <button className="btn btn--sm btn--ghost" onClick={ai.retry} style={{ marginTop: 8 }}>
-            Retry
-          </button>
-        </div>
+    <div className="page" style={{ paddingTop: 'calc(var(--sat) + 12vh)' }}>
+      {prepass.visible.length === 0 && (
+        <>
+          <h1 className="page-title">The current is still</h1>
+          <p className="faint">When a cloud rains, its actions flow here — one at a time.</p>
+        </>
       )}
 
       {suggestion && (
         <div className="card" style={{ borderColor: 'rgba(122,215,255,0.4)', marginBottom: 'var(--sp-4)' }}>
-          <div className="eyebrow" style={{ color: 'var(--water)', marginBottom: 6 }}>
-            Suggested order
-          </div>
           <p className="muted" style={{ fontSize: 'var(--fs-label)', marginBottom: 10 }}>
             First: <strong>{thoughts.find((t) => t.id === suggestion.recommended.id)?.title ?? '—'}</strong> —{' '}
             {suggestion.recommended.why}
@@ -139,114 +121,120 @@ export default function CurrentPage() {
         </div>
       )}
 
-      {recThought && rec && !suggestion && (
-        <div className="card" style={{ borderColor: 'rgba(122,215,255,0.4)', marginBottom: 'var(--sp-5)' }}>
-          <div className="eyebrow" style={{ color: 'var(--water)', marginBottom: 4 }}>
+      {primary && !suggestion && (
+        <div style={{ textAlign: 'center', marginBottom: 'var(--sp-6)' }}>
+          <div className="eyebrow" style={{ color: 'var(--water)', marginBottom: 14 }}>
             This first
           </div>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>{recThought.title || recThought.raw_content}</div>
-          <p className="muted" style={{ fontSize: 'var(--fs-label)', marginBottom: 10 }}>{rec.why}</p>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn--primary btn--sm" onClick={() => setFocusId(recThought.id)}>
+          <div
+            style={{
+              fontSize: 24,
+              fontWeight: 300,
+              lineHeight: 1.45,
+              letterSpacing: '-0.01em',
+              maxWidth: 340,
+              margin: '0 auto',
+              textWrap: 'balance',
+            }}
+          >
+            {primary.title || primary.raw_content}
+          </div>
+          <p className="faint" style={{ fontSize: 'var(--fs-label)', marginTop: 10 }}>
+            {primaryWhy}
+          </p>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 18 }}>
+            <button className="btn btn--primary" onClick={() => setFocusId(primary.id)}>
               ▸ Focus
             </button>
-            <button className="btn btn--ghost btn--sm" onClick={() => complete(recThought)}>
+            <button className="btn btn--ghost" onClick={() => complete(primary)}>
               ✓ Done
             </button>
           </div>
         </div>
       )}
 
-      {prepass.visible.length === 0 && (
-        <p className="faint">
-          The current is still. Capture thoughts, let them condense, and rain will fill it.
+      {ai.status === 'error' && (
+        <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-label)', textAlign: 'center', marginBottom: 12 }}>
+          {ai.error}{' '}
+          <button style={{ textDecoration: 'underline', color: 'inherit' }} onClick={ai.retry}>
+            retry
+          </button>
         </p>
       )}
 
-      {[
-        { key: 'now' as const, label: 'Now', items: now },
-        { key: 'next' as const, label: 'Next', items: next },
-      ].map(
-        (lane) =>
-          lane.items.length > 0 && (
-            <section key={lane.key} style={{ marginBottom: 'var(--sp-5)' }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', marginBottom: 8 }}>
-                <h2 style={{ fontSize: 'var(--fs-md)' }}>{lane.label}</h2>
-                <span className="mono faint" style={{ fontSize: 'var(--fs-caption)' }}>
-                  {lane.items.length}
-                </span>
-              </div>
-              <div style={{ display: 'grid', gap: 6 }}>
-                {lane.items.map((t) => (
-                  <div
-                    key={t.id}
+      {rest.length > 0 && (
+        <div style={{ textAlign: 'center' }}>
+          <button className="faint" style={{ fontSize: 'var(--fs-label)' }} onClick={() => setShowAll((s) => !s)}>
+            {showAll ? '▴ fold the current' : `▾ ${rest.length} more in the current`}
+          </button>
+          {showAll && (
+            <div style={{ display: 'grid', gap: 6, marginTop: 14, textAlign: 'left' }}>
+              {rest.map((t) => (
+                <div
+                  key={t.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '10px 12px',
+                    border: '0.5px solid var(--glass-line)',
+                    borderRadius: 'var(--r-md)',
+                    background: 'var(--glass)',
+                  }}
+                >
+                  <button
+                    aria-label="Complete"
+                    onClick={() => complete(t)}
                     style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: 10,
-                      padding: '10px 12px',
-                      border: '0.5px solid var(--glass-line)',
-                      borderRadius: 'var(--r-md)',
-                      background: 'var(--glass)',
+                      width: 20,
+                      height: 20,
+                      borderRadius: '50%',
+                      border: '1.5px solid rgba(255,255,255,0.3)',
+                      flexShrink: 0,
                     }}
-                  >
-                    <button
-                      aria-label="Complete"
-                      onClick={() => complete(t)}
-                      style={{
-                        width: 22,
-                        height: 22,
-                        marginTop: 1,
-                        borderRadius: '50%',
-                        border: '1.5px solid rgba(255,255,255,0.3)',
-                        flexShrink: 0,
-                      }}
-                    />
-                    <button onClick={() => setFocusId(t.id)} style={{ textAlign: 'left', flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 500 }}>{t.title || t.raw_content.slice(0, 120)}</div>
-                      <div style={{ display: 'flex', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
-                        {goalTitle(t) && (
-                          <span className="mono faint" style={{ fontSize: 'var(--fs-caption)' }}>
-                            {goalTitle(t)}
-                          </span>
-                        )}
-                        {t.due_date && (
-                          <span
-                            className="mono"
-                            style={{
-                              fontSize: 'var(--fs-caption)',
-                              color: t.due_date <= today ? 'var(--danger)' : 'var(--ink-faint)',
-                            }}
-                          >
-                            due {t.due_date}
-                          </span>
-                        )}
+                  />
+                  <button onClick={() => setFocusId(t.id)} style={{ textAlign: 'left', flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 500 }}>{t.title || t.raw_content.slice(0, 120)}</div>
+                    {(goalTitle(t) || t.due_date) && (
+                      <div className="mono faint" style={{ fontSize: 'var(--fs-caption)', marginTop: 2 }}>
+                        {[goalTitle(t), t.due_date ? `due ${t.due_date}` : null].filter(Boolean).join(' · ')}
                       </div>
-                    </button>
-                    <button
-                      aria-label="Snooze one week"
-                      className="faint"
-                      onClick={() => {
-                        const d = new Date()
-                        d.setDate(d.getDate() + 7)
-                        updateThought(t.id, { snooze_until: d.toISOString().slice(0, 10) })
-                      }}
-                      style={{ padding: '0 4px', fontSize: 'var(--fs-label)' }}
-                    >
-                      ⏾
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ),
+                    )}
+                  </button>
+                  <button
+                    aria-label="Snooze one week"
+                    className="faint"
+                    onClick={() => {
+                      const d = new Date()
+                      d.setDate(d.getDate() + 7)
+                      updateThought(t.id, { snooze_until: d.toISOString().slice(0, 10) })
+                    }}
+                    style={{ padding: '0 4px' }}
+                  >
+                    ⏾
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {showAll && prepass.visible.length > 2 && !offline && (
+            <button
+              className="chip chip--ai"
+              style={{ marginTop: 14 }}
+              onClick={decideFirst}
+              disabled={ai.status === 'running'}
+            >
+              {ai.status === 'running' ? 'deciding…' : '✦ decide what flows first'}
+            </button>
+          )}
+        </div>
       )}
 
-      {restCount > 0 && (
-        <p className="faint" style={{ fontSize: 'var(--fs-label)' }}>
-          {restCount} more wait{restCount === 1 ? 's' : ''} in the world —{' '}
+      {elsewhere > 0 && (
+        <p className="faint" style={{ fontSize: 'var(--fs-caption)', textAlign: 'center', marginTop: 'var(--sp-5)' }}>
+          {elsewhere} more wait{elsewhere === 1 ? 's' : ''} in{' '}
           <button style={{ textDecoration: 'underline', color: 'inherit' }} onClick={() => navigate('/think')}>
-            open Think
+            the world
           </button>
         </p>
       )}

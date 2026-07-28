@@ -52,13 +52,11 @@ export const DEMO_SEED = {
   hydrated: true,
   offline: false,
   thoughts: [
-    // loose droplets — the mess
+    // a few loose droplets — enough to feel the water, not a crowd
     th({ id: 'd1', raw_content: 'What if the campaign used handwritten letters?', title: 'What if the campaign used handwritten letters?', type: 'question', created_at: days(1) }),
-    th({ id: 'd2', raw_content: 'Could the collection become a game?', title: 'Could the collection become a game?', type: 'question', created_at: days(2) }),
     th({ id: 'd3', raw_content: 'Order care labels', title: 'Order care labels', type: 'task', due_date: new Date(Date.now() + 4 * 86400000).toISOString().slice(0, 10), created_at: days(4) }),
     th({ id: 'd4', raw_content: 'A pop-up that feels like a listening room', title: 'A pop-up that feels like a listening room', type: 'idea', created_at: days(1) }),
-    th({ id: 'd5', raw_content: 'Aged brass hardware — research finishes', title: 'Aged brass hardware', type: 'idea', created_at: days(5) }),
-    // a saturated cloud, ready to rain
+    // one saturated cloud, ready to rain
     th({ id: 'c1', raw_content: 'Theme: SS27 campaign', title: 'SS27 campaign', type: 'goal', created_at: days(6) }),
     th({ id: 'm1', raw_content: 'Letters sealed with wax', title: 'Letters sealed with wax', type: 'idea', created_at: days(5) }),
     th({ id: 'm2', raw_content: 'Shoot on expired film', title: 'Shoot on expired film', type: 'idea', created_at: days(5) }),
@@ -70,7 +68,6 @@ export const DEMO_SEED = {
     rel('m1', 'c1', 'part_of'),
     rel('m2', 'c1', 'part_of'),
     rel('m3', 'c1', 'part_of'),
-    rel('d1', 'd4', 'relates_to'),
   ],
   roadmaps: [],
   memories: [mem('me1', 'Two-person team based in Los Angeles'), mem('me2', 'Works best in the morning')],
