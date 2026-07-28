@@ -79,6 +79,7 @@ async function execute(e: OutboxEntry): Promise<boolean> {
 
 /** Write-through: try now; queue on failure. */
 export async function write(entry: Omit<OutboxEntry, 'id' | 'queuedAt'>): Promise<void> {
+  if (import.meta.env.VITE_DEMO === '1') return // demo mode: in-memory only
   await load()
   const full: OutboxEntry = {
     ...entry,

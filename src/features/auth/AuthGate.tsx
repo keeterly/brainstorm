@@ -2,9 +2,45 @@ import { useEffect, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, supabaseConfigured } from '@/lib/supabase'
 import { useGraph } from '@/store/graph'
+import { DEMO, DEMO_SEED } from '@/lib/demo'
 import { SignIn } from './SignIn'
 
+let demoSeeded = false
+
 export function AuthGate({ children }: { children: ReactNode }) {
+  if (DEMO && !demoSeeded) {
+    demoSeeded = true
+    useGraph.setState(DEMO_SEED)
+  }
+  if (DEMO) return <DemoShell>{children}</DemoShell>
+  return <RealAuthGate>{children}</RealAuthGate>
+}
+
+function DemoShell({ children }: { children: ReactNode }) {
+  return (
+    <>
+      <div
+        role="note"
+        style={{
+          position: 'fixed',
+          top: 'calc(env(safe-area-inset-top, 0px) + 4px)',
+          right: 8,
+          zIndex: 300,
+          fontSize: 10,
+          fontWeight: 600,
+          letterSpacing: '0.14em',
+          color: 'var(--ink-faint)',
+          pointerEvents: 'none',
+        }}
+      >
+        DEMO · local only
+      </div>
+      {children}
+    </>
+  )
+}
+
+function RealAuthGate({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [checked, setChecked] = useState(false)
   const hydrated = useGraph((s) => s.hydrated)
