@@ -1,4 +1,5 @@
-/* The Think world — droplets and clouds over dark water. */
+/* Think — a clean constellation over the atmosphere.
+   Glass circles, thin lines, legible type. The world stays behind the UI. */
 .think-stage {
   position: fixed;
   inset: 0;
@@ -8,115 +9,63 @@
   z-index: 1;
 }
 
-.think-goo {
-  position: absolute;
-  inset: 0;
-  filter: url(#bs-gooey)
-    drop-shadow(0 0 1.4px rgba(190, 225, 255, 0.34))
-    drop-shadow(-1.6px 0.5px 1.3px rgba(122, 215, 255, 0.16))
-    drop-shadow(1.6px -0.5px 1.3px rgba(255, 190, 130, 0.09));
-}
-.think-goo.flash {
-  filter: url(#bs-gooey)
-    drop-shadow(0 0 2.5px rgba(122, 215, 255, 0.95))
-    drop-shadow(0 0 16px rgba(122, 215, 255, 0.4));
-  transition: filter 120ms;
-}
-.think-core {
-  position: absolute;
-  left: 0;
-  top: 0;
-  border-radius: 50%;
-  background: var(--glass-solid);
-  will-change: transform;
-}
-.think-core--cloud {
-  background: var(--cloud);
-}
-
-.think-gloss {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-.think-tether {
+.tk-lines {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   pointer-events: none;
 }
-.think-tether path {
+.tk-lines .edge {
   fill: none;
-  stroke: rgba(122, 215, 255, 0.16);
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 1;
+}
+.tk-lines .tether {
+  fill: none;
+  stroke: rgba(122, 215, 255, 0.28);
   stroke-width: 1;
   stroke-dasharray: 2 5;
 }
 
-.think-bub {
+.tk-node {
   position: absolute;
   left: 0;
   top: 0;
   border-radius: 50%;
-  will-change: transform;
+  background: rgba(255, 255, 255, 0.055);
+  border: 0.5px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 10px 30px rgba(0, 0, 0, 0.35);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 3px;
   text-align: center;
+  will-change: transform;
+  cursor: pointer;
 }
-.think-bub::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle 9% at 33% 22%, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.08) 55%, transparent 70%),
-    radial-gradient(ellipse 60% 30% at 50% 15%, transparent 60%, rgba(210, 235, 255, 0.1) 66%, transparent 72%),
-    radial-gradient(ellipse 55% 28% at 50% 89%, transparent 58%, rgba(150, 210, 255, 0.1) 64%, transparent 70%),
-    radial-gradient(circle at 50% 118%, rgba(122, 215, 255, 0.13), transparent 58%),
-    radial-gradient(circle at 50% 26%, rgba(220, 240, 255, 0.05), transparent 55%);
-}
-.think-bub::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: radial-gradient(circle at 50% 108%, var(--tint, transparent), transparent 52%);
-  opacity: 0.15;
-}
-.think-bub .txt {
-  position: relative;
-  z-index: 1;
-  width: 76%;
-  font-size: 12.5px;
-  line-height: 1.35;
-  font-weight: 400;
+.tk-node .txt {
+  width: 80%;
+  font-size: 11.5px;
+  line-height: 1.3;
+  font-weight: 450;
   color: var(--ink);
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.85);
 }
-.think-bub .kind {
-  position: absolute;
-  z-index: 1;
-  bottom: 16%;
-  left: 0;
-  right: 0;
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--tint, var(--ink-soft));
-  opacity: 0.85;
+.tk-node.pop {
+  animation: tk-pop 480ms cubic-bezier(0.2, 1.4, 0.4, 1);
 }
-.think-bub.pop {
-  animation: think-pop 520ms cubic-bezier(0.2, 1.5, 0.4, 1);
-}
-@keyframes think-pop {
+@keyframes tk-pop {
   from {
-    scale: 0.15;
+    scale: 0.3;
     opacity: 0;
   }
   to {
@@ -125,48 +74,57 @@
   }
 }
 
-.think-cloudlabel {
-  position: absolute;
-  left: 0;
-  top: 0;
-  will-change: transform;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
+/* hubs: themes and goals — brighter, named */
+.tk-node--hub {
+  background: rgba(255, 255, 255, 0.075);
+  border-color: rgba(255, 255, 255, 0.32);
 }
-.think-cloudlabel .name {
-  font-size: 13.5px;
+.tk-node--hub .txt {
+  font-size: 13px;
   font-weight: 600;
-  color: var(--ink);
-  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.9);
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.think-cloudlabel .meta {
-  font-size: 9.5px;
+.tk-node--hub .meta {
+  font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--ink-soft);
+  color: var(--ink-faint);
 }
-.think-cloudlabel .meta.ready {
+.tk-node--hub.ready {
+  border-color: rgba(122, 215, 255, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 0 24px rgba(122, 215, 255, 0.12),
+    0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.tk-node--hub.ready .meta {
   color: var(--water);
 }
 
-.think-raindrop {
+/* satellites: a cloud's member thoughts */
+.tk-node--sat {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+.tk-node--sat .txt {
+  font-size: 10.5px;
+  color: var(--ink-soft);
+}
+.tk-node--sat.done {
+  opacity: 0.45;
+}
+.tk-node--sat.done .txt {
+  text-decoration: line-through;
+}
+
+/* loose droplets keep a whisper of tint at the base */
+.tk-node--drop::after {
+  content: '';
   position: absolute;
-  left: 0;
-  top: 0;
-  width: 5px;
-  height: 11px;
-  border-radius: 50% 50% 60% 60% / 40% 40% 60% 60%;
-  background: linear-gradient(rgba(190, 230, 255, 0.15), rgba(122, 215, 255, 0.75));
-  will-change: transform;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 108%, var(--tint, transparent), transparent 52%);
+  opacity: 0.18;
   pointer-events: none;
 }
 
@@ -174,7 +132,7 @@
   position: fixed;
   z-index: 5;
   transform: translate(-50%, -50%);
-  font-size: 58px;
+  font-size: 54px;
   font-weight: 200;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
@@ -193,17 +151,40 @@
 .think-top {
   position: fixed;
   z-index: 6;
-  top: calc(var(--sat) + 14px);
+  top: calc(var(--sat) + 12px);
   left: 0;
   right: 0;
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
   pointer-events: none;
 }
 .think-top .weather {
-  margin-top: 5px;
   font-size: 11.5px;
   color: var(--ink-faint);
-  transition: color 400ms;
+}
+.tk-seg {
+  pointer-events: auto;
+  display: inline-flex;
+  padding: 3px;
+  border-radius: var(--r-full);
+  background: rgba(15, 22, 32, 0.7);
+  border: 0.5px solid var(--glass-line);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+.tk-seg button {
+  min-height: 30px;
+  padding: 0 16px;
+  border-radius: var(--r-full);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-faint);
+}
+.tk-seg button.on {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--ink);
 }
 
 .think-quick {
@@ -212,9 +193,8 @@
   left: 50%;
   transform: translateX(-50%);
   bottom: calc(var(--tabbar-h) + var(--sab) + 16px);
-  width: min(88vw, 430px);
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   pointer-events: none;
 }
 .think-quick .chip {
@@ -222,17 +202,84 @@
   box-shadow: var(--shadow-pop);
 }
 
-.think-bar {
+/* the hub panel — a clear glass card, like the board's focus panels */
+.think-panel {
   position: fixed;
   z-index: 7;
-  left: 8px;
-  right: 8px;
-  bottom: calc(var(--tabbar-h) + var(--sab) + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--tabbar-h) + var(--sab) + 10px);
+  width: min(94vw, 420px);
   background: var(--sheet);
   border: 0.5px solid var(--glass-line);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-pop);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  padding: var(--sp-3);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  padding: var(--sp-4);
+}
+.think-panel .row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 0;
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.07);
+  font-size: var(--fs-label);
+  color: var(--ink-soft);
+  text-align: left;
+}
+.think-panel .row:last-of-type {
+  border-bottom: none;
+}
+.think-panel .row .chev {
+  margin-left: auto;
+  color: var(--ink-faint);
+}
+
+/* Themes view — "I see themes around…" */
+.tk-themes {
+  position: relative;
+  z-index: 1;
+  max-width: var(--maxw-page);
+  margin: 0 auto;
+  padding: calc(var(--sat) + 74px) var(--sp-4) calc(var(--tabbar-h) + var(--sab) + var(--sp-6));
+}
+.tk-themes .lead {
+  font-size: var(--fs-lg);
+  font-weight: 300;
+  letter-spacing: -0.01em;
+  margin-bottom: var(--sp-4);
+}
+.tk-theme-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px var(--sp-4);
+  margin-bottom: 8px;
+  border-radius: var(--r-lg);
+  background: var(--glass);
+  border: 0.5px solid var(--glass-line);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  text-align: left;
+}
+.tk-theme-row .name {
+  font-weight: 600;
+}
+.tk-theme-row .sub {
+  font-size: var(--fs-caption);
+  color: var(--ink-faint);
+  margin-top: 1px;
+}
+.tk-theme-row .chev {
+  margin-left: auto;
+  color: var(--ink-faint);
+}
+.tk-theme-row--mist {
+  border-color: rgba(122, 215, 255, 0.35);
+}
+.tk-theme-row--mist .name {
+  color: var(--water);
 }

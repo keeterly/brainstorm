@@ -1,6 +1,8 @@
-// Think — the spatial world. Droplets are real loose thoughts; clouds are
-// real goal/concept thoughts with part_of members; drags create real edges;
-// rain creates real action thoughts. The prototype's physics, on the graph.
+// Think — the spatial world, kept legible. Hubs (themes/goals) sit as bright
+// glass circles with their member thoughts as satellites on thin lines,
+// exactly like the concept board. Loose thoughts drift below and can be
+// dragged together (three make a theme) or into a hub. A Themes view shows
+// the same understanding as a calm list.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGraph } from '@/store/graph'
@@ -11,104 +13,152 @@ import { TypeBadge } from '@/components/TypeBadge'
 import type { Thought } from '@/domain/types'
 import './think.css'
 
-interface DropNode {
-  id: string
-  x: number
-  y: number
-  vx: number
-  vy: number
-  r: number
-  phase: number
-  coreEl: HTMLDivElement
-  el: HTMLDivElement
-}
-interface CloudNode {
-  id: string
-  x: number
-  y: number
-  vx: number
-  targetY: number
-  w: number
-  phase: number
-  puffs: { dx: number; dy: number; r: number }[]
-  cores: HTMLDivElement[]
-  el: HTMLDivElement
-}
-interface Model {
-  drops: { id: string; label: string; kind: string; r: number }[]
-  clouds: { id: string; name: string; membersOpen: number; saturated: boolean; w: number }[]
-  tethers: { a: string; b: string }[]
-}
-
 const STOP = new Set(['what', 'when', 'where', 'which', 'would', 'could', 'should', 'about',
   'with', 'this', 'that', 'than', 'then', 'like', 'look', 'looks', 'does', 'from', 'have',
   'over', 'into', 'your', 'their', 'there', 'they', 'week', 'next', 'really', 'thing', 'need'])
 
-function radiusFor(label: string): number {
-  return Math.min(88, 44 + Math.min(30, label.length * 0.3))
+interface SatView {
+  id: string
+  label: string
+  done: boolean
+  x: number
+  y: number
+  r: number
+}
+interface HubView {
+  id: string
+  name: string
+  membersOpen: number
+  saturated: boolean
+  x: number
+  y: number
+  r: number
+  sats: SatView[]
+  more: number
+}
+interface DropView {
+  id: string
+  label: string
+  kind: string
+  x: number
+  y: number
+  r: number
+}
+
+function hash(s: string): number {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
+  return Math.abs(h)
 }
 
 export default function ThinkPage() {
   const navigate = useNavigate()
   const thoughts = useGraph((s) => s.thoughts)
   const relationships = useGraph((s) => s.relationships)
+  const layouts = useGraph((s) => s.layouts)
   const profile = useGraph((s) => s.profile)
   const addThought = useGraph((s) => s.addThought)
   const addRelationship = useGraph((s) => s.addRelationship)
   const saveLayout = useGraph((s) => s.saveLayout)
   const updateProfileSettings = useGraph((s) => s.updateProfileSettings)
 
-  const [selected, setSelected] = useState<string | null>(null)
+  const [view, setView] = useState<'map' | 'themes'>('map')
+  const [selectedHub, setSelectedHub] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight - 140 })
 
-  const stageRef = useRef<HTMLDivElement>(null)
-  const gooRef = useRef<HTMLDivElement>(null)
-  const glossRef = useRef<HTMLDivElement>(null)
-  const tetherRef = useRef<SVGPathElement>(null)
-  const meterRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const onR = () => setSize({ w: window.innerWidth, h: window.innerHeight - 140 })
+    window.addEventListener('resize', onR)
+    return () => window.removeEventListener('resize', onR)
+  }, [])
 
-  // ---------- derive the model from the graph ----------
-  // Only the newest few thoughts float — the rest wait beneath the surface.
+  const byId = useMemo(() => new Map(thoughts.map((t) => [t.id, t])), [thoughts])
   const allLoose = useMemo(() => looseDroplets(thoughts, relationships), [thoughts, relationships])
-  const model: Model = useMemo(() => {
-    const loose = allLoose
-      .slice(0, 8)
-      .map((t) => {
-        const label = t.title || t.raw_content.slice(0, 90)
-        return { id: t.id, label, kind: t.type, r: radiusFor(label) }
-      })
-    const looseIds = new Set(loose.map((d) => d.id))
-    const clouds = thoughts
-      .filter((t) => t.status === 'open' && isCloudType(t))
-      .slice(0, 12)
-      .map((c) => {
-        const members = cloudMembers(c, thoughts, relationships).filter((m) => m.status === 'open')
-        const actions = members.filter((m) => m.type === 'action' || m.type === 'task')
-        return {
-          id: c.id,
-          name: c.title || c.raw_content.slice(0, 40),
-          membersOpen: members.length,
-          saturated: members.length >= 3 && actions.length === 0,
-          w: Math.min(240, 120 + members.length * 14),
-        }
-      })
-    const tethers = relationships
-      .filter((r) => (r.type === 'relates_to' || r.type === 'inspired_by') && looseIds.has(r.from_id) && looseIds.has(r.to_id))
-      .map((r) => ({ a: r.from_id, b: r.to_id }))
-    return { drops: loose, clouds, tethers }
-  }, [allLoose, thoughts, relationships])
-  const beneath = Math.max(0, allLoose.length - 8)
-
-  const modelRef = useRef(model)
-  modelRef.current = model
   const weather = useMemo(
     () => weatherLine({ thoughts, relationships, profile }),
     [thoughts, relationships, profile],
   )
 
-  // ---------- graph mutations driven by gestures ----------
-  const byId = useMemo(() => new Map(thoughts.map((t) => [t.id, t])), [thoughts])
+  // ---------- deterministic constellation layout ----------
+  const saved = layouts['think'] ?? {}
+  const { hubs, drops, beneath } = useMemo(() => {
+    const { w, h } = size
+    const clouds = thoughts.filter((t) => t.status === 'open' && isCloudType(t)).slice(0, 6)
+    const hubs: HubView[] = clouds.map((c, i) => {
+      const members = cloudMembers(c, thoughts, relationships)
+      const open = members.filter((m) => m.status === 'open')
+      const actions = open.filter((m) => m.type === 'action' || m.type === 'task')
+      const n = clouds.length
+      const hx = saved[c.id]?.x ?? w * ((i + 1) / (n + 1))
+      const hy = saved[c.id]?.y ?? h * (n > 2 ? (i % 2 === 0 ? 0.3 : 0.46) : 0.37)
+      const shown = members.slice(0, 6)
+      const satR = 34
+      const orbit = 62 + satR + 28
+      const sats: SatView[] = shown.map((m, j) => {
+        // half-step rotation keeps satellites off the header line above
+        const a = -Math.PI / 2 + ((j + 0.5) / shown.length) * Math.PI * 2
+        return {
+          id: m.id,
+          label: m.title || m.raw_content.slice(0, 40),
+          done: m.status === 'done',
+          x: hx + Math.cos(a) * orbit,
+          y: hy + Math.sin(a) * orbit,
+          r: satR,
+        }
+      })
+      return {
+        id: c.id,
+        name: c.title || c.raw_content.slice(0, 40),
+        membersOpen: open.length,
+        saturated: open.length >= 3 && actions.length === 0,
+        x: hx,
+        y: hy,
+        r: 62,
+        sats,
+        more: members.length - shown.length,
+      }
+    })
+    const looseCap = clouds.length ? 6 : 10
+    const loose = allLoose.slice(0, looseCap)
+    const bandTop = clouds.length ? h * 0.73 : h * 0.32
+    const drops: DropView[] = loose.map((t, i) => {
+      const label = t.title || t.raw_content.slice(0, 60)
+      const col = i % 3
+      const row = Math.floor(i / 3)
+      const jx = ((hash(t.id) % 40) - 20)
+      const jy = ((hash(t.id + 'y') % 30) - 15)
+      return {
+        id: t.id,
+        label,
+        kind: t.type,
+        x: saved[t.id]?.x ?? w * (0.2 + col * 0.3) + jx,
+        y: saved[t.id]?.y ?? bandTop + row * 118 + jy,
+        r: 46,
+      }
+    })
+    return { hubs, drops, beneath: Math.max(0, allLoose.length - looseCap) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thoughts, relationships, allLoose, size, layouts])
 
+  // ---------- understanding: mist = a theme the world can see ----------
+  const mist = useMemo(() => {
+    const buckets = new Map<string, string[]>()
+    for (const d of allLoose.slice(0, 10)) {
+      const words = new Set(
+        (d.title || d.raw_content).toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 4 && !STOP.has(w)),
+      )
+      for (const w of words) {
+        if (!buckets.has(w)) buckets.set(w, [])
+        buckets.get(w)!.push(d.id)
+      }
+    }
+    let best: { w: string; ids: string[] } | null = null
+    for (const [w, ids] of buckets) if (ids.length >= 3 && (!best || ids.length > best.ids.length)) best = { w, ids }
+    return best
+  }, [allLoose])
+
+  // ---------- graph mutations ----------
   const conceptNameFor = useCallback((members: Thought[]): string => {
     const counts = new Map<string, number>()
     for (const m of members) {
@@ -120,99 +170,58 @@ export default function ThinkPage() {
     let best: string | null = null
     for (const [w, n] of counts) if (n >= 2 && (!best || n > (counts.get(best) ?? 0))) best = w
     if (best) return best[0].toUpperCase() + best.slice(1)
-    const first = (members[0].title || members[0].raw_content).split(/\s+/).filter((w) => w.length > 3 && !STOP.has(w.toLowerCase()))
+    const first = (members[0].title || members[0].raw_content)
+      .split(/\s+/)
+      .filter((w) => w.length > 3 && !STOP.has(w.toLowerCase()))
     return first.slice(0, 2).join(' ') || 'New theme'
   }, [])
 
   const condenseGroup = useCallback(
-    (ids: string[], at?: { x: number; y: number }) => {
+    (ids: string[]) => {
       const members = ids.map((id) => byId.get(id)).filter((t): t is Thought => !!t)
-      if (members.length < 3) return null
+      if (members.length < 3) return
       const name = conceptNameFor(members)
       const cloud = addThought({ raw_content: `Theme: ${name}`, title: name, type: 'concept', source: 'ai' })
       for (const m of members) addRelationship(m.id, cloud.id, 'part_of')
-      if (at) {
-        const positions = { ...(useGraph.getState().layouts['think'] ?? {}) }
-        positions[cloud.id] = { x: at.x, y: Math.min(at.y, window.innerHeight * 0.3) }
-        saveLayout('think', positions)
-      }
-      setNotice(`condensation — “${name}” formed from ${members.length} thoughts`)
-      return cloud
+      setNotice(`“${name}” formed from ${members.length} thoughts`)
     },
-    [addThought, addRelationship, byId, conceptNameFor, saveLayout],
+    [addThought, addRelationship, byId, conceptNameFor],
   )
 
   const joinDrops = useCallback(
-    (aId: string, bId: string, at: { x: number; y: number }) => {
+    (aId: string, bId: string) => {
       addRelationship(aId, bId, 'relates_to')
-      // connected component over loose-droplet tethers (incl. the new edge)
-      const looseIds = new Set(modelRef.current.drops.map((d) => d.id))
+      const looseIds = new Set(drops.map((d) => d.id))
+      const edges = relationships
+        .filter((r) => (r.type === 'relates_to' || r.type === 'inspired_by') && looseIds.has(r.from_id) && looseIds.has(r.to_id))
+        .map((r) => ({ a: r.from_id, b: r.to_id }))
+      edges.push({ a: aId, b: bId })
       const adj = new Map<string, string[]>()
-      const push = (x: string, y: string) => {
-        if (!adj.has(x)) adj.set(x, [])
-        adj.get(x)!.push(y)
-      }
-      for (const t of [...modelRef.current.tethers, { a: aId, b: bId }]) {
-        if (looseIds.has(t.a) && looseIds.has(t.b)) {
-          push(t.a, t.b)
-          push(t.b, t.a)
-        }
+      for (const e of edges) {
+        if (!adj.has(e.a)) adj.set(e.a, [])
+        if (!adj.has(e.b)) adj.set(e.b, [])
+        adj.get(e.a)!.push(e.b)
+        adj.get(e.b)!.push(e.a)
       }
       const seen = new Set<string>([aId])
-      const queue = [aId]
-      while (queue.length) {
-        const cur = queue.pop()!
-        for (const nxt of adj.get(cur) ?? []) {
-          if (!seen.has(nxt)) {
-            seen.add(nxt)
-            queue.push(nxt)
-          }
-        }
+      const q = [aId]
+      while (q.length) {
+        const cur = q.pop()!
+        for (const nx of adj.get(cur) ?? []) if (!seen.has(nx)) { seen.add(nx); q.push(nx) }
       }
-      if (seen.size >= 3) condenseGroup([...seen], at)
-      else setNotice('connected — one more thought makes a cloud')
+      if (seen.size >= 3) condenseGroup([...seen])
+      else setNotice('connected — one more thought makes a theme')
     },
-    [addRelationship, condenseGroup],
+    [addRelationship, condenseGroup, drops, relationships],
   )
-
-  const absorbIntoCloud = useCallback(
-    (dropId: string, cloudId: string) => {
-      addRelationship(dropId, cloudId, 'part_of')
-      setNotice('absorbed into the cloud')
-    },
-    [addRelationship],
-  )
-
-  // Mist only forms when the world actually sees a theme — the condense
-  // affordance does not exist otherwise. Remove decisions, never add them.
-  const mist = useMemo(() => {
-    const buckets = new Map<string, string[]>()
-    for (const d of model.drops) {
-      const words = new Set(d.label.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 4 && !STOP.has(w)))
-      for (const w of words) {
-        if (!buckets.has(w)) buckets.set(w, [])
-        buckets.get(w)!.push(d.id)
-      }
-    }
-    let best: { w: string; ids: string[] } | null = null
-    for (const [w, ids] of buckets) if (ids.length >= 3 && (!best || ids.length > best.ids.length)) best = { w, ids }
-    return best
-  }, [model.drops])
-
-  const condenseBest = useCallback(() => {
-    if (!mist) return
-    for (let i = 1; i < mist.ids.length; i++) addRelationship(mist.ids[0], mist.ids[i], 'relates_to')
-    condenseGroup(mist.ids)
-  }, [mist, addRelationship, condenseGroup])
 
   const rainFrom = useCallback(
     (cloudId: string) => {
       const cloud = byId.get(cloudId)
       if (!cloud) return
-      const members = cloudMembers(cloud, thoughts, relationships).filter(
-        (m) => m.status === 'open' && m.type !== 'action' && m.type !== 'task',
-      )
-      const sources = members.slice(0, 6)
+      const sources = cloudMembers(cloud, thoughts, relationships)
+        .filter((m) => m.status === 'open' && m.type !== 'action' && m.type !== 'task')
+        .slice(0, 6)
       if (!sources.length) return
       let firstId: string | null = null
       sources.forEach((m, i) => {
@@ -230,434 +239,342 @@ export default function ThinkPage() {
         updateProfileSettings({
           recommended_action: {
             id: firstId,
-            why: `It fell first from “${cloud.title || 'this cloud'}” — small enough to start the current moving.`,
+            why: `It fell first from “${cloud.title || 'this theme'}” — small enough to start the current moving.`,
             at: new Date().toISOString(),
           },
         })
       }
+      setSelectedHub(null)
       setNotice(`rain — ${sources.length} action${sources.length === 1 ? '' : 's'} fell into the current`)
-      setSelected(null)
     },
     [addRelationship, addThought, byId, relationships, thoughts, updateProfileSettings],
   )
 
-  // stable refs for the engine
-  const cb = useRef({ joinDrops, absorbIntoCloud, setSelected })
-  cb.current = { joinDrops, absorbIntoCloud, setSelected }
+  // ---------- drag (loose drops only) ----------
+  const stageRef = useRef<HTMLDivElement>(null)
+  const meterRef = useRef<HTMLDivElement>(null)
+  const dragRef = useRef<{
+    id: string
+    el: HTMLElement
+    dx: number
+    dy: number
+    sx: number
+    sy: number
+    moved: boolean
+    x: number
+    y: number
+    target: { kind: 'drop' | 'hub'; id: string } | null
+  } | null>(null)
+  const viewsRef = useRef({ hubs, drops })
+  viewsRef.current = { hubs, drops }
+  const [dragTick, setDragTick] = useState(0) // re-render lines during drag
 
-  // ---------- the imperative water engine ----------
-  useEffect(() => {
-    const stage = stageRef.current
-    const goo = gooRef.current
-    const gloss = glossRef.current
-    const tetherPath = tetherRef.current
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    const el = (e.target as HTMLElement).closest<HTMLElement>('[data-drop-id]')
+    if (!el) return
+    const id = el.dataset.dropId!
+    const d = viewsRef.current.drops.find((x) => x.id === id)
+    if (!d) return
+    dragRef.current = {
+      id, el,
+      dx: d.x - e.clientX, dy: d.y - e.clientY,
+      sx: e.clientX, sy: e.clientY,
+      moved: false, x: d.x, y: d.y, target: null,
+    }
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  }, [])
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    const g = dragRef.current
+    if (!g) return
+    if (Math.hypot(e.clientX - g.sx, e.clientY - g.sy) > 6) g.moved = true
+    if (!g.moved) return
+    g.x = e.clientX + g.dx
+    g.y = e.clientY + g.dy
+    g.el.style.transform = `translate(${g.x - 46}px, ${g.y - 46}px)`
+    // nearest target
+    let best: { kind: 'drop' | 'hub'; id: string; x: number; y: number; r: number } | null = null
+    let bestD = Infinity
+    for (const o of viewsRef.current.drops) {
+      if (o.id === g.id) continue
+      const d = Math.hypot(o.x - g.x, o.y - g.y)
+      if (d < bestD) { bestD = d; best = { kind: 'drop', id: o.id, x: o.x, y: o.y, r: o.r } }
+    }
+    for (const o of viewsRef.current.hubs) {
+      const d = Math.hypot(o.x - g.x, o.y - g.y)
+      if (d < bestD) { bestD = d; best = { kind: 'hub', id: o.id, x: o.x, y: o.y, r: o.r } }
+    }
     const meter = meterRef.current
-    if (!stage || !goo || !gloss || !tetherPath || !meter) return
-    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
-
-    const dropNodes = new Map<string, DropNode>()
-    const cloudNodes = new Map<string, CloudNode>()
-    const saved: Record<string, { x: number; y: number }> =
-      { ...(useGraph.getState().layouts['think'] ?? {}) }
-    const dirty: Record<string, { x: number; y: number }> = {}
-    let persistTimer: ReturnType<typeof setTimeout> | null = null
-    const schedulePersist = () => {
-      if (persistTimer) clearTimeout(persistTimer)
-      persistTimer = setTimeout(() => {
-        const merged = { ...(useGraph.getState().layouts['think'] ?? {}), ...dirty }
-        useGraph.getState().saveLayout('think', merged)
-      }, 700)
-    }
-
-    const H = () => stage.clientHeight
-    const W = () => stage.clientWidth
-    const skyTop = () => 84
-    const skyBottom = () => H() * 0.34
-    const airTop = () => H() * 0.3
-    const airBottom = () => H() - 60
-
-    const sync = () => {
-      const m = modelRef.current
-      const dropIds = new Set(m.drops.map((d) => d.id))
-      const cloudIds = new Set(m.clouds.map((c) => c.id))
-      for (const [id, n] of dropNodes) {
-        if (!dropIds.has(id)) {
-          n.coreEl.remove()
-          n.el.remove()
-          dropNodes.delete(id)
-        }
-      }
-      for (const [id, n] of cloudNodes) {
-        if (!cloudIds.has(id)) {
-          n.cores.forEach((c) => c.remove())
-          n.el.remove()
-          cloudNodes.delete(id)
-        }
-      }
-      for (const d of m.drops) {
-        let n = dropNodes.get(d.id)
-        if (!n) {
-          const coreEl = document.createElement('div')
-          coreEl.className = 'think-core'
-          const el = document.createElement('div')
-          el.className = 'think-bub' + (reduced ? '' : ' pop')
-          el.dataset.nodeId = d.id
-          goo.appendChild(coreEl)
-          gloss.appendChild(el)
-          const p = saved[d.id] ?? {
-            x: W() * (0.18 + Math.random() * 0.64),
-            y: airTop() + Math.random() * (airBottom() - airTop() - 80),
-          }
-          n = {
-            id: d.id, x: p.x, y: p.y,
-            vx: (Math.random() - 0.5) * 0.3, vy: 0,
-            r: d.r, phase: Math.random() * Math.PI * 2,
-            coreEl, el,
-          }
-          dropNodes.set(d.id, n)
-        }
-        n.r = d.r
-        n.el.style.setProperty('--tint', `var(--tint-${d.kind}, var(--ink-soft))`)
-        // quiet by default: the tint carries the kind; words stay short
-        n.el.innerHTML = `<div class="txt"></div>`
-        n.el.querySelector('.txt')!.textContent = d.label
-        const dia = `${d.r * 2}px`
-        n.coreEl.style.width = n.coreEl.style.height = dia
-        n.el.style.width = n.el.style.height = dia
-      }
-      for (const c of m.clouds) {
-        let n = cloudNodes.get(c.id)
-        if (!n) {
-          const el = document.createElement('div')
-          el.className = 'think-cloudlabel'
-          el.dataset.cloudId = c.id
-          gloss.appendChild(el)
-          const p = saved[c.id] ?? {
-            x: W() * (0.25 + Math.random() * 0.5),
-            y: skyTop() + 50 + Math.random() * Math.max(40, skyBottom() - skyTop() - 120),
-          }
-          n = {
-            id: c.id, x: p.x, y: p.y,
-            vx: (Math.random() < 0.5 ? -1 : 1) * 0.08,
-            targetY: p.y, w: c.w,
-            phase: Math.random() * Math.PI * 2,
-            puffs: [], cores: [], el,
-          }
-          cloudNodes.set(c.id, n)
-        }
-        if (n.w !== c.w || !n.puffs.length) {
-          n.w = c.w
-          n.cores.forEach((x) => x.remove())
-          n.cores = []
-          n.puffs = []
-          for (let i = 0; i < 5; i++) {
-            const fx = i / 4 - 0.5
-            n.puffs.push({
-              dx: fx * c.w * 0.78,
-              dy: (i % 2 === 0 ? -1 : 1) * (6 + (i * 7) % 11) - Math.abs(fx) * 10,
-              r: (0.34 - Math.abs(fx) * 0.16) * c.w + 2,
-            })
-            const core = document.createElement('div')
-            core.className = 'think-core think-core--cloud'
-            goo.appendChild(core)
-            n.cores.push(core)
-          }
-        }
-        // clouds stay silent unless they have something to say
-        n.el.innerHTML =
-          `<div class="name"></div>` +
-          (c.saturated ? `<div class="meta ready">● tap to rain</div>` : '')
-        n.el.querySelector('.name')!.textContent = c.name
-        n.el.style.width = `${c.w}px`
-        n.el.style.height = `${c.w * 0.55}px`
-      }
-    }
-    sync()
-    const unsub = useGraph.subscribe(() => sync())
-
-    // ---------- gestures ----------
-    let drag: {
-      n: DropNode
-      dx: number
-      dy: number
-      sx: number
-      sy: number
-      moved: boolean
-      target: { kind: 'drop' | 'cloud'; id: string } | null
-    } | null = null
-
-    const onDown = (e: PointerEvent) => {
-      const p = { x: e.clientX, y: e.clientY }
-      let hit: DropNode | null = null
-      for (const n of dropNodes.values()) {
-        if (Math.hypot(n.x - p.x, n.y - p.y) <= n.r) hit = n
-      }
-      if (!hit) {
-        for (const n of cloudNodes.values()) {
-          if (Math.abs(n.x - p.x) <= n.w / 2 && Math.abs(n.y - p.y) <= n.w * 0.3) {
-            cb.current.setSelected(n.id)
-            return
-          }
-        }
-        cb.current.setSelected(null)
-        return
-      }
-      drag = { n: hit, dx: hit.x - p.x, dy: hit.y - p.y, sx: p.x, sy: p.y, moved: false, target: null }
-      stage.setPointerCapture(e.pointerId)
-    }
-    const onMove = (e: PointerEvent) => {
-      if (!drag) return
-      if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 6) drag.moved = true
-      if (!drag.moved) return
-      drag.n.x = e.clientX + drag.dx
-      drag.n.y = e.clientY + drag.dy
-      drag.n.vx = drag.n.vy = 0
-    }
-    const onUp = () => {
-      if (!drag) return
-      const { n, moved, target } = drag
-      drag = null
+    g.target = null
+    if (meter && best && bestD < 46 + best.r + 120) {
+      const gap = Math.max(0, bestD - (46 + best.r) * 0.6)
+      const deg = Math.round(gap / 4)
+      meter.textContent = String(deg)
+      meter.style.left = `${(g.x + best.x) / 2}px`
+      meter.style.top = `${(g.y + best.y) / 2}px`
+      meter.classList.add('on')
+      meter.classList.toggle('zero', deg === 0)
+      if (deg === 0) g.target = { kind: best.kind, id: best.id }
+    } else if (meter) {
       meter.classList.remove('on', 'zero')
-      if (!moved) {
-        cb.current.setSelected(n.id)
-        return
-      }
-      dirty[n.id] = { x: n.x, y: n.y }
-      schedulePersist()
-      if (target) {
-        if (target.kind === 'drop') cb.current.joinDrops(n.id, target.id, { x: n.x, y: n.y })
-        else cb.current.absorbIntoCloud(n.id, target.id)
-        flash()
-      }
     }
-    const flash = () => {
-      goo.classList.add('flash')
-      setTimeout(() => goo.classList.remove('flash'), reduced ? 0 : 700)
-    }
-    stage.addEventListener('pointerdown', onDown)
-    stage.addEventListener('pointermove', onMove)
-    stage.addEventListener('pointerup', onUp)
-    stage.addEventListener('pointercancel', onUp)
+    setDragTick((t) => t + 1)
+  }, [])
 
-    // ---------- physics ----------
-    let t = 0
+  const onPointerUp = useCallback(() => {
+    const g = dragRef.current
+    dragRef.current = null
+    meterRef.current?.classList.remove('on', 'zero')
+    if (!g) return
+    if (!g.moved) {
+      navigate(`/thought/${g.id}`)
+      return
+    }
+    const positions = { ...(useGraph.getState().layouts['think'] ?? {}) }
+    positions[g.id] = { x: g.x, y: g.y }
+    saveLayout('think', positions)
+    if (g.target) {
+      if (g.target.kind === 'hub') {
+        addRelationship(g.id, g.target.id, 'part_of')
+        setNotice('absorbed into the theme')
+      } else {
+        joinDrops(g.id, g.target.id)
+      }
+    }
+  }, [addRelationship, joinDrops, navigate, saveLayout])
+
+  // gentle drift for the whole field (one transform on a wrapper — calm, cheap)
+  const driftRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return
     let raf = 0
+    let t = 0
     const step = () => {
       t += 0.016
-      for (const n of dropNodes.values()) {
-        if (drag && drag.n === n) continue
-        if (!reduced) {
-          n.vx += Math.sin(t * 0.6 + n.phase) * 0.006
-          n.vy += Math.cos(t * 0.5 + n.phase * 1.3) * 0.005
-        }
-        if (n.y > airBottom() - n.r) n.vy -= 0.06
-        if (n.y < airTop() + n.r) n.vy += 0.05
-        n.vx *= 0.985
-        n.vy *= 0.985
-        n.x += n.vx
-        n.y += n.vy
-        const m = n.r + 8
-        if (n.x < m) { n.x = m; n.vx = Math.abs(n.vx) * 0.6 }
-        if (n.x > W() - m) { n.x = W() - m; n.vx = -Math.abs(n.vx) * 0.6 }
+      if (driftRef.current) {
+        driftRef.current.style.transform = `translate(${Math.sin(t * 0.3) * 3}px, ${Math.cos(t * 0.23) * 3}px)`
       }
-      const ds = [...dropNodes.values()]
-      for (let i = 0; i < ds.length; i++) {
-        for (let j = i + 1; j < ds.length; j++) {
-          const a = ds[i], c = ds[j]
-          if (drag && (drag.n === a || drag.n === c)) continue
-          const dx = c.x - a.x, dy = c.y - a.y
-          const dist = Math.hypot(dx, dy) || 1
-          const min = a.r + c.r + 30
-          if (dist < min) {
-            const push = (min - dist) * 0.045
-            const ux = dx / dist, uy = dy / dist
-            a.vx -= ux * push; a.vy -= uy * push
-            c.vx += ux * push; c.vy += uy * push
-          }
-        }
-      }
-      for (const n of cloudNodes.values()) {
-        n.x += n.vx + (reduced ? 0 : Math.sin(t * 0.3 + n.phase) * 0.06)
-        n.y += (n.targetY - n.y) * 0.03
-        const m = n.w / 2 + 10
-        if (n.x < m) { n.x = m; n.vx = Math.abs(n.vx) }
-        if (n.x > W() - m) { n.x = W() - m; n.vx = -Math.abs(n.vx) }
-      }
-      // droplets keep clear of clouds unless deliberately dragged in
-      for (const n of dropNodes.values()) {
-        if (drag && drag.n === n) continue
-        for (const c of cloudNodes.values()) {
-          const dx = n.x - c.x, dy = n.y - c.y
-          const dist = Math.hypot(dx, dy) || 1
-          const min = c.w * 0.45 + n.r + 30
-          if (dist < min) {
-            const push = (min - dist) * 0.05
-            n.vx += (dx / dist) * push
-            n.vy += (dy / dist) * push + push * 0.6
-          }
-        }
-      }
-      // meter while dragging
-      if (drag && drag.moved) {
-        const n = drag.n
-        let best: { kind: 'drop' | 'cloud'; id: string; x: number; y: number; r: number } | null = null
-        let bestD = Infinity
-        for (const o of dropNodes.values()) {
-          if (o === n) continue
-          const d = Math.hypot(o.x - n.x, o.y - n.y)
-          if (d < bestD) { bestD = d; best = { kind: 'drop', id: o.id, x: o.x, y: o.y, r: o.r } }
-        }
-        for (const o of cloudNodes.values()) {
-          const d = Math.hypot(o.x - n.x, o.y - n.y)
-          if (d < bestD) { bestD = d; best = { kind: 'cloud', id: o.id, x: o.x, y: o.y, r: o.w * 0.34 } }
-        }
-        drag.target = null
-        if (best && bestD < n.r + best.r + 130) {
-          const gap = Math.max(0, bestD - (n.r + best.r) * 0.62)
-          const deg = Math.round(gap / 4)
-          meter.textContent = String(deg)
-          meter.style.left = `${(n.x + best.x) / 2}px`
-          meter.style.top = `${(n.y + best.y) / 2}px`
-          meter.classList.add('on')
-          meter.classList.toggle('zero', deg === 0)
-          if (deg === 0) drag.target = { kind: best.kind, id: best.id }
-        } else {
-          meter.classList.remove('on', 'zero')
-        }
-      }
-      // paint
-      for (const n of dropNodes.values()) {
-        const squish = reduced ? 0 : Math.sin(t * 2.6 + n.phase) * 0.035
-        const tr = `translate(${n.x - n.r}px, ${n.y - n.r}px) scale(${1 + squish}, ${1 - squish})`
-        n.coreEl.style.transform = tr
-        n.el.style.transform = tr
-      }
-      for (const n of cloudNodes.values()) {
-        n.puffs.forEach((p, i) => {
-          const bob = reduced ? 0 : Math.sin(t * 0.8 + n.phase + i) * 2
-          const core = n.cores[i]
-          core.style.width = core.style.height = `${p.r * 2}px`
-          core.style.transform = `translate(${n.x + p.dx - p.r}px, ${n.y + p.dy + bob - p.r}px)`
-        })
-        n.el.style.transform = `translate(${n.x - n.w / 2}px, ${n.y - n.w * 0.27}px)`
-      }
-      let td = ''
-      for (const l of modelRef.current.tethers) {
-        const a = dropNodes.get(l.a)
-        const b = dropNodes.get(l.b)
-        if (a && b) td += `M${a.x.toFixed(1)} ${a.y.toFixed(1)}L${b.x.toFixed(1)} ${b.y.toFixed(1)}`
-      }
-      tetherPath.setAttribute('d', td)
       raf = requestAnimationFrame(step)
     }
     raf = requestAnimationFrame(step)
-
-    return () => {
-      cancelAnimationFrame(raf)
-      unsub()
-      stage.removeEventListener('pointerdown', onDown)
-      stage.removeEventListener('pointermove', onMove)
-      stage.removeEventListener('pointerup', onUp)
-      stage.removeEventListener('pointercancel', onUp)
-      dropNodes.forEach((n) => { n.coreEl.remove(); n.el.remove() })
-      cloudNodes.forEach((n) => { n.cores.forEach((c) => c.remove()); n.el.remove() })
-    }
+    return () => cancelAnimationFrame(raf)
   }, [])
 
-  // ---------- selection bar ----------
-  const selectedThought = selected ? byId.get(selected) : null
-  const selectedIsCloud = selectedThought ? isCloudType(selectedThought) : false
-  const selectedMembers = useMemo(() => {
-    if (!selectedThought || !selectedIsCloud) return []
-    return cloudMembers(selectedThought, thoughts, relationships).filter((m) => m.status === 'open')
-  }, [selectedThought, selectedIsCloud, thoughts, relationships])
-  const canRain =
-    selectedIsCloud &&
-    selectedMembers.filter((m) => m.type !== 'action' && m.type !== 'task').length > 0 &&
-    selectedMembers.filter((m) => m.type === 'action' || m.type === 'task').length === 0
+  useEffect(() => {
+    if (!notice) return
+    const id = setTimeout(() => setNotice(null), 5000)
+    return () => clearTimeout(id)
+  }, [notice])
+
+  const hub = selectedHub ? hubs.find((h) => h.id === selectedHub) : null
+  const hubMembers = useMemo(() => {
+    if (!hub) return []
+    const c = byId.get(hub.id)
+    return c ? cloudMembers(c, thoughts, relationships) : []
+  }, [hub, byId, thoughts, relationships])
+
+  const empty = hubs.length === 0 && drops.length === 0
+  const g = dragRef.current
+  void dragTick
 
   return (
     <>
-      <div className="think-stage" ref={stageRef}>
-        <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden>
-          <defs>
-            <filter id="bs-gooey">
-              <feGaussianBlur in="SourceGraphic" stdDeviation="9" result="blur" />
-              <feColorMatrix
-                in="blur"
-                mode="matrix"
-                values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 26 -13"
-                result="goo"
-              />
-              <feComposite in="SourceGraphic" in2="goo" operator="atop" />
-            </filter>
-          </defs>
-        </svg>
-        <svg className="think-tether" aria-hidden>
-          <path ref={tetherRef} d="" />
-        </svg>
-        <div className="think-goo" ref={gooRef} />
-        <div className="think-gloss" ref={glossRef} />
+      <div className="think-top">
+        <div className="tk-seg" role="tablist" aria-label="Think views">
+          <button role="tab" aria-selected={view === 'map'} className={view === 'map' ? 'on' : ''} onClick={() => setView('map')}>
+            Map
+          </button>
+          <button role="tab" aria-selected={view === 'themes'} className={view === 'themes' ? 'on' : ''} onClick={() => setView('themes')}>
+            Themes
+          </button>
+        </div>
+        <div className="weather">{notice ?? weather}</div>
       </div>
+
+      {view === 'themes' ? (
+        <div className="tk-themes">
+          {hubs.length > 0 || mist ? (
+            <div className="lead">I see themes around…</div>
+          ) : (
+            <div className="lead">No themes yet</div>
+          )}
+          {hubs.map((h) => (
+            <button key={h.id} className="tk-theme-row" onClick={() => navigate(`/thought/${h.id}`)}>
+              <div>
+                <div className="name">{h.name}</div>
+                <div className="sub">
+                  {h.membersOpen} thought{h.membersOpen === 1 ? '' : 's'}
+                  {h.saturated ? ' · ready to rain' : ''}
+                </div>
+              </div>
+              <span className="chev">›</span>
+            </button>
+          ))}
+          {mist && (
+            <button className="tk-theme-row tk-theme-row--mist" onClick={() => condenseGroup(mist.ids)}>
+              <div>
+                <div className="name">✦ {mist.w}</div>
+                <div className="sub">{mist.ids.length} loose thoughts — tap to condense</div>
+              </div>
+              <span className="chev">›</span>
+            </button>
+          )}
+          {hubs.length === 0 && !mist && (
+            <p className="faint" style={{ fontSize: 'var(--fs-label)' }}>
+              Connect thoughts on the map — three make a theme.
+            </p>
+          )}
+        </div>
+      ) : (
+        <div
+          className="think-stage"
+          ref={stageRef}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+        >
+          <div ref={driftRef} style={{ position: 'absolute', inset: 0 }}>
+            <svg className="tk-lines" aria-hidden>
+              {hubs.map((h) =>
+                h.sats.map((s) => (
+                  <line key={`${h.id}-${s.id}`} className="edge" x1={h.x} y1={h.y} x2={s.x} y2={s.y} />
+                )),
+              )}
+              {relationships
+                .filter((r) => r.type === 'relates_to' || r.type === 'inspired_by')
+                .map((r) => {
+                  const a = g?.id === r.from_id ? g : drops.find((d) => d.id === r.from_id)
+                  const b = g?.id === r.to_id ? g : drops.find((d) => d.id === r.to_id)
+                  if (!a || !b) return null
+                  return <line key={r.id} className="tether" x1={a.x} y1={a.y} x2={b.x} y2={b.y} />
+                })}
+            </svg>
+
+            {hubs.map((h) => (
+              <div key={h.id}>
+                <button
+                  className={`tk-node tk-node--hub ${h.saturated ? 'ready' : ''}`}
+                  style={{
+                    width: h.r * 2,
+                    height: h.r * 2,
+                    transform: `translate(${h.x - h.r}px, ${h.y - h.r}px)`,
+                  }}
+                  onClick={() => setSelectedHub((s) => (s === h.id ? null : h.id))}
+                >
+                  <span className="txt">{h.name}</span>
+                  <span className="meta">{h.saturated ? '● tap to rain' : `${h.membersOpen}`}</span>
+                </button>
+                {h.sats.map((s) => (
+                  <button
+                    key={s.id}
+                    className={`tk-node tk-node--sat ${s.done ? 'done' : ''}`}
+                    style={{
+                      width: s.r * 2,
+                      height: s.r * 2,
+                      transform: `translate(${s.x - s.r}px, ${s.y - s.r}px)`,
+                    }}
+                    onClick={() => navigate(`/thought/${s.id}`)}
+                  >
+                    <span className="txt">{s.label}</span>
+                  </button>
+                ))}
+              </div>
+            ))}
+
+            {drops.map((d) => (
+              <div
+                key={d.id}
+                data-drop-id={d.id}
+                className="tk-node tk-node--drop"
+                style={{
+                  width: d.r * 2,
+                  height: d.r * 2,
+                  transform: `translate(${(g?.id === d.id ? g.x : d.x) - d.r}px, ${(g?.id === d.id ? g.y : d.y) - d.r}px)`,
+                  ['--tint' as string]: `var(--tint-${d.kind}, var(--ink-soft))`,
+                }}
+              >
+                <span className="txt">{d.label}</span>
+              </div>
+            ))}
+          </div>
+
+          {empty && (
+            <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
+              <button className="chip" onClick={() => navigate('/')}>
+                Collect a thought
+              </button>
+            </div>
+          )}
+          {beneath > 0 && (
+            <div
+              className="faint"
+              style={{
+                position: 'absolute',
+                bottom: 14,
+                left: 0,
+                right: 0,
+                textAlign: 'center',
+                fontSize: 'var(--fs-caption)',
+                pointerEvents: 'none',
+              }}
+            >
+              +{beneath} beneath the surface
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="think-meter" ref={meterRef} aria-hidden>
         18
       </div>
 
-      <div className="think-top">
-        <div className="weather">{notice ?? weather}</div>
-        {beneath > 0 && (
-          <div className="weather" style={{ opacity: 0.6 }}>
-            +{beneath} beneath the surface
-          </div>
-        )}
-      </div>
-
-      <div className="think-quick" style={{ justifyContent: 'center' }}>
-        {mist && !selectedThought && (
-          <button className="chip chip--ai" onClick={condenseBest}>
+      {view === 'map' && mist && !hub && (
+        <div className="think-quick">
+          <button className="chip chip--ai" onClick={() => condenseGroup(mist.ids)}>
             ✦ mist is forming — condense “{mist.w}”
           </button>
-        )}
-        {model.drops.length === 0 && model.clouds.length === 0 && (
-          <button className="chip" onClick={() => navigate('/')}>
-            Collect a thought
-          </button>
-        )}
-      </div>
+        </div>
+      )}
 
-      {selectedThought && (
-        <div className="think-bar">
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-            <TypeBadge type={selectedThought.type} />
-            <strong
-              style={{
-                flex: 1,
-                fontSize: 'var(--fs-label)',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {selectedThought.title || selectedThought.raw_content.slice(0, 60)}
-            </strong>
-            <button aria-label="Close" className="faint" onClick={() => setSelected(null)}>
+      {hub && (
+        <div className="think-panel">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+            <strong style={{ flex: 1 }}>{hub.name}</strong>
+            <button aria-label="Close" className="faint" onClick={() => setSelectedHub(null)}>
               ×
             </button>
           </div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <button className="btn btn--sm" onClick={() => navigate(`/thought/${selectedThought.id}`)}>
-              Open
+          {hubMembers.slice(0, 5).map((m) => (
+            <button key={m.id} className="row" onClick={() => navigate(`/thought/${m.id}`)}>
+              <TypeBadge type={m.type} />
+              <span
+                style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  textDecoration: m.status === 'done' ? 'line-through' : 'none',
+                }}
+              >
+                {m.title || m.raw_content.slice(0, 60)}
+              </span>
+              <span className="chev">›</span>
             </button>
-            {canRain && (
-              <button className="btn btn--sm btn--accent" onClick={() => rainFrom(selectedThought.id)}>
+          ))}
+          {hubMembers.length > 5 && (
+            <p className="faint" style={{ fontSize: 'var(--fs-caption)', margin: '6px 0' }}>
+              +{hubMembers.length - 5} more inside
+            </p>
+          )}
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            {hub.saturated && (
+              <button className="btn btn--accent btn--sm" onClick={() => rainFrom(hub.id)}>
                 ☂ Make it rain
               </button>
             )}
-            {selectedIsCloud && (
-              <span className="faint" style={{ fontSize: 'var(--fs-caption)', alignSelf: 'center' }}>
-                {selectedMembers.length} thoughts inside
-              </span>
-            )}
+            <button className="btn btn--ghost btn--sm" onClick={() => navigate(`/thought/${hub.id}`)}>
+              Open
+            </button>
           </div>
         </div>
       )}
