@@ -6,6 +6,8 @@ import { useGraph } from '@/store/graph'
 import { parseCapture } from '@/domain/parse-blocks'
 import { runAction } from '@/ai/client'
 import type { ClassifyOutput } from '@shared/ai/actions/classify-thought'
+import { absorbIsEmpty, type AbsorbOutput } from '@shared/ai/actions/absorb'
+import type { DistillOutput } from '@shared/ai/actions/distill-memory'
 import { useVoice } from '@/features/capture/useVoice'
 import { splashAt } from '@/world/Atmosphere'
 import { nextBest } from '@/world/interaction'
@@ -19,11 +21,15 @@ export default function CollectPage() {
   const addThought = useGraph((s) => s.addThought)
   const addRelationship = useGraph((s) => s.addRelationship)
   const updateThought = useGraph((s) => s.updateThought)
+  const addMemory = useGraph((s) => s.addMemory)
+  const memories = useGraph((s) => s.memories)
   const profile = useGraph((s) => s.profile)
   const offline = useGraph((s) => s.offline)
 
   const [text, setText] = useState('')
   const [question, setQuestion] = useState<{ id: string; q: string } | null>(null)
+  const [absorbing, setAbsorbing] = useState(false)
+  const [report, setReport] = useState<string | null>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
 
   const voice = useVoice(
@@ -81,6 +87,83 @@ export default function CollectPage() {
       taRef.current.focus()
     }
   }, [text, addThought, addRelationship, classify, offline, voice.listening])
+
+  // memory learns passively from what the user pours in — never blocking, never loud
+  const learnQuietly = useCallback(
+    (t: string) => {
+      if (t.length < 120) return
+      void runAction<DistillOutput>('distill_memory', {
+        text: t,
+        existing: memories.map((m) => m.content).slice(0, 100),
+      })
+        .then(({ output }) => output.facts.forEach((f) => addMemory(f, 'distilled')))
+        .catch(() => {})
+    },
+    [memories, addMemory],
+  )
+
+  // Absorb — the sky rearranges instead of duplicating. If the AI sees nothing
+  // to adjust (or fails), the text falls through to plain capture: never lost.
+  const absorbCapture = useCallback(async () => {
+    const v = text.trim()
+    if (!v || absorbing) return
+    const open = thoughts.filter((t) => t.status === 'open')
+    setAbsorbing(true)
+    setReport(null)
+    try {
+      const { output } = await runAction<AbsorbOutput>('absorb', {
+        text: v,
+        thoughts: open.slice(0, 200).map((t) => ({
+          id: t.id,
+          title: t.title || t.raw_content.slice(0, 200),
+          type: t.type,
+          summary: t.summary,
+          due: t.due_date,
+        })),
+      })
+      if (absorbIsEmpty(output)) {
+        capture()
+        setReport('Captured as new — nothing in the sky needed adjusting.')
+        return
+      }
+      const known = new Set(open.map((t) => t.id))
+      for (const u of output.updates) {
+        if (!known.has(u.id)) continue
+        const patch: Partial<Thought> = {}
+        if (u.title) patch.title = u.title
+        if (u.summary !== undefined) patch.summary = u.summary
+        if (u.due_date !== undefined) patch.due_date = u.due_date
+        updateThought(u.id, patch)
+      }
+      for (const id of output.completions) {
+        if (known.has(id)) updateThought(id, { status: 'done', completed_at: new Date().toISOString() })
+      }
+      for (const s of output.snoozes) {
+        if (known.has(s.id)) updateThought(s.id, { status: 'snoozed', snooze_until: s.until })
+      }
+      const tempIds = new Map<string, string>()
+      for (const a of output.additions) {
+        const created = addThought({ raw_content: a.title, title: a.title, type: a.type, due_date: a.due_date ?? null })
+        tempIds.set(a.tempId, created.id)
+      }
+      for (const a of output.additions) {
+        if (!a.part_of) continue
+        const parent = known.has(a.part_of) ? a.part_of : tempIds.get(a.part_of)
+        const childId = tempIds.get(a.tempId)
+        if (parent && childId && parent !== childId) addRelationship(childId, parent, 'part_of')
+      }
+      setReport(output.note || 'Absorbed — the sky rearranged itself.')
+      splashAt(window.innerWidth * (0.25 + Math.random() * 0.5), window.innerHeight - 150)
+      setText('')
+      learnQuietly(v)
+      if (taRef.current) taRef.current.style.height = 'auto'
+    } catch {
+      capture()
+      setReport('Captured as new — absorb was unavailable just now.')
+    } finally {
+      setAbsorbing(false)
+    }
+  }, [text, absorbing, thoughts, capture, updateThought, addThought, addRelationship, learnQuietly])
 
   const best = nextBest(thoughts, relationships, profile)
   const loose = looseDroplets(thoughts, relationships).length
@@ -150,11 +233,29 @@ export default function CollectPage() {
           ) : (
             <span />
           )}
-          <button className="btn btn--primary btn--sm" onClick={capture} disabled={!text.trim()}>
-            Capture
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {!offline && thoughts.filter((t) => t.status === 'open').length >= 3 && (
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={() => void absorbCapture()}
+                disabled={!text.trim() || absorbing}
+                title="Let the sky rearrange around this instead of adding a duplicate"
+              >
+                {absorbing ? '◐ Absorbing…' : '✦ Absorb'}
+              </button>
+            )}
+            <button className="btn btn--primary btn--sm" onClick={capture} disabled={!text.trim() || absorbing}>
+              Capture
+            </button>
+          </div>
         </div>
       </div>
+
+      {report && (
+        <p className="muted" style={{ marginTop: 'var(--sp-3)', fontSize: 'var(--fs-label)', textAlign: 'center' }}>
+          {report}
+        </p>
+      )}
 
       {/* one quiet card — a question if the AI just asked one, else the single
           next thing, else nothing at all */}

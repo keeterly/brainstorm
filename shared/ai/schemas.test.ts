@@ -36,9 +36,51 @@ function sampleInput(name: string): never {
     generate_roadmap: { goal: ref, raw_content: 'launch the campaign' },
     prioritize: { actions: [{ id: 'aaaa', title: 'do a thing' }] },
     distill_memory: { text: 'I prefer mornings', existing: [] },
+    absorb: { text: 'the buyer moved our meeting to friday', thoughts: [ref] },
   }
   return inputs[name] as never
 }
+
+describe('absorb output schema', () => {
+  const absorb = ACTION_REGISTRY.absorb
+  it('accepts a full adjustment set', () => {
+    const r = absorb.outputSchema.safeParse({
+      updates: [{ id: 'aaaa', due_date: '2026-08-01' }],
+      completions: ['bbbb'],
+      snoozes: [{ id: 'cccc', until: '2026-08-04' }],
+      additions: [
+        { tempId: 't1', title: 'Confirm the room block', type: 'goal' },
+        { tempId: 't2', title: 'Email the hotel', type: 'action', part_of: 't1' },
+      ],
+      note: 'Moved the buyer meeting and added a room-block goal.',
+    })
+    expect(r.success).toBe(true)
+  })
+  it('accepts the all-empty "nothing to adjust" shape', () => {
+    const r = absorb.outputSchema.safeParse({ updates: [], completions: [], snoozes: [], additions: [], note: '' })
+    expect(r.success).toBe(true)
+  })
+  it('rejects bad dates and unknown thought types', () => {
+    expect(
+      absorb.outputSchema.safeParse({
+        updates: [{ id: 'aaaa', due_date: 'friday' }],
+        completions: [],
+        snoozes: [],
+        additions: [],
+        note: '',
+      }).success,
+    ).toBe(false)
+    expect(
+      absorb.outputSchema.safeParse({
+        updates: [],
+        completions: [],
+        snoozes: [],
+        additions: [{ tempId: 't1', title: 'x', type: 'wish' }],
+        note: '',
+      }).success,
+    ).toBe(false)
+  })
+})
 
 describe('classify_thought output schema', () => {
   it('accepts a valid classification', () => {
