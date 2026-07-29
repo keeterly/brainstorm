@@ -24,6 +24,8 @@ export interface SkyColors {
   ground: RGB
   /** 0 cool … 1 warm — drives the light shaft's temperature */
   warm: number
+  /** 0 the dead of night … 1 full midday — how much light is in the room */
+  lift: number
   /** what to call this hour */
   name: 'night' | 'dawn' | 'morning' | 'midday' | 'afternoon' | 'evening'
 }
@@ -32,31 +34,34 @@ type Anchor = SkyColors & { at: number }
 
 // Anchored around the waking day; everything between is interpolated.
 //
-// The world stays dark throughout — this is not a light theme at noon. What
-// travels is hue and energy: indigo through the night, rose at first light,
-// clear blue while you are working, gold as it tips over, orange at sunset.
-// One accent carries the hour into every view, so the app feels like the same
-// room at a different time rather than a different app.
+// Both hue and light travel. Indigo through the night, rose at first light,
+// clear blue while you are working, gold as it tips over, orange at sunset —
+// and the room genuinely brightens toward noon and falls away after it, so the
+// day has a shape you can feel rather than only a colour you can name.
+//
+// It is a dark interface at every hour: midday is a lit blue room, not a white
+// screen. Type stays near-white throughout, and the contrast that holds it
+// readable is asserted across the whole cycle in the tests.
 const CYCLE: Anchor[] = [
-  { at: 0, name: 'night', top: [10, 12, 30], horizon: [22, 32, 72], water: [22, 52, 104], warm: 0.05,
+  { at: 0, name: 'night', top: [10, 12, 30], horizon: [22, 32, 72], water: [22, 52, 104], warm: 0.05, lift: 0,
     accent: [126, 158, 240], surface: [20, 24, 38], ground: [4, 5, 12] },
   // night holds its own colour until first light is genuinely near — without
   // this, 2am is already a third of the way to dawn
-  { at: 3.5, name: 'night', top: [10, 12, 30], horizon: [22, 32, 72], water: [22, 52, 104], warm: 0.05,
+  { at: 3.5, name: 'night', top: [10, 12, 30], horizon: [22, 32, 72], water: [22, 52, 104], warm: 0.05, lift: 0,
     accent: [126, 158, 240], surface: [20, 24, 38], ground: [4, 5, 12] },
-  { at: 5.5, name: 'dawn', top: [42, 20, 38], horizon: [140, 54, 70], water: [86, 60, 108], warm: 0.62,
-    accent: [255, 162, 172], surface: [32, 24, 34], ground: [10, 6, 12] },
-  { at: 8, name: 'morning', top: [18, 32, 58], horizon: [56, 84, 122], water: [40, 108, 160], warm: 0.4,
-    accent: [142, 206, 255], surface: [23, 29, 40], ground: [5, 8, 14] },
-  { at: 12, name: 'midday', top: [12, 38, 74], horizon: [32, 90, 146], water: [32, 124, 196], warm: 0.12,
-    accent: [122, 215, 255], surface: [20, 28, 42], ground: [4, 7, 15] },
-  { at: 16, name: 'afternoon', top: [40, 32, 44], horizon: [146, 88, 48], water: [70, 106, 148], warm: 0.44,
-    accent: [255, 200, 132], surface: [30, 27, 36], ground: [9, 7, 12] },
-  { at: 19, name: 'evening', top: [48, 22, 32], horizon: [182, 68, 24], water: [98, 70, 110], warm: 0.78,
-    accent: [255, 148, 88], surface: [34, 24, 30], ground: [12, 6, 10] },
-  { at: 22, name: 'night', top: [18, 16, 40], horizon: [44, 34, 78], water: [34, 58, 110], warm: 0.22,
+  { at: 5.5, name: 'dawn', top: [50, 26, 46], horizon: [150, 60, 76], water: [92, 66, 116], warm: 0.62, lift: 0.24,
+    accent: [255, 162, 172], surface: [38, 29, 40], ground: [13, 9, 16] },
+  { at: 8, name: 'morning', top: [24, 56, 100], horizon: [56, 104, 152], water: [44, 126, 184], warm: 0.4, lift: 0.64,
+    accent: [142, 206, 255], surface: [31, 43, 63], ground: [9, 18, 34] },
+  { at: 12, name: 'midday', top: [34, 86, 142], horizon: [72, 142, 198], water: [50, 148, 216], warm: 0.12, lift: 1,
+    accent: [122, 215, 255], surface: [39, 57, 83], ground: [15, 29, 51] },
+  { at: 16, name: 'afternoon', top: [60, 50, 62], horizon: [170, 106, 60], water: [88, 120, 160], warm: 0.44, lift: 0.66,
+    accent: [255, 200, 132], surface: [47, 41, 51], ground: [22, 17, 22] },
+  { at: 19, name: 'evening', top: [56, 27, 36], horizon: [190, 74, 28], water: [104, 76, 116], warm: 0.78, lift: 0.28,
+    accent: [255, 148, 88], surface: [38, 27, 33], ground: [15, 8, 12] },
+  { at: 22, name: 'night', top: [18, 16, 40], horizon: [44, 34, 78], water: [34, 58, 110], warm: 0.22, lift: 0.05,
     accent: [150, 152, 244], surface: [24, 24, 40], ground: [6, 6, 14] },
-  { at: 24, name: 'night', top: [10, 12, 30], horizon: [22, 32, 72], water: [22, 52, 104], warm: 0.05,
+  { at: 24, name: 'night', top: [10, 12, 30], horizon: [22, 32, 72], water: [22, 52, 104], warm: 0.05, lift: 0,
     accent: [126, 158, 240], surface: [20, 24, 38], ground: [4, 5, 12] },
 ]
 
@@ -84,6 +89,7 @@ export function daylightAt(date: Date): SkyColors {
     surface: mix3(a.surface, b.surface, k),
     ground: mix3(a.ground, b.ground, k),
     warm: mix(a.warm, b.warm, k),
+    lift: mix(a.lift, b.lift, k),
     name: nameHour(h),
   }
 }
@@ -122,13 +128,18 @@ export function tickDaylight(now = new Date()) {
   sky.surface = s.surface
   sky.ground = s.ground
   sky.warm = s.warm
+  sky.lift = s.lift
   sky.name = s.name
   if (typeof document === 'undefined') return s
   const r = document.documentElement.style
   r.setProperty('--sky-top', rgb(s.top))
   r.setProperty('--sky-horizon', rgb(s.horizon, 0.62))
-  r.setProperty('--sky-ground', rgb(mix3(s.top, [3, 4, 9], 0.72)))
+  r.setProperty('--sky-ground', rgb(mix3(s.top, [3, 4, 9], 0.72 - s.lift * 0.24)))
   r.setProperty('--sky-warm', s.warm.toFixed(3))
+  r.setProperty('--sky-lift', s.lift.toFixed(3))
+  // the frame closes in at night and opens up at noon — a fixed vignette was
+  // putting the same dusk back around every bright hour
+  r.setProperty('--sky-vignette', `rgba(2,3,6,${(0.6 - s.lift * 0.3).toFixed(3)})`)
 
   // ---- the hour, carried into every view ----
   const a = s.accent
@@ -160,7 +171,12 @@ export function tickDaylight(now = new Date()) {
   r.setProperty('--ink-soft', rgb(mix3([152, 160, 172], a, 0.18)))
   r.setProperty('--ink-faint', rgb(mix3([86, 93, 104], a, 0.16)))
 
-  // the glass drops in the sky, lit by the same accent
+  // the glass drops in the sky, lit by the same accent. Their bodies lift with
+  // the room: held at midnight they would read as holes cut in a bright sky
+  // rather than as water hanging in it.
+  r.setProperty('--drop-body-hi', rgb(mix3(s.surface, [255, 255, 255], 0.14), 0.96))
+  r.setProperty('--drop-body-lo', rgb(mix3(s.surface, [0, 0, 0], 0.42), 0.97))
+  r.setProperty('--drop-fill', rgb(mix3(s.surface, [255, 255, 255], 0.06), 0.94))
   r.setProperty('--drop-glow', rgb(a, 0.2))
   r.setProperty('--drop-rim', rgb(a, 0.17))
   // the echo a live drop sends out carries the same hour, but has to survive

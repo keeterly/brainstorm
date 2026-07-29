@@ -129,7 +129,9 @@ export function Atmosphere() {
         style={{
           position: 'absolute',
           inset: 0,
-          background: 'radial-gradient(ellipse at 50% 42%, transparent 52%, rgba(2, 3, 6, 0.6) 100%)',
+          background:
+            'radial-gradient(ellipse at 50% 42%, transparent 52%, var(--sky-vignette, rgba(2, 3, 6, 0.6)) 100%)',
+          transition: 'background 4s linear',
         }}
       />
     </div>
