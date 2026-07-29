@@ -937,12 +937,14 @@ function mountSky(root: HTMLDivElement) {
       }
       pendingImage = { mediaType: 'image/jpeg', dataB64: readable.split(',')[1] }
       const pf = pageFor
-      const t = S().addThought({ raw_content: 'A captured photo', extra: { img } })
+      const t = S().addThought({ raw_content: 'Photo', title: 'Photo', extra: { img } })
       const p = posOf(t.id)
       const a = Math.random() * Math.PI * 2
       p.x = p.rx = Math.max(60, Math.min(W - 60, (pf?.ox ?? W / 2) + Math.cos(a) * 110))
-      p.y = p.ry = Math.max(140, Math.min(H - 160, (pf?.oy ?? H / 2) + Math.sin(a) * 90))
-      pageN.textContent = '✦ can read this one'
+      p.y = p.ry = Math.max(140, Math.min(waterlineY() - 90, (pf?.oy ?? H / 2) + Math.sin(a) * 90))
+      // choosing a picture is the request to read it — no second tap needed
+      if (!S().offline) void runOrganize(false, t.id)
+      else pageN.textContent = 'kept — reading needs a connection'
     }
     im.onerror = () => URL.revokeObjectURL(url)
     im.src = url
@@ -958,7 +960,7 @@ function mountSky(root: HTMLDivElement) {
     }
   }
   let organizing = false
-  async function runOrganize(spoken: boolean) {
+  async function runOrganize(spoken: boolean, photoId?: string) {
     const v = pageT.value.trim()
     if ((!v && !pendingImage) || organizing) return
     const pf = pageFor
@@ -971,6 +973,8 @@ function mountSky(root: HTMLDivElement) {
     organizing = false
     pageAbsorb.classList.remove('busy')
     if (res.kind === 'organized') {
+      // the picture now knows what it shows
+      if (photoId && res.source) S().updateThought(photoId, { title: res.source, raw_content: res.source })
       pageT.value = ''
       micUsed = false
       pendingImage = null
@@ -984,7 +988,8 @@ function mountSky(root: HTMLDivElement) {
     } else {
       // nothing found, or the engine is down — the words still become drops
       closePage(true)
-      say(res.kind === 'failed' ? 'kept as written — the thinking engine is quiet' : 'kept as written')
+      if (photoId) say(res.kind === 'failed' ? 'the picture is kept — reading it failed' : 'the picture is kept')
+      else say(res.kind === 'failed' ? 'kept as written — the thinking engine is quiet' : 'kept as written')
     }
   }
   pageAbsorb.addEventListener('click', () => void runOrganize(micUsed))

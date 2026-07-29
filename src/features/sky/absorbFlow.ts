@@ -74,7 +74,7 @@ export function learnQuietly(text: string) {
 // atomic drops, named pools around real themes, threads between the ideas
 // that speak to each other. Returns what to say and where to splash.
 export type OrganizeResult =
-  | { kind: 'organized'; note: string; drops: number; pools: number; links: number }
+  | { kind: 'organized'; note: string; drops: number; pools: number; links: number; source?: string }
   | { kind: 'nothing' }
   | { kind: 'failed' }
 
@@ -131,7 +131,7 @@ export async function organizeText(
       }
     }
     learnQuietly(text)
-    return { kind: 'organized', note: output.note, drops: output.drops.length, pools, links }
+    return { kind: 'organized', note: output.note, drops: output.drops.length, pools, links, source: output.source }
   } catch {
     return { kind: 'failed' }
   }

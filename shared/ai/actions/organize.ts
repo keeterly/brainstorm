@@ -50,6 +50,9 @@ const Output = z.object({
     .max(8),
   // ideas that speak to each other but should not be merged
   links: z.array(z.object({ a: z.string(), b: z.string() })).max(30),
+  // a short name for the attached image itself, so the photo in the sky is
+  // labelled by what it shows rather than "a captured photo"
+  source: z.string().max(60).optional(),
   note: z.string().max(240),
 })
 
@@ -88,6 +91,7 @@ export const organize: ActionDef<OrganizeInput, OrganizeOutput> = {
         `3. links — pairs of thoughts that illuminate each other but belong to different pools, or that are in tension. ` +
         `Only draw a link you could explain in one sentence. Few and meaningful.\n\n` +
         `note: one plain sentence to the user about what you found — the shape of their thinking, not a summary of the text.` +
+        (input.image ? `\nsource: 2-5 words naming the picture itself, as a label for it in their sky.` : '') +
         existing +
         (input.text.trim() ? `\n\nText:\n"""${input.text}"""` : ''),
       images: input.image ? [input.image] : undefined,
