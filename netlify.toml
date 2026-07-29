@@ -3,6 +3,13 @@
   command = "npm run build"
   publish = "dist"
 
+[build.environment]
+  # The Supabase URL and anon key are public by design — they ship in the
+  # client bundle and RLS is the security boundary. Without this exemption
+  # Netlify's secrets scanner finds them in dist/ and fails every build.
+  # ANTHROPIC_API_KEY stays scanned: it is server-only and never in output.
+  SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL,SUPABASE_ANON_KEY,VITE_SUPABASE_URL,VITE_SUPABASE_ANON_KEY"
+
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
