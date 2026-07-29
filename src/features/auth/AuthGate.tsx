@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { supabase, supabaseConfigured } from '@/lib/supabase'
+import { arrivedViaRecovery, supabase, supabaseConfigured } from '@/lib/supabase'
 import { useGraph } from '@/store/graph'
 import { DEMO, DEMO_SEED } from '@/lib/demo'
 import { SignIn } from './SignIn'
 import { DeviceLock } from './DeviceLock'
+import { SetPassword } from './SetPassword'
 import { EnrollFaceId } from './EnrollFaceId'
 import { isEnrolled } from '@/lib/passkey'
 
@@ -48,6 +49,8 @@ function RealAuthGate({ children }: { children: ReactNode }) {
   const [checked, setChecked] = useState(false)
   // the device lock stands in front of an existing session, once per app load
   const [locked, setLocked] = useState(() => isEnrolled())
+  // a reset link signs you in without ever asking you to pick a password
+  const [recovering, setRecovering] = useState(arrivedViaRecovery)
   const hydrated = useGraph((s) => s.hydrated)
   const hydrate = useGraph((s) => s.hydrate)
   const reset = useGraph((s) => s.reset)
@@ -61,8 +64,9 @@ function RealAuthGate({ children }: { children: ReactNode }) {
       setSession(data.session)
       setChecked(true)
     })
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((e, s) => {
       setSession(s)
+      if (e === 'PASSWORD_RECOVERY') setRecovering(true)
       // a fresh sign-in has already proved who you are; do not ask twice
       if (s) setLocked(false)
     })
@@ -96,6 +100,7 @@ function RealAuthGate({ children }: { children: ReactNode }) {
   if (!checked) return null
   if (!session) return <SignIn />
   if (locked) return <DeviceLock onOpen={() => setLocked(false)} />
+  if (recovering) return <SetPassword onDone={() => setRecovering(false)} />
 
   if (!hydrated) {
     return (

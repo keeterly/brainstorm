@@ -33,7 +33,7 @@ export function SignIn() {
       } else if (mode === 'reset') {
         const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
         if (error) throw error
-        setNotice('Reset sent. Open the link to get back in, then set a password under Memory → Account. If the email carries a 6-digit code, type it below to do it all in this browser.')
+        setNotice('Reset sent. Open the link — it signs you in and then asks you to choose a new password.')
         setSentKind('recovery')
       } else if (mode === 'password') {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
