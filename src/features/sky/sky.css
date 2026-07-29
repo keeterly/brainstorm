@@ -67,8 +67,9 @@
     1.5px -0.5px 2px rgba(255, 190, 130, 0.09),
     0 20px 60px rgba(0, 0, 0, 0.62);
 }
-/* while a pool holds the stage, the rest of the sky recedes */
-.skyb.recede { opacity: 0.13; }
+/* while a pool holds the stage, the rest of the sky recedes — far enough back
+   that its words stop competing with the ring you are actually reading */
+.skyb.recede { opacity: 0.06; }
 .skyb.saturated {
   border-color: rgba(122, 215, 255, 0.5);
   box-shadow:

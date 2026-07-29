@@ -428,6 +428,27 @@ function mountSky(root: HTMLDivElement) {
     }
     camTarget = target
   }
+  /** Frame one opened pool and the whole ring it lays out, and nothing else. */
+  function frameOpen(g: TL) {
+    const p = posOf(g.t.id)
+    const reach = orbitR(g) + memberR(g.members.length) + 22
+    // keep the ring inside the world so no part of it can be clamped away
+    p.x = Math.max(Math.min(reach, worldW() / 2), Math.min(worldW() - reach, p.x))
+    p.y = Math.max(Math.min(reach, worldH() / 2), Math.min(worldH() - reach, p.y))
+    const top = 76
+    // the pool's own actions wait below it; leave them room
+    const bottom = waterlineY() - 118
+    const k = Math.max(MIN_K, Math.min(MAX_K, Math.min(W / (reach * 2), (bottom - top) / (reach * 2))))
+    const target = { k, x: W / 2 - p.x * k, y: (top + bottom) / 2 - p.y * k }
+    if (reduced) {
+      cam.k = target.k
+      cam.x = target.x
+      cam.y = target.y
+      applyCam()
+      return
+    }
+    camTarget = target
+  }
   let camTarget: { x: number; y: number; k: number } | null = null
   const onResize = () => {
     W = innerWidth
@@ -637,8 +658,19 @@ function mountSky(root: HTMLDivElement) {
     els.get(id)?.remove()
     els.delete(id)
   }
-  function memberR() {
-    return 50
+  // A pool with a lot inside it holds smaller members, so the ring it needs
+  // does not run away with the whole sky.
+  function memberR(n = 1) {
+    return Math.max(34, Math.min(50, 54 - n * 1.6))
+  }
+  // The ring an opened pool lays its members out on. Big enough to clear the
+  // pool's own body and its name, and big enough that no two members touch —
+  // whichever of those is the larger demand.
+  function orbitR(g: TL) {
+    const n = Math.max(1, g.members.length)
+    const mr = memberR(n)
+    const apart = n > 1 ? (mr + 9) / Math.sin(Math.PI / n) : 0
+    return Math.max(radiusOf(g) + mr + 18, apart)
   }
   function paintDropEl(t: Thought, el: HTMLDivElement, r: number, asMember: boolean) {
     el.style.width = el.style.height = r * 2 + 'px'
@@ -1366,7 +1398,8 @@ function mountSky(root: HTMLDivElement) {
     closeMoons()
     moonsFor = tl.t.id
     const p = posOf(tl.t.id)
-    p.y = Math.max(p.y, radiusOf(tl) + 170)
+    // an opened pool has already been framed by the camera; leave it where it is
+    if (openPool !== tl.t.id) p.y = Math.max(p.y, radiusOf(tl) + 170)
     const acts: { icon: string; lb: string; dim?: boolean; run: () => void }[] = []
     if (tl.kind === 'drop' && !isKept(tl.t)) {
       acts.push({
@@ -1429,17 +1462,19 @@ function mountSky(root: HTMLDivElement) {
       let x: number
       let y: number
       if (open) {
-        // an opened pool is showing its contents; its own actions step out of
-        // the orbit and wait together above the water
+        // an opened pool is showing its contents; its own actions step clear of
+        // the whole ring and wait together below it
         const gap = 78 / cam.k
         x = p.x + (slot - (n - 1) / 2) * gap - 27
-        y = p.y + radiusOf(tl) + 76
+        y = p.y + orbitR(tl) + memberR(tl.members.length) + 46
       } else {
         const ang = toCenter + (slot - (n - 1) / 2) * spread
         x = p.x + Math.cos(ang) * r - 27
         y = p.y + Math.sin(ang) * r - 27
       }
-      m.style.transform = `translate(${x}px, ${y}px)`
+      // the moons live in the world but are things you tap: they keep their
+      // real size however far out the camera has pulled
+      m.style.transform = `translate(${x}px, ${y}px) scale(${(1 / cam.k).toFixed(3)})`
     })
   }
 
@@ -1470,8 +1505,12 @@ function mountSky(root: HTMLDivElement) {
   let openPool: string | null = null
   function clearAll() {
     closeMoons()
+    const wasOpen = !!openPool
     if (openPool) openPool = null
     paintAll()
+    // coming out of a pool, the camera pulls back to the whole sky — the same
+    // move in reverse. Opening another pool re-aims it a line later.
+    if (wasOpen) fitAll()
   }
 
   let fusing: string[] = []
@@ -1795,8 +1834,9 @@ function mountSky(root: HTMLDivElement) {
       else {
         clearAll()
         openPool = tl.t.id
-        p.y = Math.max(p.y, radiusOf(tl) + 236)
-        p.x = Math.max(radiusOf(tl) + 90, Math.min(W - radiusOf(tl) - 90, p.x))
+        // the camera goes to the pool rather than the pool being shoved into
+        // whatever part of the sky happens to be on screen
+        frameOpen(tl)
         paintAll()
         showMoons(tl)
       }
@@ -1883,11 +1923,18 @@ function mountSky(root: HTMLDivElement) {
       if (!tl) return
       seen.add(id)
       const p = posOf(id)
-      echoFrom(id, p.rx, p.ry, radiusOf(tl) * p.s, strength)
+      // capped: a big pool's echo would otherwise reach across the whole sky
+      echoFrom(id, p.rx, p.ry, Math.min(radiusOf(tl) * p.s, 76), strength)
+    }
+    // an opened pool is already saying it is live, with a ring of its contents
+    // and a spoke to each one; rings on top of that is just noise
+    if (openPool) {
+      if (holding && holding.id !== openPool) push(holding.id, 0.4)
+      for (let i = echoUsed; i < echoPool.length; i++) echoPool[i].style.opacity = '0'
+      return
     }
     push(holding?.id, 0.4)
     push(moonsFor, 0.3)
-    push(openPool, 0.2)
     // whatever has gone ripe keeps a quiet pulse of its own — kept to a few, or
     // a full sky of ripe drops turns the echo into scratches
     let ripe = 0
@@ -2012,7 +2059,8 @@ function mountSky(root: HTMLDivElement) {
       const g = view.byId.get(openPool)
       if (g) {
         const gp = posOf(g.t.id)
-        const or = radiusOf(g) + 62
+        const or = orbitR(g)
+        const mr = memberR(g.members.length)
         g.members.forEach((m, i) => {
           const a = -Math.PI / 2 + (i / g.members.length) * Math.PI * 2 + t * 0.05
           const mp = posOf(m.id)
@@ -2020,13 +2068,13 @@ function mountSky(root: HTMLDivElement) {
             mp.x += (gp.x + Math.cos(a) * or - mp.x) * 0.1
             mp.y += (gp.y + Math.sin(a) * or - mp.y) * 0.1
           }
-          // members never leave the frame, whatever the orbit wants
-          const mr = memberR()
-          mp.x = Math.max(mr + 8, Math.min(W - mr - 8, mp.x))
-          mp.y = Math.max(mr + 74, Math.min(waterlineY() - mr - 14, mp.y))
+          // members stay in the world, not in the window — clamping them to the
+          // glass is what used to fold one side of the ring onto the other
+          mp.x = Math.max(mr, Math.min(worldW() - mr, mp.x))
+          mp.y = Math.max(mr, Math.min(worldH() - mr, mp.y))
         })
         // clear the orbit's room: the rest of the sky drifts out of the way
-        const clear = or + memberR() + 34
+        const clear = or + mr + 34
         for (const other of view.tls) {
           if (other.t.id === g.t.id) continue
           const op = posOf(other.t.id)
