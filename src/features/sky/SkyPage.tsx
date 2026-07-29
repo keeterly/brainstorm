@@ -444,52 +444,77 @@ function mountSky(root: HTMLDivElement) {
 
   // ---------- world view over the store ----------
   let ver = 0
-  let view: { tls: TL[]; byId: Map<string, TL>; threads: { a: string; b: string; id: string }[] } = {
+  let view: {
+    /** what is on stage at rest: the roots */
+    tls: TL[]
+    /** every node, however deep, so anything can be opened or measured */
+    byId: Map<string, TL>
+    threads: { a: string; b: string; id: string }[]
+    parentOf: Map<string, string>
+    kidsOf: Map<string, Thought[]>
+  } = {
     tls: [],
     byId: new Map(),
     threads: [],
+    parentOf: new Map(),
+    kidsOf: new Map(),
   }
   function rebuild() {
     const s = S()
     const open = s.thoughts.filter((t) => t.status === 'open')
-    const goals = open.filter((t) => t.type === 'goal')
-    const goalIds = new Set(goals.map((g) => g.id))
-    const memberOf = new Map<string, string>()
+    const alive = new Map(open.map((t) => [t.id, t]))
+    // Groups within groups: a thing belongs to whatever it is part of, whether
+    // that parent is a goal or not, and a thing with anything under it is a
+    // pool. Nesting is just this map read one level at a time.
+    const parentOf = new Map<string, string>()
+    const kidsOf = new Map<string, Thought[]>()
     for (const r of s.relationships) {
-      if (r.type === 'part_of' && goalIds.has(r.to_id)) memberOf.set(r.from_id, r.to_id)
+      if (r.type !== 'part_of') continue
+      const child = alive.get(r.from_id)
+      if (!child || !alive.has(r.to_id) || r.from_id === r.to_id) continue
+      // one home each: a second parent is ignored rather than duplicating it
+      if (parentOf.has(child.id)) continue
+      parentOf.set(child.id, r.to_id)
+      if (!kidsOf.has(r.to_id)) kidsOf.set(r.to_id, [])
+      ;(kidsOf.get(r.to_id) as Thought[]).push(child)
     }
-    const membersByGoal = new Map<string, Thought[]>()
-    for (const t of open) {
-      const g = memberOf.get(t.id)
-      if (g && t.type !== 'goal') {
-        if (!membersByGoal.has(g)) membersByGoal.set(g, [])
-        ;(membersByGoal.get(g) as Thought[]).push(t)
+    // a cycle would hang the walk up; break any that a bad edge created
+    for (const id of [...parentOf.keys()]) {
+      const seen = new Set([id])
+      let p = parentOf.get(id)
+      while (p) {
+        if (seen.has(p)) {
+          parentOf.delete(id)
+          const sib = kidsOf.get(p)
+          if (sib) kidsOf.set(p, sib.filter((k) => k.id !== id))
+          break
+        }
+        seen.add(p)
+        p = parentOf.get(p)
       }
     }
-    const tls: TL[] = [
-      ...open
-        .filter((t) => t.type !== 'goal' && !memberOf.has(t.id))
-        .map((t) => ({ kind: 'drop' as const, t, members: [] })),
-      ...goals.map((g) => ({ kind: 'pool' as const, t: g, members: membersByGoal.get(g.id) ?? [] })),
-    ]
-    const byId = new Map(tls.map((tl) => [tl.t.id, tl]))
-    const topIds = new Set(byId.keys())
+
+    const nodeOf = (t: Thought): TL => {
+      const kids = kidsOf.get(t.id) ?? []
+      return { kind: kids.length ? 'pool' : 'drop', t, members: kids }
+    }
+    // every node is addressable, so a pool nested three deep can still be
+    // opened, measured and drawn; only the roots go on stage at rest
+    const byId = new Map(open.map((t) => [t.id, nodeOf(t)]))
+    const tls = open.filter((t) => !parentOf.has(t.id)).map((t) => byId.get(t.id) as TL)
+
+    const topIds = new Set(tls.map((tl) => tl.t.id))
     const threads = s.relationships
       .filter((r) => r.type === 'relates_to' && topIds.has(r.from_id) && topIds.has(r.to_id))
       .map((r) => ({ a: r.from_id, b: r.to_id, id: r.id }))
-    // a pool that has lost its members is just a label in the way
-    for (const g of goals) {
-      const n = (membersByGoal.get(g.id) ?? []).length
-      const born = Date.now() - new Date(g.created_at).getTime()
-      if (n < 2 && born > 8000) {
-        for (const m of membersByGoal.get(g.id) ?? []) {
-          const rel = s.relationships.find((r) => r.type === 'part_of' && r.from_id === m.id && r.to_id === g.id)
-          if (rel) s.deleteRelationship(rel.id)
-        }
-        s.deleteThought(g.id)
-      }
+
+    // a pool that has lost its contents is just a label in the way. Only ever
+    // an empty one — a group holding a single group is a real thing to keep.
+    for (const t of open) {
+      if (t.type !== 'goal' || kidsOf.has(t.id)) continue
+      if (Date.now() - new Date(t.created_at).getTime() > 8000) s.deleteThought(t.id)
     }
-    view = { tls, byId, threads }
+    view = { tls, byId, threads, parentOf, kidsOf }
     ver++
   }
 
@@ -680,9 +705,18 @@ function mountSky(root: HTMLDivElement) {
     tx.style.fontSize = Math.round(Math.max(10.5, Math.min(17, 6 + r * 0.105)) * 10) / 10 + 'px'
     tx.textContent = trim(label(t), r < 50 ? 40 : 92)
   }
+  /** What is on stage: the roots, plus the group you are currently inside if
+   *  that group is itself nested and so is not a root. */
+  function onStage(): TL[] {
+    if (!openPool) return view.tls
+    const o = view.byId.get(openPool)
+    if (!o || view.tls.some((tl) => tl.t.id === openPool)) return view.tls
+    return [...view.tls, o]
+  }
+
   function paintAll() {
     const alive = new Set<string>()
-    for (const tl of view.tls) {
+    for (const tl of onStage()) {
       alive.add(tl.t.id)
       const el = els.get(tl.t.id) ?? mountEl(tl.t.id, tl.kind === 'pool' ? 'skyb pool' : 'skyb')
       el.classList.toggle('pool', tl.kind === 'pool')
@@ -712,13 +746,28 @@ function mountSky(root: HTMLDivElement) {
       } else {
         paintDropEl(tl.t, el, radiusOf(tl), false)
       }
-      // open pool renders its members in orbit
+      // open pool renders its contents in orbit — and one of those may itself
+      // be a pool, which is what makes groups within groups visible
       if (tl.kind === 'pool' && openPool === tl.t.id) {
+        const mr = memberR(tl.members.length)
         for (const m of tl.members) {
           alive.add(m.id)
           const me = els.get(m.id) ?? mountEl(m.id, 'skyb')
           me.classList.remove('recede')
-          paintDropEl(m, me, memberR(), true)
+          const inner = view.kidsOf.get(m.id)?.length ?? 0
+          if (inner) {
+            me.classList.add('pool', 'member')
+            me.classList.remove('small')
+            me.style.width = me.style.height = mr * 2 + 'px'
+            me.innerHTML = `<div class="t" style="font-weight:600"></div><div class="state"></div>`
+            const nm = me.querySelector('.t') as HTMLDivElement
+            nm.style.fontSize = Math.round(Math.max(11, Math.min(15, 6 + mr * 0.11)) * 10) / 10 + 'px'
+            nm.textContent = label(m)
+            ;(me.querySelector('.state') as HTMLDivElement).textContent = `${inner} inside`
+          } else {
+            me.classList.remove('pool')
+            paintDropEl(m, me, mr, true)
+          }
         }
       }
     }
@@ -1539,12 +1588,18 @@ function mountSky(root: HTMLDivElement) {
   let openPool: string | null = null
   function clearAll() {
     closeMoons()
-    const wasOpen = !!openPool
-    if (openPool) openPool = null
+    const wasOpen = openPool
+    if (wasOpen) {
+      // out of a group is into the group that held it, not all the way back to
+      // the surface — going three deep and being thrown to the top is a loss
+      const up = view.parentOf.get(wasOpen)
+      openPool = up && view.byId.has(up) ? up : null
+    }
     paintAll()
-    // coming out of a pool, the camera pulls back to the whole sky — the same
-    // move in reverse. Opening another pool re-aims it a line later.
-    if (wasOpen) fitAll()
+    if (!wasOpen) return
+    const back = openPool ? view.byId.get(openPool) : null
+    if (back) frameOpen(back)
+    else fitAll()
   }
 
   let fusing: string[] = []
@@ -1893,6 +1948,14 @@ function mountSky(root: HTMLDivElement) {
     hint.style.opacity = '0'
     const tl = view.byId.get(id)
     if (isMember) {
+      // a group inside a group opens like any other: you go in one more level
+      if (tl && tl.kind === 'pool') {
+        openPool = tl.t.id
+        closeMoons()
+        frameOpen(tl)
+        paintAll()
+        return
+      }
       const t = S().thoughts.find((x) => x.id === id)
       if (t) {
         const p = posOf(id)
