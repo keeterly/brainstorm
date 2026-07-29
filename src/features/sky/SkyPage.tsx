@@ -8,6 +8,7 @@ import { parseCapture } from '@/domain/parse-blocks'
 import { runAction } from '@/ai/client'
 import type { ClassifyOutput } from '@shared/ai/actions/classify-thought'
 import { absorbText } from './absorbFlow'
+import { waterlineY } from '@/world/water'
 import type { Thought } from '@/domain/types'
 import './sky.css'
 
@@ -17,15 +18,11 @@ export default function SkyPage() {
   return (
     <div ref={rootRef}>
       <div className="sky-stage" data-sky="stage">
-        <canvas className="sky-water" data-sky="water" />
         <svg className="sky-links" data-sky="links" aria-hidden="true" />
         <div data-sky="field" />
       </div>
       <header className="sky-head">
-        <div className="mark">BRAINSTORM</div>
-        <div className="hint" data-sky="hint">
-          hold the sky to write
-        </div>
+        <div className="hint" data-sky="hint" />
       </header>
       <div className="sky-meter" data-sky="meter" aria-hidden="true" />
       <button className="sky-rest" data-sky="rest" aria-label="Resting thoughts">
@@ -47,16 +44,21 @@ export default function SkyPage() {
         <div className="bot">
           <div className="tools">
             <button className="tool" data-sky="pageMic" aria-label="Speak">
-              🎤
+              <Ico d="M12 3.4a2.6 2.6 0 0 0-2.6 2.6v5a2.6 2.6 0 0 0 5.2 0V6A2.6 2.6 0 0 0 12 3.4ZM6.2 10.6a5.8 5.8 0 0 0 11.6 0M12 16.4v4.2" />
             </button>
             <button className="tool" data-sky="pagePic" aria-label="Add a photo">
-              🖼
+              <Ico d="M3.6 6.8a2 2 0 0 1 2-2h12.8a2 2 0 0 1 2 2v10.4a2 2 0 0 1-2 2H5.6a2 2 0 0 1-2-2V6.8ZM3.9 16l4.6-4.3a1.7 1.7 0 0 1 2.3 0l4 3.7M14 13.4l1.6-1.5a1.7 1.7 0 0 1 2.3 0l2.2 2M9 9.4a1.2 1.2 0 1 1-2.4 0 1.2 1.2 0 0 1 2.4 0Z" />
             </button>
-            <button className="tool" data-sky="pageAbsorb" aria-label="Absorb into the sky" title="Let the sky rearrange instead of adding duplicates">
-              ✦
+            <button
+              className="tool"
+              data-sky="pageAbsorb"
+              aria-label="Absorb into the sky"
+              title="Let the sky rearrange instead of adding duplicates"
+            >
+              <Ico d="M12 3.2c.7 4.2 1.9 5.4 6.1 6.1-4.2.7-5.4 1.9-6.1 6.1-.7-4.2-1.9-5.4-6.1-6.1 4.2-.7 5.4-1.9 6.1-6.1ZM17.6 15.2c.35 2 .95 2.6 2.95 2.95-2 .35-2.6.95-2.95 2.95-.35-2-.95-2.6-2.95-2.95 2-.35 2.6-.95 2.95-2.95Z" />
             </button>
             <button className="tool" data-sky="pageLater" aria-label="Let it rest">
-              ☁
+              <Ico d="M7.2 18.4a4.2 4.2 0 0 1-.5-8.37 5.6 5.6 0 0 1 10.75-1.2 3.8 3.8 0 0 1 .35 7.55 4 4 0 0 1-.6.04H7.2Z" />
             </button>
             <span className="note" data-sky="pageN" />
           </div>
@@ -67,6 +69,15 @@ export default function SkyPage() {
       </div>
       <input type="file" data-sky="pageFile" accept="image/*" style={{ display: 'none' }} />
     </div>
+  )
+}
+
+// one drawn family for every tool, so nothing is a stray emoji
+function Ico({ d }: { d: string }) {
+  return (
+    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" aria-hidden focusable="false">
+      <path d={d} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }
 
@@ -102,12 +113,25 @@ const QUESTIONS = [
 const STOP = new Set(['what', 'when', 'where', 'which', 'would', 'could', 'should', 'about', 'with', 'this', 'that', 'than', 'then', 'like', 'look', 'from', 'have', 'over', 'into', 'your', 'their', 'there', 'they', 'want', 'need', 'make', 'build', 'helps', 'really', 'thing', 'something', 'anything'])
 const STRONG = 2
 
+// the same drawn family as the page tools — no stray emoji in the sky
+const MOON_ICONS: Record<string, string> = {
+  grow: 'M12 3.4c.72 4.3 1.94 5.52 6.24 6.24-4.3.72-5.52 1.94-6.24 6.24-.72-4.3-1.94-5.52-6.24-6.24 4.3-.72 5.52-1.94 6.24-6.24ZM17.7 15.6c.32 1.9.88 2.46 2.78 2.78-1.9.32-2.46.88-2.78 2.78-.32-1.9-.88-2.46-2.78-2.78 1.9-.32 2.46-.88 2.78-2.78Z',
+  gather: 'M3.2 12h5.4M20.8 12h-5.4M6.2 9.2 8.9 12l-2.7 2.8M17.8 9.2 15.1 12l2.7 2.8',
+  rain: 'M7.6 13.6a3.7 3.7 0 0 1-.44-7.37 4.95 4.95 0 0 1 9.5-1.06 3.36 3.36 0 0 1 .3 6.67 3.6 3.6 0 0 1-.53.03H7.6M8.4 16.4l-1 3M13 16.4l-1 3M17.6 16.4l-1 3',
+}
+function moonSvg(key: string) {
+  return (
+    `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" aria-hidden="true">` +
+    `<path d="${MOON_ICONS[key] ?? MOON_ICONS.grow}" stroke="currentColor" stroke-width="1.5" ` +
+    `stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  )
+}
+
 function mountSky(root: HTMLDivElement) {
   const $ = <T extends HTMLElement>(k: string) => root.querySelector(`[data-sky="${k}"]`) as T
   const stage = $('stage')
   const field = $('field')
   const links = root.querySelector('[data-sky="links"]') as unknown as SVGSVGElement
-  const water = root.querySelector('[data-sky="water"]') as HTMLCanvasElement
   const hint = $('hint')
   const meter = $('meter')
   const restEl = $('rest')
@@ -144,7 +168,6 @@ function mountSky(root: HTMLDivElement) {
   const onResize = () => {
     W = innerWidth
     H = stage.clientHeight || innerHeight
-    sizeWater()
   }
   addEventListener('resize', onResize)
 
@@ -335,7 +358,10 @@ function mountSky(root: HTMLDivElement) {
     el.innerHTML = (isRipe(t) ? `<div class="ring"></div>` : '') + photo + `<div class="t"></div>${r < 50 ? '' : st}`
     const ph = el.querySelector('.photo') as HTMLDivElement | null
     if (ph && imgOf(t)) ph.style.backgroundImage = `url(${imgOf(t)})`
-    ;(el.querySelector('.t') as HTMLDivElement).textContent = trim(label(t), r < 50 ? 40 : 88)
+    const tx = el.querySelector('.t') as HTMLDivElement
+    // type grows with the drop, so a big idea reads big and a small one stays quiet
+    tx.style.fontSize = Math.round(Math.max(10.5, Math.min(17, 6 + r * 0.105)) * 10) / 10 + 'px'
+    tx.textContent = trim(label(t), r < 50 ? 40 : 92)
   }
   function paintAll() {
     const alive = new Set<string>()
@@ -343,23 +369,28 @@ function mountSky(root: HTMLDivElement) {
       alive.add(tl.t.id)
       const el = els.get(tl.t.id) ?? mountEl(tl.t.id, tl.kind === 'pool' ? 'skyb pool' : 'skyb')
       el.classList.toggle('pool', tl.kind === 'pool')
+      // an open pool takes the stage; everything else steps back
+      el.classList.toggle('recede', !!openPool && openPool !== tl.t.id)
       if (tl.kind === 'pool') {
         const r = radiusOf(tl)
         el.style.width = el.style.height = r * 2 + 'px'
         const shifted = isKept(tl.t) && !!ex(tl.t).planSig && ex(tl.t).planSig !== sigOf(tl)
-        const st =
-          openPool === tl.t.id
-            ? 'pool · tap water to close'
-            : shifted
-              ? 'path · the sky shifted'
-              : isKept(tl.t)
-                ? 'has a path'
-                : `${tl.members.length} idea${tl.members.length === 1 ? '' : 's'}`
+        const open = openPool === tl.t.id
+        const st = open
+          ? ''
+          : shifted
+            ? 'the sky shifted'
+            : isKept(tl.t)
+              ? 'has a path'
+              : `${tl.members.length} inside`
         const next = tl.members[0]
-        const peek = openPool !== tl.t.id && next ? `<div class="peek"></div>` : ''
-        el.innerHTML = `<div class="t" style="font-weight:600"></div>` + peek + `<div class="state ${isKept(tl.t) && !shifted ? '' : 'blue'}"></div>`
-        ;(el.querySelector('.t') as HTMLDivElement).textContent = label(tl.t)
-        ;(el.querySelector('.state') as HTMLDivElement).textContent = st
+        const peek = !open && next ? `<div class="peek"></div>` : ''
+        el.innerHTML =
+          `<div class="t" style="font-weight:600"></div>` + peek + (st ? `<div class="state ${shifted ? 'blue' : ''}"></div>` : '')
+        const nameEl = el.querySelector('.t') as HTMLDivElement
+        nameEl.style.fontSize = Math.round(Math.max(12, Math.min(18, 7 + r * 0.1)) * 10) / 10 + 'px'
+        nameEl.textContent = label(tl.t)
+        if (st) (el.querySelector('.state') as HTMLDivElement).textContent = st
         if (peek) (el.querySelector('.peek') as HTMLDivElement).textContent = '→ ' + trim(label(next), 34)
       } else {
         paintDropEl(tl.t, el, radiusOf(tl), false)
@@ -369,6 +400,7 @@ function mountSky(root: HTMLDivElement) {
         for (const m of tl.members) {
           alive.add(m.id)
           const me = els.get(m.id) ?? mountEl(m.id, 'skyb')
+          me.classList.remove('recede')
           paintDropEl(m, me, memberR(), true)
         }
       }
@@ -390,39 +422,14 @@ function mountSky(root: HTMLDivElement) {
   field.appendChild(inviteEl)
   const invitePos: Pos = { x: W / 2, y: H * 0.34, rx: W / 2, ry: H * 0.34, s: 1, vx: 0, vy: 0 }
 
-  // ---------- water / splash / say ----------
-  const wctx = water.getContext('2d') as CanvasRenderingContext2D
-  function sizeWater() {
-    water.width = W * devicePixelRatio
-    water.height = 90 * devicePixelRatio
-    water.style.width = W + 'px'
-    water.style.height = '90px'
-    wctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0)
-  }
-  sizeWater()
-  function drawWater(t: number) {
-    wctx.clearRect(0, 0, W, 90)
-    const line = (amp: number, speed: number, alpha: number, off: number) => {
-      wctx.beginPath()
-      for (let x = 0; x <= W; x += 6) {
-        const y = 8 + Math.sin(x * 0.016 + t * speed + off) * amp + Math.sin(x * 0.031 - t * speed * 0.7) * amp * 0.5
-        if (x === 0) wctx.moveTo(x, y)
-        else wctx.lineTo(x, y)
-      }
-      wctx.strokeStyle = `rgba(150, 210, 255, ${alpha})`
-      wctx.lineWidth = 1
-      wctx.stroke()
-    }
-    line(reduced ? 0 : 2.4, 0.9, 0.2, 0)
-    line(reduced ? 0 : 3.4, 0.6, 0.09, 2.1)
-  }
+  // ---------- splash / say ----------
   function splash(x: number) {
     for (const s of [26, 48]) {
       const r = document.createElement('div')
       r.className = 'sky-ripple'
       r.style.width = r.style.height = s + 'px'
       r.style.left = x - s / 2 + 'px'
-      r.style.top = H - 66 + 'px'
+      r.style.top = waterlineY() - 5 + 'px'
       r.style.transform = 'scaleY(0.32)'
       stage.appendChild(r)
       setTimeout(() => r.remove(), 950)
@@ -475,7 +482,7 @@ function mountSky(root: HTMLDivElement) {
     if (el) {
       els.delete(t.id)
       el.style.transition = 'transform 720ms cubic-bezier(0.5, 0, 0.8, 0.6), opacity 720ms'
-      el.style.transform = `translate3d(${p.x - 20}px, ${H - 80}px, 0) scale(0.22)`
+      el.style.transform = `translate3d(${p.x - 20}px, ${waterlineY() + 6}px, 0) scale(0.22)`
       el.style.opacity = '0'
       setTimeout(() => el.remove(), reduced ? 0 : 760)
     }
@@ -662,7 +669,7 @@ function mountSky(root: HTMLDivElement) {
     if (mode === 'path' && tl) {
       pageQ.textContent = `The rain from “${trim(label(tl.t), 44)}”`
       const stale = isKept(tl.t) && !!ex(tl.t).planSig && ex(tl.t).planSig !== sigOf(tl)
-      pageN.textContent = stale ? 'the sky shifted since this rained — refreshed' : 'a path, not a list — begin at the top'
+      pageN.textContent = stale ? 'the sky shifted — this is fresh' : ''
       const plan = (isKept(tl.t) && !stale && (ex(tl.t).plan as Step[] | undefined)) || planOf(tl)
       patchExtra(tl.t, { plan, planSig: sigOf(tl) })
       pageA.style.display = 'block'
@@ -671,7 +678,8 @@ function mountSky(root: HTMLDivElement) {
         .join('')
       const stepEls = [...pageA.querySelectorAll('.step')] as HTMLDivElement[]
       stepEls.forEach((el, i) => {
-        ;(el.querySelector('.k') as HTMLElement).textContent = plan[i].ph
+        // a numeral, not "then / then / then" — repetition carries no information
+        ;(el.querySelector('.k') as HTMLElement).textContent = String(i + 1)
         ;(el.querySelector('.v') as HTMLElement).textContent = plan[i].pt
         ;(el.querySelector('.d') as HTMLElement).textContent = plan[i].detail
         el.style.transitionDelay = reduced ? '0ms' : 180 + i * 90 + 'ms'
@@ -679,9 +687,8 @@ function mountSky(root: HTMLDivElement) {
     } else if (mode === 'capture') {
       pageQ.textContent = 'What’s on your mind?'
       pageT.value = ''
-      pageT.placeholder =
-        'Let it storm.\n\nEvery line becomes its own drop. A heading over bullet lines becomes a pool. “by friday” at the end of a line becomes its weight.'
-      pageN.textContent = 'each line becomes a drop'
+      pageT.placeholder = 'Let it storm.'
+      pageN.textContent = 'a line, a drop'
     } else if (mode === 'grow' && tl) {
       pageQ.textContent = QUESTIONS[answersOf(tl.t).length] || 'What else wants to be said?'
       pageT.value = ''
@@ -860,7 +867,7 @@ function mountSky(root: HTMLDivElement) {
     try {
       rec.start()
       pageMic.classList.add('live')
-      pageN.textContent = 'listening — every pause becomes a line'
+      pageN.textContent = 'listening…'
     } catch {
       rec = null
     }
@@ -891,7 +898,7 @@ function mountSky(root: HTMLDivElement) {
       const a = Math.random() * Math.PI * 2
       p.x = p.rx = Math.max(60, Math.min(W - 60, (pf?.ox ?? W / 2) + Math.cos(a) * 110))
       p.y = p.ry = Math.max(140, Math.min(H - 160, (pf?.oy ?? H / 2) + Math.sin(a) * 90))
-      pageN.textContent = 'caught — the photo is a drop now'
+      pageN.textContent = 'caught'
     }
     im.onerror = () => URL.revokeObjectURL(url)
     im.src = url
@@ -899,7 +906,7 @@ function mountSky(root: HTMLDivElement) {
   pageAbsorb.addEventListener('click', async () => {
     const v = pageT.value.trim()
     if (!v || !pageFor) return
-    pageN.textContent = '◐ absorbing…'
+    pageN.textContent = 'absorbing…'
     const res = await absorbText(v)
     if (res.kind === 'absorbed') {
       pageT.value = ''
@@ -932,10 +939,10 @@ function mountSky(root: HTMLDivElement) {
     moonsFor = tl.t.id
     const p = posOf(tl.t.id)
     p.y = Math.max(p.y, radiusOf(tl) + 170)
-    const acts: { ic: string; lb: string; dim?: boolean; run: () => void }[] = []
+    const acts: { icon: string; lb: string; dim?: boolean; run: () => void }[] = []
     if (tl.kind === 'drop' && !isKept(tl.t)) {
       acts.push({
-        ic: '✦',
+        icon: 'grow',
         lb: isRipe(tl.t) ? 'deepen' : 'grow',
         run: () => {
           closeMoons()
@@ -944,10 +951,10 @@ function mountSky(root: HTMLDivElement) {
       })
     }
     const kin = kinOf(tl)
-    acts.push({ ic: '≈', lb: 'gather', dim: kin.length === 0, run: () => startPull(tl, true) })
+    acts.push({ icon: 'gather', lb: 'gather', dim: kin.length === 0, run: () => startPull(tl, true) })
     const canRain = tl.kind === 'drop' || tl.members.length >= 1
     acts.push({
-      ic: '☂',
+      icon: 'rain',
       lb: isKept(tl.t) ? 'path' : 'rain',
       dim: !canRain,
       run: () => {
@@ -955,11 +962,10 @@ function mountSky(root: HTMLDivElement) {
         rain(tl)
       },
     })
-    const angles = acts.length === 3 ? [-2.5, -1.57, -0.64] : [-2.2, -0.94]
     acts.forEach((a, i) => {
       const m = document.createElement('div')
       m.className = 'sky-moon' + (a.dim ? ' dim' : '')
-      m.innerHTML = `<div class="ic">${a.ic}</div><div class="lb">${a.lb}</div>`
+      m.innerHTML = `<div class="ic">${moonSvg(a.icon)}</div><div class="lb">${a.lb}</div>`
       if (!reduced) m.style.animationDelay = i * 45 + 'ms'
       m.addEventListener('pointerdown', (e) => e.stopPropagation())
       m.addEventListener('click', (e) => {
@@ -969,7 +975,8 @@ function mountSky(root: HTMLDivElement) {
       })
       field.appendChild(m)
       moonEls.push(m)
-      ;(m as HTMLDivElement & { _angle?: number })._angle = angles[i]
+      ;(m as HTMLDivElement & { _slot?: number; _of?: number })._slot = i
+      ;(m as HTMLDivElement & { _slot?: number; _of?: number })._of = acts.length
     })
   }
   function layoutMoons() {
@@ -981,11 +988,32 @@ function mountSky(root: HTMLDivElement) {
     }
     const p = posOf(tl.t.id)
     const r = radiusOf(tl) + 44
+    // the orbit swings toward open space — the moons face the middle of the
+    // screen, so they never collide with each other or fall off an edge
+    const open = openPool === tl.t.id
+    const toCenter = Math.atan2(H * 0.46 - p.y, W / 2 - p.x)
+    const spread = 0.66
     moonEls.forEach((m) => {
-      const ang = (m as HTMLDivElement & { _angle?: number })._angle ?? -1.57
-      m.style.transform = `translate(${p.x + Math.cos(ang) * r - 27}px, ${p.y + Math.sin(ang) * r - 27}px)`
+      const el = m as HTMLDivElement & { _slot?: number; _of?: number }
+      const n = el._of ?? 1
+      const slot = el._slot ?? 0
+      let x: number
+      let y: number
+      if (open) {
+        // an opened pool is showing its contents; its own actions step out of
+        // the orbit and wait together above the water
+        const gap = 78
+        x = W / 2 + (slot - (n - 1) / 2) * gap - 27
+        y = waterlineY() - 96
+      } else {
+        const ang = toCenter + (slot - (n - 1) / 2) * spread
+        x = p.x + Math.cos(ang) * r - 27
+        y = p.y + Math.sin(ang) * r - 27
+      }
+      m.style.transform = `translate(${Math.max(30, Math.min(W - 84, x))}px, ${Math.max(72, Math.min(H - 92, y))}px)`
     })
   }
+
   function rain(tl: TL) {
     closeMoons()
     openPool = null
@@ -1000,7 +1028,7 @@ function mountSky(root: HTMLDivElement) {
         d.style.opacity = '0.9'
         field.appendChild(d)
         setTimeout(() => {
-          d.style.transform = `translate(${p.x + dx * 1.4}px, ${H - 70}px)`
+          d.style.transform = `translate(${p.x + dx * 1.4}px, ${waterlineY()}px)`
           d.style.opacity = '0'
         }, 30 + k * 55)
         setTimeout(() => d.remove(), 900 + k * 55)
@@ -1159,7 +1187,7 @@ function mountSky(root: HTMLDivElement) {
       onTap(d.id, d.isMember)
       return
     }
-    if (d.tl.kind === 'drop' && e.clientY > H - 120) {
+    if (d.tl.kind === 'drop' && e.clientY > waterlineY() - 12) {
       completeDrop(d.tl.t)
       persistLayout()
       return
@@ -1267,7 +1295,6 @@ function mountSky(root: HTMLDivElement) {
   function step() {
     if (dead) return
     t += 0.016
-    drawWater(t)
     stepHold()
     const busy = drag || holding || pageFor
     if (!busy) {
@@ -1319,22 +1346,41 @@ function mountSky(root: HTMLDivElement) {
         coast(p)
         const r = radiusOf(tl)
         p.x = Math.max(r + 8, Math.min(W - r - 8, p.x))
-        p.y = Math.max(r + 82, Math.min(H - r - 76, p.y))
+        p.y = Math.max(r + 74, Math.min(waterlineY() - r - 18, p.y))
       }
     }
     if (openPool) {
       const g = view.byId.get(openPool)
       if (g) {
         const gp = posOf(g.t.id)
+        const or = radiusOf(g) + 62
         g.members.forEach((m, i) => {
           const a = -Math.PI / 2 + (i / g.members.length) * Math.PI * 2 + t * 0.05
-          const or = radiusOf(g) + 62
           const mp = posOf(m.id)
           if (!(drag && drag.id === m.id)) {
             mp.x += (gp.x + Math.cos(a) * or - mp.x) * 0.1
             mp.y += (gp.y + Math.sin(a) * or - mp.y) * 0.1
           }
+          // members never leave the frame, whatever the orbit wants
+          const mr = memberR()
+          mp.x = Math.max(mr + 8, Math.min(W - mr - 8, mp.x))
+          mp.y = Math.max(mr + 74, Math.min(waterlineY() - mr - 14, mp.y))
         })
+        // clear the orbit's room: the rest of the sky drifts out of the way
+        const clear = or + memberR() + 34
+        for (const other of view.tls) {
+          if (other.t.id === g.t.id) continue
+          const op = posOf(other.t.id)
+          const dx = op.x - gp.x
+          const dy = op.y - gp.y
+          const dist = Math.hypot(dx, dy) || 1
+          const need = clear + radiusOf(other)
+          if (dist < need) {
+            const push = (need - dist) * 0.08
+            op.x += (dx / dist) * push
+            op.y += (dy / dist) * push
+          }
+        }
       }
     }
     // render
@@ -1353,16 +1399,18 @@ function mountSky(root: HTMLDivElement) {
     }
     layoutMoons()
     lineUsed = 0
-    for (const pair of allKinPairs()) {
-      if (hasThread(pair.a.t.id, pair.b.t.id)) continue
-      const pa = posOf(pair.a.t.id)
-      const pb = posOf(pair.b.t.id)
-      drawLine('kin', pa.rx, pa.ry, pb.rx, pb.ry)
-    }
-    for (const th of view.threads) {
-      const pa = pos.get(th.a)
-      const pb = pos.get(th.b)
-      if (pa && pb) drawLine('bond', pa.rx, pa.ry, pb.rx, pb.ry)
+    if (!openPool) {
+      for (const pair of allKinPairs()) {
+        if (hasThread(pair.a.t.id, pair.b.t.id)) continue
+        const pa = posOf(pair.a.t.id)
+        const pb = posOf(pair.b.t.id)
+        drawLine('kin', pa.rx, pa.ry, pb.rx, pb.ry)
+      }
+      for (const th of view.threads) {
+        const pa = pos.get(th.a)
+        const pb = pos.get(th.b)
+        if (pa && pb) drawLine('bond', pa.rx, pa.ry, pb.rx, pb.ry)
+      }
     }
     if (openPool) {
       const g = view.byId.get(openPool)

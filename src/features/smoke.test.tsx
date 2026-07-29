@@ -109,7 +109,7 @@ describe('CurrentPage', () => {
         <CurrentPage />
       </MemoryRouter>,
     )
-    fireEvent.click(screen.getByText('▸ Focus'))
+    fireEvent.click(screen.getByText('Focus'))
     expect(screen.getByRole('dialog', { name: 'Focus on one action' })).toBeInTheDocument()
   })
 })

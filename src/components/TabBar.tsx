@@ -1,10 +1,12 @@
 import { NavLink, useLocation } from 'react-router-dom'
 
-// The sky is home — capture and thinking live inside it, not behind a form.
+// Three words, no icons, no bar. Arbitrary glyphs (◉ ▸ ◍) named nothing, and a
+// solid bar cut the sky off at the ankles — so the world now runs to the bottom
+// edge and the names float over it under a soft scrim.
 const TABS = [
-  { to: '/', label: 'Sky', icon: '◉' },
-  { to: '/current', label: 'Current', icon: '▸' },
-  { to: '/memory', label: 'Memory', icon: '◍' },
+  { to: '/', label: 'Sky' },
+  { to: '/current', label: 'Current' },
+  { to: '/memory', label: 'Memory' },
 ]
 
 export function TabBar() {
@@ -20,10 +22,8 @@ export function TabBar() {
         height: 'calc(var(--tabbar-h) + var(--sab))',
         paddingBottom: 'var(--sab)',
         display: 'flex',
-        background: 'rgba(10, 13, 22, 0.85)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        borderTop: '0.5px solid rgba(180, 215, 255, 0.12)',
+        alignItems: 'center',
+        background: 'linear-gradient(rgba(4, 6, 12, 0) 0%, rgba(4, 6, 12, 0.72) 55%, rgba(4, 6, 12, 0.92) 100%)',
         zIndex: 100,
       }}
     >
@@ -40,19 +40,18 @@ export function TabBar() {
             style={{
               flex: 1,
               display: 'flex',
-              flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: 2,
+              minHeight: 44,
               textDecoration: 'none',
+              fontSize: 'var(--fs-label)',
+              letterSpacing: '0.01em',
               color: active ? 'var(--ink)' : 'var(--ink-faint)',
-              fontWeight: active ? 700 : 500,
+              fontWeight: active ? 600 : 400,
+              transition: 'color 260ms ease',
             }}
           >
-            <span aria-hidden style={{ fontSize: 16, lineHeight: 1 }}>
-              {t.icon}
-            </span>
-            <span style={{ fontSize: 'var(--fs-caption)' }}>{t.label}</span>
+            {t.label}
           </NavLink>
         )
       })}

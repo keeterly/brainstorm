@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useGraph } from '@/store/graph'
 import { computeWorld } from './engine'
+import { WATER_H, drawWater, invalidateWaterline } from './water'
 
 export function Atmosphere() {
   const thoughts = useGraph((s) => s.thoughts)
@@ -28,10 +29,11 @@ export function Atmosphere() {
       if (!canvas || !ctx) return
       const W = window.innerWidth
       canvas.width = W * devicePixelRatio
-      canvas.height = 90 * devicePixelRatio
+      canvas.height = WATER_H * devicePixelRatio
       canvas.style.width = `${W}px`
-      canvas.style.height = '90px'
+      canvas.style.height = `${WATER_H}px`
       ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0)
+      invalidateWaterline()
     }
     size()
     window.addEventListener('resize', size)
@@ -44,32 +46,7 @@ export function Atmosphere() {
       if (fogRef.current) fogRef.current.style.opacity = cur.fog.toFixed(3)
       if (shaftRef.current) shaftRef.current.style.opacity = cur.light.toFixed(3)
 
-      if (ctx && canvas) {
-        const W = window.innerWidth
-        ctx.clearRect(0, 0, W, 90)
-        const y0 = 8
-        const line = (amp: number, speed: number, alpha: number, offset: number) => {
-          ctx.beginPath()
-          for (let x = 0; x <= W; x += 6) {
-            const y =
-              y0 +
-              Math.sin(x * 0.016 + t * speed + offset) * amp +
-              Math.sin(x * 0.031 - t * speed * 0.7) * amp * 0.5
-            if (x === 0) ctx.moveTo(x, y)
-            else ctx.lineTo(x, y)
-          }
-          ctx.strokeStyle = `rgba(150, 210, 255, ${alpha})`
-          ctx.lineWidth = 1
-          ctx.stroke()
-        }
-        line(reduced ? 0 : 2.4, 0.9, 0.2, 0)
-        line(reduced ? 0 : 3.4, 0.6, 0.09, 2.1)
-        const g = ctx.createLinearGradient(0, y0, 0, 90)
-        g.addColorStop(0, 'rgba(122, 215, 255, 0.04)')
-        g.addColorStop(1, 'rgba(122, 215, 255, 0)')
-        ctx.fillStyle = g
-        ctx.fillRect(0, y0, W, 90 - y0)
-      }
+      if (ctx && canvas) drawWater(ctx, window.innerWidth, t, reduced)
       raf = requestAnimationFrame(frame)
     }
     raf = requestAnimationFrame(frame)
@@ -81,14 +58,15 @@ export function Atmosphere() {
 
   return (
     <div aria-hidden style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
+      {/* depth, not graph paper — night above, the water's glow below */}
       <div
         style={{
           position: 'absolute',
           inset: 0,
-          backgroundImage:
-            'linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px)',
-          backgroundSize: '96px 96px',
-          backgroundPosition: 'center top',
+          background:
+            'radial-gradient(ellipse 150% 60% at 50% -10%, #0e1424 0%, transparent 62%),' +
+            'radial-gradient(ellipse 110% 42% at 50% 108%, rgba(28, 74, 116, 0.34), transparent 66%),' +
+            'linear-gradient(#04060c 0%, #05070f 52%, #070d18 100%)',
         }}
       />
       <div
@@ -113,6 +91,7 @@ export function Atmosphere() {
       />
       <canvas
         ref={waterRef}
+        data-water
         style={{
           position: 'absolute',
           left: 0,

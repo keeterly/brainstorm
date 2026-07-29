@@ -8,18 +8,13 @@
   overflow: hidden;
   touch-action: none;
   z-index: 1;
-  background-image:
-    linear-gradient(rgba(160, 200, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(160, 200, 255, 0.035) 1px, transparent 1px);
-  background-size: 96px 96px;
-  background-position: center top;
 }
 .sky-stage::after {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(ellipse at 50% 40%, transparent 55%, rgba(2, 3, 6, 0.5) 100%);
+  background: radial-gradient(ellipse at 50% 42%, transparent 58%, rgba(2, 3, 7, 0.42) 100%);
 }
 
 .sky-links { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -36,7 +31,10 @@
   top: 0;
   border-radius: 50%;
   will-change: transform;
-  transition: width 480ms cubic-bezier(0.3, 0, 0.2, 1), height 480ms cubic-bezier(0.3, 0, 0.2, 1);
+  transition:
+    width 480ms cubic-bezier(0.3, 0, 0.2, 1),
+    height 480ms cubic-bezier(0.3, 0, 0.2, 1),
+    opacity 520ms ease;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -44,20 +42,23 @@
   gap: 6px;
   text-align: center;
   cursor: pointer;
+  /* a body of water, not a wireframe: specular, rim light, underglow, mass */
   background:
-    radial-gradient(circle 10% at 32% 20%, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.05) 60%, transparent 75%),
-    radial-gradient(ellipse 62% 32% at 50% 14%, transparent 58%, rgba(215, 238, 255, 0.09) 66%, transparent 74%),
-    radial-gradient(ellipse 56% 30% at 50% 90%, transparent 56%, rgba(150, 210, 255, 0.08) 64%, transparent 72%),
-    radial-gradient(circle at 50% 120%, rgba(122, 215, 255, 0.12), transparent 55%),
-    radial-gradient(circle at 50% 30%, rgba(30, 36, 48, 0.9), rgba(14, 17, 24, 0.92) 70%);
-  border: 0.5px solid rgba(205, 228, 255, 0.32);
+    radial-gradient(circle 11% at 31% 19%, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.08) 58%, transparent 74%),
+    radial-gradient(ellipse 66% 34% at 50% 11%, transparent 54%, rgba(222, 241, 255, 0.16) 64%, transparent 74%),
+    radial-gradient(ellipse 58% 31% at 50% 91%, transparent 53%, rgba(150, 210, 255, 0.17) 63%, transparent 73%),
+    radial-gradient(circle at 50% 118%, rgba(122, 215, 255, 0.2), transparent 58%),
+    radial-gradient(circle at 44% 28%, rgba(48, 59, 79, 0.96), rgba(21, 27, 38, 0.97) 72%);
+  border: 0.5px solid rgba(205, 228, 255, 0.34);
   box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.1),
-    inset 0 -14px 28px rgba(80, 150, 210, 0.07),
-    -1.5px 0.5px 2px rgba(122, 215, 255, 0.12),
-    1.5px -0.5px 2px rgba(255, 190, 130, 0.08),
-    0 14px 44px rgba(0, 0, 0, 0.55);
+    inset 0 1px 1px rgba(255, 255, 255, 0.14),
+    inset 0 -20px 40px rgba(74, 142, 200, 0.12),
+    -1.5px 0.5px 2px rgba(122, 215, 255, 0.14),
+    1.5px -0.5px 2px rgba(255, 190, 130, 0.09),
+    0 20px 60px rgba(0, 0, 0, 0.62);
 }
+/* while a pool holds the stage, the rest of the sky recedes */
+.skyb.recede { opacity: 0.13; }
 .skyb.saturated {
   border-color: rgba(122, 215, 255, 0.5);
   box-shadow:
@@ -88,24 +89,27 @@
 .skyb.pop { animation: sky-pop 620ms cubic-bezier(0.2, 1.35, 0.4, 1); }
 @keyframes sky-pop { from { scale: 0.25; opacity: 0; } to { scale: 1; opacity: 1; } }
 
-.skyb .q { width: 78%; font-size: 14.5px; line-height: 1.45; font-weight: 300; color: var(--ink-soft); text-wrap: balance; pointer-events: none; }
+.skyb .q { width: 76%; font-size: 15px; line-height: 1.5; font-weight: 300; color: var(--ink-soft); text-wrap: balance; pointer-events: none; }
 .skyb .t {
-  width: 80%;
-  font-size: 13px;
-  line-height: 1.38;
+  /* type scales with the drop — set inline; measure kept narrow so a circle reads */
+  width: 78%;
+  line-height: 1.34;
   font-weight: 450;
+  letter-spacing: -0.005em;
   color: var(--ink);
+  text-wrap: balance;
   display: -webkit-box;
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
   pointer-events: none;
 }
-.skyb.small .t { font-size: 10.5px; -webkit-line-clamp: 3; }
-.skyb.member .t { font-size: 10.5px; -webkit-line-clamp: 3; }
-.skyb .state { font-size: 9px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-faint); pointer-events: none; }
-.skyb .state.blue { color: var(--water); }
-.skyb .peek { width: 76%; font-size: 10px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.skyb.small .t { -webkit-line-clamp: 3; }
+.skyb.member .t { -webkit-line-clamp: 3; }
+/* status whispers — lowercase, never a shout */
+.skyb .state { font-size: 10.5px; font-weight: 400; color: var(--ink-faint); pointer-events: none; }
+.skyb .state.blue { color: rgba(122, 215, 255, 0.72); }
+.skyb .peek { width: 74%; font-size: 11px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 .skyb .dots { display: flex; gap: 4px; pointer-events: none; }
 .skyb .dots i { width: 5px; height: 5px; border-radius: 50%; background: rgba(160, 205, 240, 0.5); }
 .skyb .photo {
@@ -142,7 +146,7 @@
   z-index: 6;
 }
 .sky-moon .ic { font-size: 15px; line-height: 1; pointer-events: none; }
-.sky-moon .lb { font-size: 7.5px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; pointer-events: none; }
+.sky-moon .lb { font-size: 9px; font-weight: 500; letter-spacing: 0.01em; pointer-events: none; }
 .sky-moon.dim { opacity: 0.35; color: var(--ink-faint); border-color: rgba(255, 255, 255, 0.15); }
 
 .sky-drop-in {
@@ -195,9 +199,17 @@
 .sky-meter.on { opacity: 1; }
 .sky-meter.zero { color: var(--water); }
 
-.sky-head { position: fixed; z-index: 6; top: calc(var(--sat) + 16px); left: 0; right: 0; text-align: center; pointer-events: none; }
-.sky-head .mark { font-size: 12px; font-weight: 600; letter-spacing: 0.34em; text-indent: 0.34em; opacity: 0.9; color: var(--ink); }
-.sky-head .hint { margin-top: 7px; font-size: 11.5px; color: var(--ink-faint); transition: opacity 600ms; }
+/* no wordmark — the sky doesn't need to announce itself. Only the world's
+   own quiet voice lives up here, and it fades when it has nothing to say. */
+.sky-head { position: fixed; z-index: 6; top: calc(var(--sat) + 18px); left: 0; right: 0; text-align: center; pointer-events: none; }
+.sky-head .hint {
+  font-size: 12px;
+  color: var(--ink-soft);
+  opacity: 0;
+  transition: opacity 700ms ease;
+  text-wrap: balance;
+  padding: 0 40px;
+}
 
 .sky-rest {
   position: fixed;
@@ -329,7 +341,7 @@
 }
 .sky-page .tool.show { display: flex; }
 .sky-page .tool.live { background: rgba(42, 127, 184, 0.16); border-color: rgba(42, 127, 184, 0.5); }
-.sky-page .note { font-size: 11px; color: #8fa3b6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sky-page .note { font-size: 11px; color: #9db0c2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
 .sky-page .done {
   min-height: 46px;
   padding: 0 28px;
@@ -360,12 +372,11 @@
 .sky-page.on .step { opacity: 1; transform: none; }
 .sky-page .step .k {
   grid-row: span 2;
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: #8fa3b6;
-  padding-top: 3px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #9db0c2;
+  padding-top: 5px;
+  font-variant-numeric: tabular-nums;
 }
 .sky-page .step.first .k { color: #2a7fb8; }
 .sky-page .step .v { font-size: 16px; font-weight: 550; line-height: 1.4; color: #131a24; }

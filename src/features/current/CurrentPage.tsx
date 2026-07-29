@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGraph } from '@/store/graph'
 import { prioritizePrepass, todayISO } from '@/domain/prioritize-prepass'
+import { humanDue } from '@/domain/human-date'
 import { useAction } from '@/ai/useAction'
 import type { PrioritizeOutput } from '@shared/ai/actions/prioritize'
 import { evaporateAt } from '@/world/Atmosphere'
@@ -54,7 +55,7 @@ export default function CurrentPage() {
   const primaryWhy = recThought && rec
     ? rec.why
     : primary?.due_date
-      ? `Due ${primary.due_date <= today ? 'now' : primary.due_date} — the water goes here first.`
+      ? `${humanDue(primary.due_date, today)} — the water goes here first.`
       : primary
         ? 'The oldest thing waiting — a place to start.'
         : ''
@@ -123,7 +124,7 @@ export default function CurrentPage() {
 
       {primary && !suggestion && (
         <div style={{ textAlign: 'center', marginBottom: 'var(--sp-6)' }}>
-          <div className="eyebrow" style={{ color: 'var(--water)', marginBottom: 14 }}>
+          <div className="faint" style={{ fontSize: 'var(--fs-label)', marginBottom: 16 }}>
             This first
           </div>
           <div
@@ -144,10 +145,10 @@ export default function CurrentPage() {
           </p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 18 }}>
             <button className="btn btn--primary" onClick={() => setFocusId(primary.id)}>
-              ▸ Focus
+              Focus
             </button>
             <button className="btn btn--ghost" onClick={() => complete(primary)}>
-              ✓ Done
+              Done
             </button>
           </div>
         </div>
@@ -196,8 +197,8 @@ export default function CurrentPage() {
                   <button onClick={() => setFocusId(t.id)} style={{ textAlign: 'left', flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 500 }}>{t.title || t.raw_content.slice(0, 120)}</div>
                     {(goalTitle(t) || t.due_date) && (
-                      <div className="mono faint" style={{ fontSize: 'var(--fs-caption)', marginTop: 2 }}>
-                        {[goalTitle(t), t.due_date ? `due ${t.due_date}` : null].filter(Boolean).join(' · ')}
+                      <div className="faint" style={{ fontSize: 'var(--fs-caption)', marginTop: 3 }}>
+                        {[goalTitle(t), t.due_date ? humanDue(t.due_date, today) : null].filter(Boolean).join(' · ')}
                       </div>
                     )}
                   </button>
