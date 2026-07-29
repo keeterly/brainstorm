@@ -1,17 +1,23 @@
 import { useState, type FormEvent } from 'react'
 import { supabase } from '@/lib/supabase'
 
+type Mode = 'magic' | 'password' | 'signup' | 'reset'
+// which template sent the code the user is about to type
+type Sent = 'email' | 'signup' | 'recovery'
+
 export function SignIn() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [mode, setMode] = useState<'magic' | 'password' | 'signup'>('magic')
+  const [mode, setMode] = useState<Mode>('magic')
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  // code entry — the email opens in whatever browser the mail app likes, but a
-  // typed 6-digit code signs you in HERE. sentKind tracks which template sent it.
-  const [sentKind, setSentKind] = useState<'email' | 'signup' | null>(null)
+  // the emailed link opens in whatever browser the mail app prefers; a typed
+  // code signs you in HERE, which is the only reliable path on iOS.
+  const [sentKind, setSentKind] = useState<Sent | null>(null)
   const [code, setCode] = useState('')
+
+  const redirectTo = typeof window !== 'undefined' ? window.location.origin : undefined
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -20,13 +26,15 @@ export function SignIn() {
     setNotice(null)
     try {
       if (mode === 'magic') {
-        const { error } = await supabase.auth.signInWithOtp({
-          email,
-          options: { emailRedirectTo: window.location.origin },
-        })
+        const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } })
         if (error) throw error
         setNotice('Check your email — tap the link, or type the 6-digit code below.')
         setSentKind('email')
+      } else if (mode === 'reset') {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
+        if (error) throw error
+        setNotice('Reset sent. Type the 6-digit code from the email to get back in, then set a new password in Memory.')
+        setSentKind('recovery')
       } else if (mode === 'password') {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
@@ -40,14 +48,14 @@ export function SignIn() {
         // that is never coming.
         if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
           setMode('password')
-          setNotice('You already have an account. Enter your password to sign in — or use a magic link.')
+          setNotice('You already have an account. Enter your password — or reset it below.')
           return
         }
         setNotice('Account created — confirm via the email link or the code below.')
         setSentKind('signup')
       }
     } catch (err) {
-      setError(String((err as Error).message || err))
+      setError(friendly(String((err as Error).message || err)))
     } finally {
       setBusy(false)
     }
@@ -59,25 +67,29 @@ export function SignIn() {
     setBusy(true)
     setError(null)
     try {
-      const { error } = await supabase.auth.verifyOtp({
-        email,
-        token: code.trim(),
-        type: sentKind,
-      })
+      const { error } = await supabase.auth.verifyOtp({ email, token: code.trim(), type: sentKind })
       if (error) throw error
       // session lands in THIS browser; AuthGate takes it from here
     } catch (err) {
-      setError(String((err as Error).message || err))
+      setError(friendly(String((err as Error).message || err)))
     } finally {
       setBusy(false)
     }
   }
 
+  const label = busy
+    ? 'Working…'
+    : mode === 'magic'
+      ? 'Email me a sign-in link'
+      : mode === 'reset'
+        ? 'Email me a reset code'
+        : mode === 'password'
+          ? 'Sign in'
+          : 'Create account'
+
   return (
     <div className="page" style={{ paddingTop: '18vh', maxWidth: '24rem' }}>
-      <h1 style={{ fontSize: 'var(--fs-2xl)', fontWeight: 800, letterSpacing: '-0.02em' }}>
-        Brainstorm
-      </h1>
+      <h1 style={{ fontSize: 'var(--fs-2xl)', fontWeight: 800, letterSpacing: '-0.02em' }}>Brainstorm</h1>
       <p className="muted" style={{ margin: '8px 0 28px' }}>
         Get ideas out of your head — and into motion.
       </p>
@@ -91,7 +103,7 @@ export function SignIn() {
           onChange={(e) => setEmail(e.target.value)}
           style={inputStyle}
         />
-        {mode !== 'magic' && (
+        {(mode === 'password' || mode === 'signup') && (
           <input
             type="password"
             required
@@ -104,15 +116,10 @@ export function SignIn() {
           />
         )}
         <button className="btn btn--primary" disabled={busy || !email} type="submit">
-          {busy
-            ? 'Working…'
-            : mode === 'magic'
-              ? 'Email me a sign-in link'
-              : mode === 'password'
-                ? 'Sign in'
-                : 'Create account'}
+          {label}
         </button>
       </form>
+
       {notice && (
         <p style={{ marginTop: 16, color: 'var(--accent-ink)' }} role="status">
           {notice}
@@ -128,7 +135,7 @@ export function SignIn() {
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
             style={{ ...inputStyle, flex: 1 }}
-            aria-label="Sign-in code from the email"
+            aria-label="Code from the email"
           />
           <button className="btn btn--primary" type="submit" disabled={busy || code.trim().length < 6}>
             Enter
@@ -140,7 +147,8 @@ export function SignIn() {
           {error}
         </p>
       )}
-      <div style={{ marginTop: 24, display: 'flex', gap: 16 }}>
+
+      <div style={{ marginTop: 24, display: 'flex', flexWrap: 'wrap', gap: 16 }}>
         {mode !== 'magic' && (
           <button className="muted" style={linkStyle} onClick={() => setMode('magic')}>
             Use a magic link
@@ -151,6 +159,11 @@ export function SignIn() {
             Sign in with password
           </button>
         )}
+        {mode !== 'reset' && (
+          <button className="muted" style={linkStyle} onClick={() => setMode('reset')}>
+            Forgot password
+          </button>
+        )}
         {mode !== 'signup' && (
           <button className="muted" style={linkStyle} onClick={() => setMode('signup')}>
             Create account
@@ -159,6 +172,20 @@ export function SignIn() {
       </div>
     </div>
   )
+}
+
+// Supabase speaks in shrugs. Say what actually happened.
+function friendly(msg: string): string {
+  const m = msg.toLowerCase()
+  if (m.includes('invalid login credentials'))
+    return 'That email and password do not match. Use “Forgot password” to get back in, or a magic link.'
+  if (m.includes('rate limit') || m.includes('too many'))
+    return 'Too many emails for now — the mail service is rate limited. Wait a few minutes, or use a password.'
+  if (m.includes('token has expired') || m.includes('expired'))
+    return 'That code has expired. Send a fresh one.'
+  if (m.includes('invalid token') || m.includes('otp'))
+    return 'That code did not match. Check the newest email — an older code stops working once a new one is sent.'
+  return msg
 }
 
 const inputStyle: React.CSSProperties = {

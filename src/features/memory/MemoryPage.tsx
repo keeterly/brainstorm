@@ -8,7 +8,80 @@ import { useAction } from '@/ai/useAction'
 import type { DistillOutput } from '@shared/ai/actions/distill-memory'
 import { exportMarkdown } from '@/domain/export-markdown'
 import { clearSnapshot } from '@/lib/idb'
+import {
+  available as passkeyAvailable,
+  enroll as enrollPasskey,
+  forget as forgetPasskey,
+  isEnrolled as isPasskeyEnrolled,
+} from '@/lib/passkey'
 import { TypeBadge } from '@/components/TypeBadge'
+
+// Account — set a password (this is where a reset finishes), and choose
+// whether this device opens with Face ID.
+function AccountSection() {
+  const [pw, setPw] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  const [face, setFace] = useState(isPasskeyEnrolled())
+  const [canFace, setCanFace] = useState(false)
+  useEffect(() => {
+    void passkeyAvailable().then(setCanFace)
+  }, [])
+  return (
+    <section style={{ marginBottom: 'var(--sp-6)' }}>
+      <h2 className="eyebrow" style={{ marginBottom: 10 }}>Account</h2>
+      <form
+        style={{ display: 'flex', gap: 8, marginBottom: 10 }}
+        onSubmit={async (e) => {
+          e.preventDefault()
+          setBusy(true)
+          setMsg(null)
+          const { error } = await supabase.auth.updateUser({ password: pw })
+          setBusy(false)
+          setMsg(error ? error.message : 'Password set.')
+          if (!error) setPw('')
+        }}
+      >
+        <input
+          type="password"
+          minLength={8}
+          required
+          placeholder="New password"
+          autoComplete="new-password"
+          value={pw}
+          onChange={(e) => setPw(e.target.value)}
+          style={inputStyle}
+        />
+        <button className="btn btn--ghost" type="submit" disabled={busy || pw.length < 8}>
+          {busy ? 'Saving…' : 'Set'}
+        </button>
+      </form>
+      {canFace && (
+        <button
+          className="btn btn--ghost"
+          onClick={async () => {
+            if (face) {
+              forgetPasskey()
+              setFace(false)
+              setMsg('Face ID turned off on this device.')
+            } else {
+              const ok = await enrollPasskey('Brainstorm')
+              setFace(ok)
+              setMsg(ok ? 'Face ID will open Brainstorm on this device.' : 'Face ID setup was cancelled.')
+            }
+          }}
+        >
+          {face ? 'Turn off Face ID on this device' : 'Open with Face ID on this device'}
+        </button>
+      )}
+      {msg && (
+        <p className="muted" style={{ fontSize: 'var(--fs-label)', marginTop: 10 }} role="status">
+          {msg}
+        </p>
+      )}
+    </section>
+  )
+}
 
 export default function MemoryPage() {
   const profile = useGraph((s) => s.profile)
@@ -223,10 +296,13 @@ export default function MemoryPage() {
         </div>
       </section>
 
+      <AccountSection />
+
       <button
         className="btn btn--danger"
         onClick={async () => {
           await clearSnapshot()
+          forgetPasskey()
           await supabase.auth.signOut()
         }}
       >

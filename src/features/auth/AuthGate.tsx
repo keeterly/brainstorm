@@ -4,6 +4,9 @@ import { supabase, supabaseConfigured } from '@/lib/supabase'
 import { useGraph } from '@/store/graph'
 import { DEMO, DEMO_SEED } from '@/lib/demo'
 import { SignIn } from './SignIn'
+import { DeviceLock } from './DeviceLock'
+import { EnrollFaceId } from './EnrollFaceId'
+import { isEnrolled } from '@/lib/passkey'
 
 let demoSeeded = false
 
@@ -43,6 +46,8 @@ function DemoShell({ children }: { children: ReactNode }) {
 function RealAuthGate({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [checked, setChecked] = useState(false)
+  // the device lock stands in front of an existing session, once per app load
+  const [locked, setLocked] = useState(() => isEnrolled())
   const hydrated = useGraph((s) => s.hydrated)
   const hydrate = useGraph((s) => s.hydrate)
   const reset = useGraph((s) => s.reset)
@@ -58,6 +63,8 @@ function RealAuthGate({ children }: { children: ReactNode }) {
     })
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
       setSession(s)
+      // a fresh sign-in has already proved who you are; do not ask twice
+      if (s) setLocked(false)
     })
     return () => sub.subscription.unsubscribe()
   }, [])
@@ -88,6 +95,7 @@ function RealAuthGate({ children }: { children: ReactNode }) {
 
   if (!checked) return null
   if (!session) return <SignIn />
+  if (locked) return <DeviceLock onOpen={() => setLocked(false)} />
 
   if (!hydrated) {
     return (
@@ -101,5 +109,10 @@ function RealAuthGate({ children }: { children: ReactNode }) {
     )
   }
 
-  return <>{children}</>
+  return (
+    <>
+      {children}
+      <EnrollFaceId />
+    </>
+  )
 }
