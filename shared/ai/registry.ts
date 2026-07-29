@@ -9,6 +9,7 @@ import { generateRoadmap } from './actions/generate-roadmap'
 import { prioritize } from './actions/prioritize'
 import { distillMemory } from './actions/distill-memory'
 import { absorb } from './actions/absorb'
+import { organize } from './actions/organize'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const ACTION_REGISTRY: Record<string, ActionDef<any, any>> = {
@@ -22,6 +23,7 @@ export const ACTION_REGISTRY: Record<string, ActionDef<any, any>> = {
   [prioritize.name]: prioritize,
   [distillMemory.name]: distillMemory,
   [absorb.name]: absorb,
+  [organize.name]: organize,
 }
 
 export type ActionName = keyof typeof ACTION_REGISTRY

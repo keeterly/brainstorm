@@ -37,6 +37,7 @@ function sampleInput(name: string): never {
     prioritize: { actions: [{ id: 'aaaa', title: 'do a thing' }] },
     distill_memory: { text: 'I prefer mornings', existing: [] },
     absorb: { text: 'the buyer moved our meeting to friday', thoughts: [ref] },
+    organize: { text: 'a long messy dump about the campaign and the pop-up', thoughts: [ref], spoken: true },
   }
   return inputs[name] as never
 }
@@ -177,6 +178,33 @@ describe('prioritize output schema', () => {
       prioritize.outputSchema.safeParse({
         buckets: [{ id: 'a', bucket: 'someday', reason: 'r' }],
         recommended: { id: 'a', why: 'w' },
+      }).success,
+    ).toBe(false)
+  })
+})
+
+describe('organize output schema', () => {
+  const organize = ACTION_REGISTRY.organize
+  it('accepts drops, pools and links', () => {
+    const r = organize.outputSchema.safeParse({
+      drops: [
+        { tempId: 't1', text: 'a pop-up that feels like a listening room', type: 'idea' },
+        { tempId: 't2', text: 'shoot on expired film', type: 'idea' },
+      ],
+      pools: [{ name: 'SS27 mood', members: ['t1', 't2'] }],
+      links: [{ a: 't1', b: 'aaaa' }],
+      note: 'Two threads: the room, and the film.',
+    })
+    expect(r.success).toBe(true)
+  })
+  it('rejects a pool of one and an unknown thought type', () => {
+    const base = { drops: [], links: [], note: '' }
+    expect(organize.outputSchema.safeParse({ ...base, pools: [{ name: 'x', members: ['t1'] }] }).success).toBe(false)
+    expect(
+      organize.outputSchema.safeParse({
+        ...base,
+        pools: [],
+        drops: [{ tempId: 't1', text: 'x', type: 'vibe' }],
       }).success,
     ).toBe(false)
   })

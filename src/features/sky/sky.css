@@ -397,3 +397,17 @@
   .sky-drop-in, .sky-rain-drop, .sky-page, .sky-page .top, .sky-page textarea,
   .sky-page .pans, .sky-page .bot, .sky-page .step, .skyb { transition: none; }
 }
+
+/* the tool is working — it says so itself rather than freezing the page */
+.sky-page .tool.busy {
+  background: rgba(42, 127, 184, 0.16);
+  border-color: rgba(42, 127, 184, 0.5);
+  animation: sky-think 1.5s ease-in-out infinite;
+}
+@keyframes sky-think {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sky-page .tool.busy { animation: none; }
+}

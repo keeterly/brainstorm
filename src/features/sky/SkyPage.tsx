@@ -7,7 +7,7 @@ import { useGraph } from '@/store/graph'
 import { parseCapture } from '@/domain/parse-blocks'
 import { runAction } from '@/ai/client'
 import type { ClassifyOutput } from '@shared/ai/actions/classify-thought'
-import { absorbText } from './absorbFlow'
+import { organizeText } from './absorbFlow'
 import { waterlineY } from '@/world/water'
 import { haptics } from '@/lib/haptics'
 import type { Thought } from '@/domain/types'
@@ -53,8 +53,8 @@ export default function SkyPage() {
             <button
               className="tool"
               data-sky="pageAbsorb"
-              aria-label="Absorb into the sky"
-              title="Let the sky rearrange instead of adding duplicates"
+              aria-label="Organize this"
+              title="Read it through, gather the themes, draw the threads"
             >
               <Ico d="M12 3.2c.7 4.2 1.9 5.4 6.1 6.1-4.2.7-5.4 1.9-6.1 6.1-.7-4.2-1.9-5.4-6.1-6.1 4.2-.7 5.4-1.9 6.1-6.1ZM17.6 15.2c.35 2 .95 2.6 2.95 2.95-2 .35-2.6.95-2.95 2.95-.35-2-.95-2.6-2.95-2.95 2-.35 2.6-.95 2.95-2.95Z" />
             </button>
@@ -716,7 +716,7 @@ function mountSky(root: HTMLDivElement) {
       pageQ.textContent = 'What’s on your mind?'
       pageT.value = ''
       pageT.placeholder = 'Let it storm.'
-      pageN.textContent = 'a line, a drop'
+      pageN.textContent = '✦ organizes · or a line, a drop'
     } else if (mode === 'grow' && tl) {
       pageQ.textContent = QUESTIONS[answersOf(tl.t).length] || 'What else wants to be said?'
       pageT.value = ''
@@ -741,7 +741,7 @@ function mountSky(root: HTMLDivElement) {
     pageMic.classList.toggle('show', speechOK && (mode === 'capture' || mode === 'grow'))
     pageMic.classList.remove('live')
     pagePic.classList.toggle('show', mode === 'capture')
-    pageAbsorb.classList.toggle('show', mode === 'capture' && !S().offline && S().thoughts.filter((t) => t.status === 'open').length >= 3)
+    pageAbsorb.classList.toggle('show', mode === 'capture' && !S().offline)
     pageLater.classList.toggle('show', mode === 'edit')
     page.classList.add('show')
     page.style.clipPath = `circle(0px at ${ox}px ${oy}px)`
@@ -831,7 +831,13 @@ function mountSky(root: HTMLDivElement) {
       if (txt) S().updateThought(pf.tl.t.id, { raw_content: txt, title: null })
     }
   }
-  pageD.addEventListener('click', () => closePage(true))
+  pageD.addEventListener('click', () => {
+    if (pageFor?.mode === 'capture' && micUsed && pageT.value.trim().length > 80) {
+      void runOrganize(true)
+      return
+    }
+    closePage(true)
+  })
   pageX.addEventListener('click', () => closePage(false))
   function absorbAnim(id: string) {
     const p = posOf(id)
@@ -931,22 +937,47 @@ function mountSky(root: HTMLDivElement) {
     im.onerror = () => URL.revokeObjectURL(url)
     im.src = url
   })
-  pageAbsorb.addEventListener('click', async () => {
-    const v = pageT.value.trim()
-    if (!v || !pageFor) return
-    pageN.textContent = 'absorbing…'
-    const res = await absorbText(v)
-    if (res.kind === 'absorbed') {
-      pageT.value = ''
-      closePage(false)
-      say(res.note || 'absorbed — the sky rearranged itself')
-      splash(pageFor?.ox ?? W / 2)
-    } else {
-      // nothing to adjust (or offline blip) → plain capture, never lost
-      closePage(true)
-      say('captured as new — nothing in the sky needed adjusting')
+  // scatter what organize creates around where the dump was written
+  function placeNear(ox: number, oy: number) {
+    return (id: string, i: number, total: number) => {
+      const p = posOf(id)
+      const ang = (i / Math.max(1, total)) * Math.PI * 2 - Math.PI / 2
+      const rad = total === 1 ? 0 : 110 + (i % 3) * 52
+      p.x = Math.max(60, Math.min(W - 60, ox + Math.cos(ang) * rad))
+      p.y = Math.max(140, Math.min(waterlineY() - 90, oy + Math.sin(ang) * rad * 0.8))
     }
-  })
+  }
+  let organizing = false
+  async function runOrganize(spoken: boolean) {
+    const v = pageT.value.trim()
+    if (!v || organizing) return
+    const pf = pageFor
+    const ox = pf?.ox ?? W / 2
+    const oy = pf?.oy ?? H / 2
+    organizing = true
+    pageAbsorb.classList.add('busy')
+    pageN.textContent = spoken ? 'making sense of what you said…' : 'reading it through…'
+    const res = await organizeText(v, spoken, placeNear(ox, oy))
+    organizing = false
+    pageAbsorb.classList.remove('busy')
+    if (res.kind === 'organized') {
+      pageT.value = ''
+      micUsed = false
+      closePage(false)
+      splash(ox)
+      haptics.arrive()
+      const bits: string[] = []
+      if (res.pools) bits.push(`${res.pools} pool${res.pools === 1 ? '' : 's'}`)
+      if (res.links) bits.push(`${res.links} thread${res.links === 1 ? '' : 's'}`)
+      say(res.note || `${res.drops} drops${bits.length ? ' · ' + bits.join(' · ') : ''}`)
+    } else {
+      // nothing found, or the engine is down — the words still become drops
+      closePage(true)
+      say(res.kind === 'failed' ? 'kept as written — the thinking engine is quiet' : 'kept as written')
+    }
+  }
+  pageAbsorb.addEventListener('click', () => void runOrganize(micUsed))
+
   pageLater.addEventListener('click', () => {
     if (!pageFor || pageFor.mode !== 'edit' || !pageFor.tl) return
     const t = pageFor.tl.t
