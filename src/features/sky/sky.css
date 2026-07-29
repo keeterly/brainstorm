@@ -411,3 +411,14 @@
 @media (prefers-reduced-motion: reduce) {
   .sky-page .tool.busy { animation: none; }
 }
+
+/* the attached photo, while it is being read */
+.sky-page .pans img { box-shadow: 0 6px 20px rgba(19, 26, 36, 0.16); }
+.sky-page.reading .pans img { animation: sky-reading 1.6s ease-in-out infinite; }
+@keyframes sky-reading {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sky-page.reading .pans img { animation: none; }
+}

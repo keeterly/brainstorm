@@ -5,6 +5,7 @@ import { useGraph } from '@/store/graph'
 import { runAction } from '@/ai/client'
 import { absorbIsEmpty, type AbsorbOutput } from '@shared/ai/actions/absorb'
 import type { OrganizeOutput } from '@shared/ai/actions/organize'
+import type { NamePoolOutput } from '@shared/ai/actions/name-pool'
 import type { DistillOutput } from '@shared/ai/actions/distill-memory'
 import type { Thought } from '@/domain/types'
 
@@ -135,4 +136,20 @@ export async function organizeText(
   } catch {
     return { kind: 'failed' }
   }
+}
+
+// Name a pool properly, a moment after it forms. The drag stays instant — the
+// local guess appears at once and the real name replaces it when it lands.
+export function nameThePool(goalId: string, members: string[]) {
+  if (members.length < 2) return
+  const s = useGraph.getState()
+  if (s.offline) return
+  void runAction<NamePoolOutput>('name_pool', { members: members.slice(0, 20).map((m) => m.slice(0, 300)) })
+    .then(({ output }) => {
+      const name = output.name.trim().replace(/^["'“”]|["'“”.]$/g, '')
+      if (name) s.updateThought(goalId, { title: name, raw_content: name })
+    })
+    .catch(() => {
+      /* the local guess stands */
+    })
 }

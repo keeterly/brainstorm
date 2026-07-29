@@ -7,7 +7,7 @@ import { useGraph } from '@/store/graph'
 import { parseCapture } from '@/domain/parse-blocks'
 import { runAction } from '@/ai/client'
 import type { ClassifyOutput } from '@shared/ai/actions/classify-thought'
-import { organizeText } from './absorbFlow'
+import { nameThePool, organizeText } from './absorbFlow'
 import { waterlineY } from '@/world/water'
 import { haptics } from '@/lib/haptics'
 import type { Thought } from '@/domain/types'
@@ -561,6 +561,8 @@ function mountSky(root: HTMLDivElement) {
       S().addRelationship(drop.t.id, pool.t.id, 'part_of')
       say(`absorbed into “${label(pool.t)}”`)
     } else {
+      // the local guess lands instantly so the drag never waits; a real name
+      // replaces it a moment later
       const name = conceptName([label(a.t), label(b.t)])
       const g = S().addThought({ raw_content: name, title: name, type: 'goal' })
       const p = posOf(g.id)
@@ -568,6 +570,8 @@ function mountSky(root: HTMLDivElement) {
       p.y = p.ry = at.y
       S().addRelationship(a.t.id, g.id, 'part_of')
       S().addRelationship(b.t.id, g.id, 'part_of')
+      const texts = [a, b].flatMap((tl) => (tl.kind === 'pool' ? tl.members.map(label) : [label(tl.t)]))
+      nameThePool(g.id, texts)
       say(`pooled — “${name}”`)
     }
     splash(at.x)
@@ -775,7 +779,7 @@ function mountSky(root: HTMLDivElement) {
     pageT.blur()
     page.classList.remove('on')
     page.style.clipPath = `circle(0px at ${pf.ox}px ${pf.oy}px)`
-    setTimeout(() => page.classList.remove('show', 'path'), reduced ? 0 : 580)
+    setTimeout(() => page.classList.remove('show', 'path', 'reading'), reduced ? 0 : 580)
     if (!commit) return
     const v = pageT.value
     if (pf.mode === 'capture') {
@@ -936,6 +940,12 @@ function mountSky(root: HTMLDivElement) {
         return
       }
       pendingImage = { mediaType: 'image/jpeg', dataB64: readable.split(',')[1] }
+      // show it. Picking a photo with no visible result is indistinguishable
+      // from the picker having failed.
+      pageA.style.display = 'block'
+      pageA.innerHTML = `<div class="lab">attached</div><img alt="the photo you just added" />`
+      const prev = pageA.querySelector('img')
+      if (prev) prev.src = img
       const pf = pageFor
       const t = S().addThought({ raw_content: 'Photo', title: 'Photo', extra: { img } })
       const p = posOf(t.id)
@@ -968,10 +978,12 @@ function mountSky(root: HTMLDivElement) {
     const oy = pf?.oy ?? H / 2
     organizing = true
     pageAbsorb.classList.add('busy')
+    page.classList.add('reading')
     pageN.textContent = pendingImage ? 'reading the picture…' : spoken ? 'making sense of what you said…' : 'reading it through…'
     const res = await organizeText(v, spoken, placeNear(ox, oy), pendingImage ?? undefined)
     organizing = false
     pageAbsorb.classList.remove('busy')
+    page.classList.remove('reading')
     if (res.kind === 'organized') {
       // the picture now knows what it shows
       if (photoId && res.source) S().updateThought(photoId, { title: res.source, raw_content: res.source })

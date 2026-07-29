@@ -38,6 +38,7 @@ function sampleInput(name: string): never {
     distill_memory: { text: 'I prefer mornings', existing: [] },
     absorb: { text: 'the buyer moved our meeting to friday', thoughts: [ref] },
     organize: { text: 'a long messy dump about the campaign and the pop-up', thoughts: [ref], spoken: true },
+    name_pool: { members: ['shoot on expired film', 'letters sealed with wax'] },
   }
   return inputs[name] as never
 }
@@ -236,5 +237,21 @@ describe('organize reads pictures', () => {
         image: { mediaType: 'image/heic', dataB64: 'AAAA' },
       }).success,
     ).toBe(false)
+  })
+})
+
+describe('name_pool', () => {
+  const namePool = ACTION_REGISTRY.name_pool
+  it('asks for the specific thing rather than a category', () => {
+    const p = namePool.buildPrompt(
+      { members: ['pay the sales tax', 'finish setting up Klaviyo'] },
+      { nowISO: '2026-07-29T12:00:00Z', tzOffsetMin: -420, memory: [] },
+    )
+    expect(p.user).toContain('pay the sales tax')
+    expect(p.user).toContain('not the category')
+  })
+  it('needs at least two members to name anything', () => {
+    expect(namePool.inputSchema.safeParse({ members: ['just one'] }).success).toBe(false)
+    expect(namePool.inputSchema.safeParse({ members: ['a', 'b'] }).success).toBe(true)
   })
 })
