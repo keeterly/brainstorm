@@ -7,7 +7,7 @@ import { useGraph } from '@/store/graph'
 import { parseCapture } from '@/domain/parse-blocks'
 import { runAction } from '@/ai/client'
 import type { ClassifyOutput } from '@shared/ai/actions/classify-thought'
-import { nameThePool, organizeText } from './absorbFlow'
+import { nameThePool, organizeText, tidySky } from './absorbFlow'
 import { waterlineY } from '@/world/water'
 import { haptics } from '@/lib/haptics'
 import type { Thought } from '@/domain/types'
@@ -19,7 +19,9 @@ export default function SkyPage() {
   return (
     <div ref={rootRef} className="sky-root">
       <div className="sky-stage" data-sky="stage">
-        <svg className="sky-links" data-sky="links" aria-hidden="true" />
+        <svg className="sky-links" aria-hidden="true">
+          <g data-sky="links" />
+        </svg>
         <div data-sky="field" />
       </div>
       <header className="sky-head">
@@ -28,6 +30,9 @@ export default function SkyPage() {
       <div className="sky-meter" data-sky="meter" aria-hidden="true" />
       <button className="sky-rest" data-sky="rest" aria-label="Resting thoughts">
         ☁
+      </button>
+      <button className="sky-tidy" data-sky="tidy" aria-label="Gather loose thoughts into pools">
+        ✦ tidy
       </button>
       <div className="sky-undo" data-sky="undo">
         <span className="lb" data-sky="undoLb" />
@@ -144,10 +149,11 @@ function mountSky(root: HTMLDivElement) {
   const $ = <T extends HTMLElement>(k: string) => root.querySelector(`[data-sky="${k}"]`) as T
   const stage = $('stage')
   const field = $('field')
-  const links = root.querySelector('[data-sky="links"]') as unknown as SVGSVGElement
+  const links = root.querySelector('[data-sky="links"]') as unknown as SVGGElement
   const hint = $('hint')
   const meter = $('meter')
   const restEl = $('rest')
+  const tidyEl = $('tidy')
   const undoEl = $('undo')
   const undoLb = $('undoLb')
   const undoGo = $('undoGo')
@@ -178,6 +184,64 @@ function mountSky(root: HTMLDivElement) {
 
   let W = innerWidth
   let H = stage.clientHeight || innerHeight
+  // The world is bigger than the glass you look through it with. Everything
+  // below works in world coordinates; the camera maps them to the screen.
+  const cam = { x: 0, y: 0, k: 1 }
+  const MIN_K = 0.35
+  const MAX_K = 1.8
+  const worldW = () => W * 1.9
+  const worldH = () => (waterlineY() - 74) * 1.7
+  const toWorldX = (sx: number) => (sx - cam.x) / cam.k
+  const toWorldY = (sy: number) => (sy - cam.y) / cam.k
+  function applyCam() {
+    const t = `translate(${cam.x}px, ${cam.y}px) scale(${cam.k})`
+    field.style.transform = t
+    field.style.transformOrigin = '0 0'
+    links.setAttribute('transform', `translate(${cam.x} ${cam.y}) scale(${cam.k})`)
+  }
+  function zoomAt(sx: number, sy: number, k: number) {
+    const next = Math.max(MIN_K, Math.min(MAX_K, k))
+    const wx = toWorldX(sx)
+    const wy = toWorldY(sy)
+    cam.k = next
+    cam.x = sx - wx * next
+    cam.y = sy - wy * next
+    applyCam()
+  }
+  /** Frame everything, with a little air. */
+  function fitAll(animate = true) {
+    const tls = view.tls
+    if (!tls.length) return
+    let x0 = Infinity
+    let y0 = Infinity
+    let x1 = -Infinity
+    let y1 = -Infinity
+    for (const tl of tls) {
+      const p = posOf(tl.t.id)
+      const r = radiusOf(tl) + 12
+      x0 = Math.min(x0, p.x - r)
+      y0 = Math.min(y0, p.y - r)
+      x1 = Math.max(x1, p.x + r)
+      y1 = Math.max(y1, p.y + r)
+    }
+    const top = 76
+    const bottom = waterlineY() - 18
+    const k = Math.max(MIN_K, Math.min(MAX_K, Math.min(W / Math.max(1, x1 - x0), (bottom - top) / Math.max(1, y1 - y0))))
+    const target = {
+      k,
+      x: (W - (x1 - x0) * k) / 2 - x0 * k,
+      y: top + (bottom - top - (y1 - y0) * k) / 2 - y0 * k,
+    }
+    if (!animate || reduced) {
+      cam.k = target.k
+      cam.x = target.x
+      cam.y = target.y
+      applyCam()
+      return
+    }
+    camTarget = target
+  }
+  let camTarget: { x: number; y: number; k: number } | null = null
   const onResize = () => {
     W = innerWidth
     H = stage.clientHeight || innerHeight
@@ -219,6 +283,18 @@ function mountSky(root: HTMLDivElement) {
     const threads = s.relationships
       .filter((r) => r.type === 'relates_to' && topIds.has(r.from_id) && topIds.has(r.to_id))
       .map((r) => ({ a: r.from_id, b: r.to_id, id: r.id }))
+    // a pool that has lost its members is just a label in the way
+    for (const g of goals) {
+      const n = (membersByGoal.get(g.id) ?? []).length
+      const born = Date.now() - new Date(g.created_at).getTime()
+      if (n < 2 && born > 8000) {
+        for (const m of membersByGoal.get(g.id) ?? []) {
+          const rel = s.relationships.find((r) => r.type === 'part_of' && r.from_id === m.id && r.to_id === g.id)
+          if (rel) s.deleteRelationship(rel.id)
+        }
+        s.deleteThought(g.id)
+      }
+    }
     view = { tls, byId, threads }
     ver++
   }
@@ -529,6 +605,29 @@ function mountSky(root: HTMLDivElement) {
       S().updateThought(t.id, { status: 'open', snooze_until: null })
     })
   }
+  let tidying = false
+  tidyEl.addEventListener('click', async () => {
+    if (tidying) return
+    tidying = true
+    tidyEl.textContent = 'tidying…'
+    const res = await tidySky((goalId, i, total) => {
+      const p = posOf(goalId)
+      const ang = (i / Math.max(1, total)) * Math.PI * 2 - Math.PI / 2
+      p.x = p.rx = worldW() / 2 + Math.cos(ang) * 220
+      p.y = p.ry = worldH() / 2 + Math.sin(ang) * 180
+    })
+    tidying = false
+    tidyEl.textContent = '✦ tidy'
+    if (res.kind === 'tidied') {
+      haptics.join()
+      fitWhenSettled()
+      const bits: string[] = []
+      if (res.made) bits.push(`${res.made} new pool${res.made === 1 ? '' : 's'}`)
+      if (res.joined) bits.push(`${res.joined} gathered`)
+      say(res.note || bits.join(' · '))
+      if (res.focus) setTimeout(() => say(`worth your attention: ${res.focus}`), 4400)
+    } else say(res.kind === 'failed' ? 'could not tidy just now' : 'nothing obvious to gather')
+  })
   restEl.addEventListener('click', () => {
     for (const t of S().thoughts) {
       if (t.status === 'snoozed') S().updateThought(t.id, { status: 'open', snooze_until: null })
@@ -1054,6 +1153,7 @@ function mountSky(root: HTMLDivElement) {
       m.className = 'sky-moon' + (a.dim ? ' dim' : '')
       m.innerHTML = `<div class="ic">${moonSvg(a.icon)}</div><div class="lb">${a.lb}</div>`
       if (!reduced) m.style.animationDelay = i * 45 + 'ms'
+      m.style.transformOrigin = '27px 27px'
       m.addEventListener('pointerdown', (e) => e.stopPropagation())
       m.addEventListener('click', (e) => {
         e.stopPropagation()
@@ -1078,7 +1178,7 @@ function mountSky(root: HTMLDivElement) {
     // the orbit swings toward open space — the moons face the middle of the
     // screen, so they never collide with each other or fall off an edge
     const open = openPool === tl.t.id
-    const toCenter = Math.atan2(H * 0.46 - p.y, W / 2 - p.x)
+    const toCenter = Math.atan2(worldH() * 0.46 - p.y, worldW() / 2 - p.x)
     const spread = 0.66
     moonEls.forEach((m) => {
       const el = m as HTMLDivElement & { _slot?: number; _of?: number }
@@ -1089,15 +1189,15 @@ function mountSky(root: HTMLDivElement) {
       if (open) {
         // an opened pool is showing its contents; its own actions step out of
         // the orbit and wait together above the water
-        const gap = 78
-        x = W / 2 + (slot - (n - 1) / 2) * gap - 27
-        y = waterlineY() - 96
+        const gap = 78 / cam.k
+        x = p.x + (slot - (n - 1) / 2) * gap - 27
+        y = p.y + radiusOf(tl) + 76
       } else {
         const ang = toCenter + (slot - (n - 1) / 2) * spread
         x = p.x + Math.cos(ang) * r - 27
         y = p.y + Math.sin(ang) * r - 27
       }
-      m.style.transform = `translate(${Math.max(30, Math.min(W - 84, x))}px, ${Math.max(72, Math.min(H - 92, y))}px)`
+      m.style.transform = `translate(${x}px, ${y}px)`
     })
   }
 
@@ -1150,12 +1250,36 @@ function mountSky(root: HTMLDivElement) {
     el: HTMLDivElement
   } | null = null
   let bgDown: { x: number; y: number } | null = null
+  let panFrom: { x: number; y: number; cx: number; cy: number } | null = null
+  let panning = false
+  let lastTap = 0
+  const touches = new Map<number, { x: number; y: number }>()
+  let pinch: { dist: number; k: number; mx: number; my: number } | null = null
   let holdTimer: ReturnType<typeof setTimeout> | null = null
   stage.addEventListener('pointerdown', (e) => {
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (touches.size === 2) {
+      // two fingers: the camera takes over from whatever was happening
+      const [a, b] = [...touches.values()]
+      pinch = {
+        dist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+        k: cam.k,
+        mx: (a.x + b.x) / 2,
+        my: (a.y + b.y) / 2,
+      }
+      if (holdTimer) clearTimeout(holdTimer)
+      if (drag) drag.el.classList.remove('dragging')
+      drag = null
+      bgDown = null
+      panFrom = null
+      endHold(false)
+      return
+    }
     const bubEl = (e.target as HTMLElement).closest?.('.skyb') as HTMLDivElement | null
     if (!bubEl) {
       if (!(e.target as HTMLElement).closest?.('.sky-moon')) {
         bgDown = { x: e.clientX, y: e.clientY }
+        panFrom = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y }
         if (holdTimer) clearTimeout(holdTimer)
         holdTimer = setTimeout(() => {
           if (bgDown && !pageFor && !holding) {
@@ -1186,8 +1310,8 @@ function mountSky(root: HTMLDivElement) {
       tl: ent,
       isMember: !!memberPool,
       memberPool,
-      dx: p.x - e.clientX,
-      dy: p.y - e.clientY,
+      dx: p.x - toWorldX(e.clientX),
+      dy: p.y - toWorldY(e.clientY),
       sx: e.clientX,
       sy: e.clientY,
       vx: 0,
@@ -1211,6 +1335,30 @@ function mountSky(root: HTMLDivElement) {
     }
   })
   stage.addEventListener('pointermove', (e) => {
+    if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (pinch && touches.size >= 2) {
+      const [a, b] = [...touches.values()]
+      const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1
+      camTarget = null
+      zoomAt(pinch.mx, pinch.my, pinch.k * (dist / pinch.dist))
+      return
+    }
+    if (!drag && panFrom) {
+      const dx = e.clientX - panFrom.x
+      const dy = e.clientY - panFrom.y
+      if (!panning && Math.hypot(dx, dy) > 9) {
+        panning = true
+        bgDown = null
+        if (holdTimer) clearTimeout(holdTimer)
+      }
+      if (panning) {
+        camTarget = null
+        cam.x = panFrom.cx + dx
+        cam.y = panFrom.cy + dy
+        applyCam()
+        return
+      }
+    }
     if (!drag) {
       if (bgDown && Math.hypot(e.clientX - bgDown.x, e.clientY - bgDown.y) > 9) {
         bgDown = null
@@ -1226,8 +1374,8 @@ function mountSky(root: HTMLDivElement) {
     }
     if (!drag.moved) return
     const p = posOf(drag.id)
-    const nx = e.clientX + drag.dx
-    const ny = e.clientY + drag.dy
+    const nx = toWorldX(e.clientX) + drag.dx
+    const ny = toWorldY(e.clientY) + drag.dy
     drag.vx = (nx - p.x) * 0.6 + drag.vx * 0.4
     drag.vy = (ny - p.y) * 0.6 + drag.vy * 0.4
     p.x = nx
@@ -1250,8 +1398,8 @@ function mountSky(root: HTMLDivElement) {
         const deg = Math.round(gap / 4)
         meter.textContent = String(deg)
         const bp = posOf(best.t.id)
-        meter.style.left = (p.x + bp.x) / 2 + 'px'
-        meter.style.top = (p.y + bp.y) / 2 + 'px'
+        meter.style.left = ((p.x + bp.x) / 2) * cam.k + cam.x + 'px'
+        meter.style.top = ((p.y + bp.y) / 2) * cam.k + cam.y + 'px'
         meter.classList.add('on')
         meter.classList.toggle('zero', deg === 0)
         if (deg === 0 && !drag.touching) haptics.grab()
@@ -1264,13 +1412,35 @@ function mountSky(root: HTMLDivElement) {
     }
   })
   stage.addEventListener('pointerup', (e) => {
+    touches.delete(e.pointerId)
+    if (pinch) {
+      if (touches.size < 2) pinch = null
+      return
+    }
+    if (panning) {
+      panning = false
+      panFrom = null
+      return
+    }
+    panFrom = null
     if (holdTimer) clearTimeout(holdTimer)
     if (holding && !holding.auto) {
       endHold(true)
       return
     }
     if (!drag) {
-      if (bgDown && Math.hypot(e.clientX - bgDown.x, e.clientY - bgDown.y) < 9) clearAll()
+      if (bgDown && Math.hypot(e.clientX - bgDown.x, e.clientY - bgDown.y) < 9) {
+        const now = performance.now()
+        if (now - lastTap < 320) {
+          // two taps on open water: frame the whole sky
+          lastTap = 0
+          clearAll()
+          fitAll()
+        } else {
+          lastTap = now
+          clearAll()
+        }
+      }
       bgDown = null
       return
     }
@@ -1304,7 +1474,11 @@ function mountSky(root: HTMLDivElement) {
     }
     persistLayout()
   })
-  stage.addEventListener('pointercancel', () => {
+  stage.addEventListener('pointercancel', (e) => {
+    touches.delete(e.pointerId)
+    if (touches.size < 2) pinch = null
+    panning = false
+    panFrom = null
     if (holdTimer) clearTimeout(holdTimer)
     endHold(false)
     if (drag) drag.el.classList.remove('dragging')
@@ -1417,22 +1591,32 @@ function mountSky(root: HTMLDivElement) {
           pb.y -= (dy / dist) * pull
         }
       }
-      for (let i = 0; i < view.tls.length; i++) {
-        for (let j = i + 1; j < view.tls.length; j++) {
-          const a = view.tls[i]
-          const b = view.tls[j]
-          const pa = posOf(a.t.id)
-          const pb = posOf(b.t.id)
-          const dx = pb.x - pa.x
-          const dy = pb.y - pa.y
-          const dist = Math.hypot(dx, dy) || 1
-          const min = radiusOf(a) + radiusOf(b) + 22
-          if (dist < min) {
-            const push = (min - dist) * 0.03
-            pa.x -= (dx / dist) * push
-            pa.y -= (dy / dist) * push
-            pb.x += (dx / dist) * push
-            pb.y += (dy / dist) * push
+      // nothing may overlap. Several soft passes settle a crowded sky without
+      // the jitter a single hard shove produces.
+      for (let pass = 0; pass < 3; pass++) {
+        for (let i = 0; i < view.tls.length; i++) {
+          for (let j = i + 1; j < view.tls.length; j++) {
+            const a = view.tls[i]
+            const b = view.tls[j]
+            const pa = posOf(a.t.id)
+            const pb = posOf(b.t.id)
+            let dx = pb.x - pa.x
+            let dy = pb.y - pa.y
+            let dist = Math.hypot(dx, dy)
+            if (dist < 0.01) {
+              // exactly coincident: nudge them apart deterministically
+              dx = (i % 2 ? 1 : -1) * 0.5
+              dy = 0.5
+              dist = 0.71
+            }
+            const min = radiusOf(a) + radiusOf(b) + 26
+            if (dist < min) {
+              const push = (min - dist) * 0.22
+              pa.x -= (dx / dist) * push
+              pa.y -= (dy / dist) * push
+              pb.x += (dx / dist) * push
+              pb.y += (dy / dist) * push
+            }
           }
         }
       }
@@ -1448,8 +1632,8 @@ function mountSky(root: HTMLDivElement) {
         }
         cx /= view.tls.length
         cy /= view.tls.length
-        const dx = (W / 2 - cx) * 0.011
-        const dy = ((74 + waterlineY()) / 2 - cy) * 0.011
+        const dx = (worldW() / 2 - cx) * 0.011
+        const dy = (worldH() / 2 - cy) * 0.011
         if (Math.abs(dx) > 0.008 || Math.abs(dy) > 0.008) {
           for (const tl of view.tls) {
             const p = posOf(tl.t.id)
@@ -1462,8 +1646,8 @@ function mountSky(root: HTMLDivElement) {
         const p = posOf(tl.t.id)
         coast(p)
         const r = radiusOf(tl)
-        p.x = Math.max(r + 8, Math.min(W - r - 8, p.x))
-        p.y = Math.max(r + 74, Math.min(waterlineY() - r - 18, p.y))
+        p.x = Math.max(r + 8, Math.min(worldW() - r - 8, p.x))
+        p.y = Math.max(r + 8, Math.min(worldH() - r - 8, p.y))
       }
     }
     if (openPool) {
@@ -1514,6 +1698,13 @@ function mountSky(root: HTMLDivElement) {
       invitePos.y = H * 0.34 + Math.cos(t * 0.3) * 4
       inviteEl.style.transform = `translate3d(${invitePos.x - 96}px, ${invitePos.y - 96}px, 0)`
     }
+    if (camTarget) {
+      cam.x += (camTarget.x - cam.x) * 0.14
+      cam.y += (camTarget.y - cam.y) * 0.14
+      cam.k += (camTarget.k - cam.k) * 0.14
+      if (Math.abs(camTarget.k - cam.k) < 0.002 && Math.abs(camTarget.x - cam.x) < 0.6) camTarget = null
+      applyCam()
+    }
     layoutMoons()
     lineUsed = 0
     if (!openPool) {
@@ -1546,9 +1737,21 @@ function mountSky(root: HTMLDivElement) {
   // ---------- boot ----------
   rebuild()
   paintAll()
+  setTimeout(() => fitAll(false), 60)
+  setTimeout(() => fitAll(), 900)
+  let lastCount = view.tls.length
+  let fitSoon: ReturnType<typeof setTimeout> | null = null
+  function fitWhenSettled() {
+    if (fitSoon) clearTimeout(fitSoon)
+    fitSoon = setTimeout(() => fitAll(), 850)
+  }
   const unsub = useGraph.subscribe(() => {
     rebuild()
     paintAll()
+    // a burst of new thinking should be shown to you, not hidden off-screen
+    if (view.tls.length - lastCount >= 3) fitWhenSettled()
+    lastCount = view.tls.length
+    tidyEl.classList.toggle('show', view.tls.filter((tl) => tl.kind === 'drop').length >= 6 && !S().offline)
   })
   raf = requestAnimationFrame(step)
   const n = view.tls.length

@@ -11,6 +11,7 @@ import { distillMemory } from './actions/distill-memory'
 import { absorb } from './actions/absorb'
 import { organize } from './actions/organize'
 import { namePool } from './actions/name-pool'
+import { cluster } from './actions/cluster'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const ACTION_REGISTRY: Record<string, ActionDef<any, any>> = {
@@ -26,6 +27,7 @@ export const ACTION_REGISTRY: Record<string, ActionDef<any, any>> = {
   [absorb.name]: absorb,
   [organize.name]: organize,
   [namePool.name]: namePool,
+  [cluster.name]: cluster,
 }
 
 export type ActionName = keyof typeof ACTION_REGISTRY

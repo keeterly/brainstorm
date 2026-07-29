@@ -39,6 +39,7 @@ function sampleInput(name: string): never {
     absorb: { text: 'the buyer moved our meeting to friday', thoughts: [ref] },
     organize: { text: 'a long messy dump about the campaign and the pop-up', thoughts: [ref], spoken: true },
     name_pool: { members: ['shoot on expired film', 'letters sealed with wax'] },
+    cluster: { loose: [ref], pools: [{ id: 'p1', name: 'SS27 show', members: ['book the space'] }] },
   }
   return inputs[name] as never
 }

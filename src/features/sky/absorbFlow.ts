@@ -6,6 +6,7 @@ import { runAction } from '@/ai/client'
 import { absorbIsEmpty, type AbsorbOutput } from '@shared/ai/actions/absorb'
 import type { OrganizeOutput } from '@shared/ai/actions/organize'
 import type { NamePoolOutput } from '@shared/ai/actions/name-pool'
+import type { ClusterOutput } from '@shared/ai/actions/cluster'
 import type { DistillOutput } from '@shared/ai/actions/distill-memory'
 import type { Thought } from '@/domain/types'
 
@@ -152,4 +153,65 @@ export function nameThePool(goalId: string, members: string[]) {
     .catch(() => {
       /* the local guess stands */
     })
+}
+
+// Tidy — put the loose thoughts where they belong. Only moves what exists.
+export type ClusterResult =
+  | { kind: 'tidied'; note: string; joined: number; made: number; focus?: string }
+  | { kind: 'nothing' }
+  | { kind: 'failed' }
+
+export async function tidySky(place: (goalId: string, i: number, total: number) => void): Promise<ClusterResult> {
+  const s = useGraph.getState()
+  const open = s.thoughts.filter((t) => t.status === 'open')
+  const goals = open.filter((t) => t.type === 'goal')
+  const memberOf = new Map<string, string>()
+  for (const r of s.relationships) if (r.type === 'part_of') memberOf.set(r.from_id, r.to_id)
+  const loose = open.filter((t) => t.type !== 'goal' && !memberOf.has(t.id))
+  if (loose.length < 2) return { kind: 'nothing' }
+  try {
+    const { output } = await runAction<ClusterOutput>('cluster', {
+      loose: loose.slice(0, 120).map((t) => ({
+        id: t.id,
+        title: t.title || t.raw_content.slice(0, 200),
+        type: t.type,
+        summary: t.summary,
+        due: t.due_date,
+      })),
+      pools: goals.slice(0, 40).map((g) => ({
+        id: g.id,
+        name: g.title || g.raw_content.slice(0, 80),
+        members: open.filter((t) => memberOf.get(t.id) === g.id).slice(0, 30).map((t) => (t.title || t.raw_content).slice(0, 200)),
+      })),
+    })
+    const looseIds = new Set(loose.map((t) => t.id))
+    const goalIds = new Set(goals.map((g) => g.id))
+    const used = new Set<string>()
+    let joined = 0
+    for (const g of output.intoExisting) {
+      if (!goalIds.has(g.poolId)) continue
+      for (const m of g.members) {
+        if (!looseIds.has(m) || used.has(m)) continue
+        used.add(m)
+        s.addRelationship(m, g.poolId, 'part_of', 'ai')
+        joined++
+      }
+    }
+    let made = 0
+    for (const p of output.newPools) {
+      const members = p.members.filter((m) => looseIds.has(m) && !used.has(m))
+      if (members.length < 2) continue
+      const goal = s.addThought({ raw_content: p.name, title: p.name, type: 'goal' })
+      place(goal.id, made, Math.max(1, output.newPools.length))
+      for (const m of members) {
+        used.add(m)
+        s.addRelationship(m, goal.id, 'part_of', 'ai')
+      }
+      made++
+    }
+    if (!joined && !made) return { kind: 'nothing' }
+    return { kind: 'tidied', note: output.note, joined, made, focus: output.focus?.poolName }
+  } catch {
+    return { kind: 'failed' }
+  }
 }

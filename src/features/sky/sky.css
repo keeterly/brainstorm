@@ -422,3 +422,20 @@
 @media (prefers-reduced-motion: reduce) {
   .sky-page.reading .pans img { animation: none; }
 }
+
+/* offered only when the sky has actually filled up */
+.sky-tidy {
+  position: fixed;
+  z-index: 6;
+  top: calc(var(--sat) + 14px);
+  left: 14px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(15, 22, 32, 0.55);
+  border: 0.5px solid rgba(122, 215, 255, 0.3);
+  color: rgba(122, 215, 255, 0.85);
+  font-size: 11px;
+  display: none;
+  cursor: pointer;
+}
+.sky-tidy.show { display: block; }
