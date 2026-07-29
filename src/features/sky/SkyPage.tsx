@@ -713,6 +713,7 @@ function mountSky(root: HTMLDivElement) {
         el.style.transitionDelay = reduced ? '0ms' : 180 + i * 90 + 'ms'
       })
     } else if (mode === 'capture') {
+      pendingImage = null
       pageQ.textContent = 'What’s on your mind?'
       pageT.value = ''
       pageT.placeholder = 'Let it storm.'
@@ -862,6 +863,9 @@ function mountSky(root: HTMLDivElement) {
   const speechOK = !!SRCls
   let rec: SpeechRecognitionLike | null = null
   let micUsed = false
+  // the stored thumbnail is far too small to read text from, so a capture also
+  // keeps a legible copy in memory for as long as the page is open
+  let pendingImage: { mediaType: string; dataB64: string } | null = null
   function stopMic() {
     if (rec) {
       const r = rec
@@ -915,24 +919,30 @@ function mountSky(root: HTMLDivElement) {
     const im = new Image()
     im.onload = () => {
       URL.revokeObjectURL(url)
-      const s = Math.min(1, 240 / Math.min(im.width, im.height))
-      const c = document.createElement('canvas')
-      c.width = Math.max(1, Math.round(im.width * s))
-      c.height = Math.max(1, Math.round(im.height * s))
-      ;(c.getContext('2d') as CanvasRenderingContext2D).drawImage(im, 0, 0, c.width, c.height)
+      const draw = (max: number, q: number) => {
+        const k = Math.min(1, max / Math.max(im.width, im.height))
+        const c = document.createElement('canvas')
+        c.width = Math.max(1, Math.round(im.width * k))
+        c.height = Math.max(1, Math.round(im.height * k))
+        ;(c.getContext('2d') as CanvasRenderingContext2D).drawImage(im, 0, 0, c.width, c.height)
+        return c.toDataURL('image/jpeg', q)
+      }
       let img: string
+      let readable: string
       try {
-        img = c.toDataURL('image/jpeg', 0.82)
+        img = draw(320, 0.8) // the drop's face — small enough to live in a row
+        readable = draw(1400, 0.85) // legible enough for the model to read
       } catch {
         return
       }
+      pendingImage = { mediaType: 'image/jpeg', dataB64: readable.split(',')[1] }
       const pf = pageFor
       const t = S().addThought({ raw_content: 'A captured photo', extra: { img } })
       const p = posOf(t.id)
       const a = Math.random() * Math.PI * 2
       p.x = p.rx = Math.max(60, Math.min(W - 60, (pf?.ox ?? W / 2) + Math.cos(a) * 110))
       p.y = p.ry = Math.max(140, Math.min(H - 160, (pf?.oy ?? H / 2) + Math.sin(a) * 90))
-      pageN.textContent = 'caught'
+      pageN.textContent = '✦ can read this one'
     }
     im.onerror = () => URL.revokeObjectURL(url)
     im.src = url
@@ -950,19 +960,20 @@ function mountSky(root: HTMLDivElement) {
   let organizing = false
   async function runOrganize(spoken: boolean) {
     const v = pageT.value.trim()
-    if (!v || organizing) return
+    if ((!v && !pendingImage) || organizing) return
     const pf = pageFor
     const ox = pf?.ox ?? W / 2
     const oy = pf?.oy ?? H / 2
     organizing = true
     pageAbsorb.classList.add('busy')
-    pageN.textContent = spoken ? 'making sense of what you said…' : 'reading it through…'
-    const res = await organizeText(v, spoken, placeNear(ox, oy))
+    pageN.textContent = pendingImage ? 'reading the picture…' : spoken ? 'making sense of what you said…' : 'reading it through…'
+    const res = await organizeText(v, spoken, placeNear(ox, oy), pendingImage ?? undefined)
     organizing = false
     pageAbsorb.classList.remove('busy')
     if (res.kind === 'organized') {
       pageT.value = ''
       micUsed = false
+      pendingImage = null
       closePage(false)
       splash(ox)
       haptics.arrive()

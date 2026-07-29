@@ -209,3 +209,32 @@ describe('organize output schema', () => {
     ).toBe(false)
   })
 })
+
+describe('organize reads pictures', () => {
+  const organize = ACTION_REGISTRY.organize
+  const ctx = { nowISO: '2026-07-29T12:00:00Z', tzOffsetMin: -420, memory: [] }
+  it('attaches the image and tells the model what it is looking at', () => {
+    const p = organize.buildPrompt(
+      { text: '', thoughts: [], image: { mediaType: 'image/jpeg', dataB64: 'AAAA' } },
+      ctx,
+    )
+    expect(p.images).toEqual([{ mediaType: 'image/jpeg', dataB64: 'AAAA' }])
+    expect(p.user).toContain('An image is attached')
+    // no empty quoted block when the picture is the whole message
+    expect(p.user).not.toContain('Text:')
+  })
+  it('stays text-only when there is no picture', () => {
+    const p = organize.buildPrompt({ text: 'a messy dump', thoughts: [] }, ctx)
+    expect(p.images).toBeUndefined()
+    expect(p.user).toContain('Text:')
+  })
+  it('rejects an image type the API cannot read', () => {
+    expect(
+      organize.inputSchema.safeParse({
+        text: '',
+        thoughts: [],
+        image: { mediaType: 'image/heic', dataB64: 'AAAA' },
+      }).success,
+    ).toBe(false)
+  })
+})

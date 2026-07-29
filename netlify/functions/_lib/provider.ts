@@ -26,6 +26,7 @@ export interface LLMProvider {
     maxTokens: number
     system: string
     user: string
+    images?: { mediaType: string; dataB64: string }[]
     outputSchema: z.ZodType<unknown>
     stream?: boolean
     onDelta?: (chunk: string) => void
@@ -43,6 +44,7 @@ export class AnthropicProvider implements LLMProvider {
     maxTokens: number
     system: string
     user: string
+    images?: { mediaType: string; dataB64: string }[]
     outputSchema: z.ZodType<unknown>
     stream?: boolean
     onDelta?: (chunk: string) => void
@@ -56,7 +58,22 @@ export class AnthropicProvider implements LLMProvider {
       model: opts.model,
       max_tokens: opts.maxTokens,
       system: opts.system,
-      messages: [{ role: 'user', content: opts.user }],
+      // an image-bearing turn becomes content blocks; text-only stays a plain
+      // string so nothing about the existing actions changes
+      messages: [
+        {
+          role: 'user',
+          content: opts.images?.length
+            ? [
+                ...opts.images.map((im) => ({
+                  type: 'image' as const,
+                  source: { type: 'base64' as const, media_type: im.mediaType, data: im.dataB64 },
+                })),
+                { type: 'text' as const, text: opts.user },
+              ]
+            : opts.user,
+        },
+      ],
       tools: [emitTool],
       tool_choice: { type: 'tool', name: 'emit' },
       stream: !!opts.stream,

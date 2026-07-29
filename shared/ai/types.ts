@@ -11,6 +11,15 @@ export interface PromptCtx {
 export interface BuiltPrompt {
   system: string
   user: string
+  /** Images the model should look at alongside the text. */
+  images?: PromptImage[]
+}
+
+export interface PromptImage {
+  /** image/jpeg, image/png, image/webp or image/gif */
+  mediaType: string
+  /** raw base64 — no data: prefix */
+  dataB64: string
 }
 
 // A named, versioned, schema-validated AI action. Input and output schemas are

@@ -82,6 +82,7 @@ export async function organizeText(
   text: string,
   spoken: boolean,
   place: (id: string, i: number, total: number) => void,
+  image?: { mediaType: string; dataB64: string },
 ): Promise<OrganizeResult> {
   const s = useGraph.getState()
   const open = s.thoughts.filter((t) => t.status === 'open')
@@ -89,6 +90,7 @@ export async function organizeText(
     const { output } = await runAction<OrganizeOutput>('organize', {
       text,
       spoken,
+      image,
       thoughts: open.slice(0, 200).map((t) => ({
         id: t.id,
         title: t.title || t.raw_content.slice(0, 200),

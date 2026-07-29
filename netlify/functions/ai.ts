@@ -89,6 +89,7 @@ export default async (req: Request): Promise<Response> => {
         maxTokens: def.maxTokens,
         system: prompt.system,
         user: prompt.user + extraUser,
+        images: prompt.images,
         outputSchema: def.outputSchema,
         stream: def.stream,
         onDelta,
