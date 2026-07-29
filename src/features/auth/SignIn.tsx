@@ -8,6 +8,10 @@ export function SignIn() {
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // code entry — the email opens in whatever browser the mail app likes, but a
+  // typed 6-digit code signs you in HERE. sentKind tracks which template sent it.
+  const [sentKind, setSentKind] = useState<'email' | 'signup' | null>(null)
+  const [code, setCode] = useState('')
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -21,15 +25,37 @@ export function SignIn() {
           options: { emailRedirectTo: window.location.origin },
         })
         if (error) throw error
-        setNotice('Check your email for a sign-in link.')
+        setNotice('Check your email — tap the link, or type the 6-digit code below.')
+        setSentKind('email')
       } else if (mode === 'password') {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
       } else {
         const { error } = await supabase.auth.signUp({ email, password })
         if (error) throw error
-        setNotice('Account created — check your email to confirm.')
+        setNotice('Account created — confirm via the email link or the code below.')
+        setSentKind('signup')
       }
+    } catch (err) {
+      setError(String((err as Error).message || err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function verifyCode(e: FormEvent) {
+    e.preventDefault()
+    if (!sentKind || !code.trim()) return
+    setBusy(true)
+    setError(null)
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email,
+        token: code.trim(),
+        type: sentKind,
+      })
+      if (error) throw error
+      // session lands in THIS browser; AuthGate takes it from here
     } catch (err) {
       setError(String((err as Error).message || err))
     } finally {
@@ -81,6 +107,23 @@ export function SignIn() {
         <p style={{ marginTop: 16, color: 'var(--accent-ink)' }} role="status">
           {notice}
         </p>
+      )}
+      {sentKind && (
+        <form onSubmit={verifyCode} style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <input
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="6-digit code"
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
+            style={{ ...inputStyle, flex: 1 }}
+            aria-label="Sign-in code from the email"
+          />
+          <button className="btn btn--primary" type="submit" disabled={busy || code.trim().length < 6}>
+            Enter
+          </button>
+        </form>
       )}
       {error && (
         <p style={{ marginTop: 16, color: 'var(--danger)' }} role="alert">
