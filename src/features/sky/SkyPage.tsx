@@ -335,6 +335,7 @@ function mountSky(root: HTMLDivElement) {
   const pageFile = root.querySelector('[data-sky="pageFile"]') as HTMLInputElement
 
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
+  document.body.classList.add('sky-held')
   // how close a dragged drop is to the sea, 0 → 1, and whether it would go
   let seaNear = 0
   function showTide(near: number, ready: boolean) {
@@ -395,10 +396,10 @@ function mountSky(root: HTMLDivElement) {
     cam.y = sy - wy * next
     applyCam()
   }
-  /** Frame everything, with a little air. */
-  function fitAll(animate = true) {
+  /** The world's occupied box, or null when there is nothing in it. */
+  function contentBox() {
     const tls = view.tls
-    if (!tls.length) return
+    if (!tls.length) return null
     let x0 = Infinity
     let y0 = Infinity
     let x1 = -Infinity
@@ -411,6 +412,20 @@ function mountSky(root: HTMLDivElement) {
       x1 = Math.max(x1, p.x + r)
       y1 = Math.max(y1, p.y + r)
     }
+    return { x0, y0, x1, y1 }
+  }
+  /** Is there anywhere to pan to? If the sky already fits, dragging the water
+   *  should do nothing — otherwise every near-miss on a drop slides the world. */
+  function canPan() {
+    const b = contentBox()
+    if (!b) return false
+    return (b.x1 - b.x0) * cam.k > W + 12 || (b.y1 - b.y0) * cam.k > waterlineY() - 94
+  }
+  /** Frame everything, with a little air. */
+  function fitAll(animate = true) {
+    const b = contentBox()
+    if (!b) return
+    const { x0, y0, x1, y1 } = b
     const top = 76
     const bottom = waterlineY() - 18
     const k = Math.max(MIN_K, Math.min(MAX_K, Math.min(W / Math.max(1, x1 - x0), (bottom - top) / Math.max(1, y1 - y0))))
@@ -1558,7 +1573,20 @@ function mountSky(root: HTMLDivElement) {
   const touches = new Map<number, { x: number; y: number }>()
   let pinch: { dist: number; k: number; mx: number; my: number } | null = null
   let holdTimer: ReturnType<typeof setTimeout> | null = null
+  // How far a finger has to travel before it means something. A drop answers
+  // quickly; the water needs more asking, so a near-miss on a drop does not
+  // slide the whole world instead.
+  const TAP_SLOP = 9
+  const PAN_SLOP = 16
   stage.addEventListener('pointerdown', (e) => {
+    // A first finger arriving while we still think fingers are down means the
+    // last gesture's release never reached us. Nothing survives that.
+    if (e.isPrimary && touches.size) {
+      touches.clear()
+      pinch = null
+      panning = false
+      panFrom = null
+    }
     touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
     if (touches.size === 2) {
       // two fingers: the camera takes over from whatever was happening
@@ -1581,7 +1609,16 @@ function mountSky(root: HTMLDivElement) {
     if (!bubEl) {
       if (!(e.target as HTMLElement).closest?.('.sky-moon')) {
         bgDown = { x: e.clientX, y: e.clientY }
-        panFrom = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y }
+        // only offer to pan when there is something off-screen to pan to
+        panFrom = canPan() ? { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y } : null
+        // the water keeps the finger too: without this, a drag that wanders
+        // over the tab bar never sends us its release, and the next tap lands
+        // in a gesture that never ended
+        try {
+          stage.setPointerCapture(e.pointerId)
+        } catch {
+          /* the pointer is already gone */
+        }
         if (holdTimer) clearTimeout(holdTimer)
         holdTimer = setTimeout(() => {
           if (bgDown && !pageFor && !holding) {
@@ -1648,7 +1685,7 @@ function mountSky(root: HTMLDivElement) {
     if (!drag && panFrom) {
       const dx = e.clientX - panFrom.x
       const dy = e.clientY - panFrom.y
-      if (!panning && Math.hypot(dx, dy) > 9) {
+      if (!panning && Math.hypot(dx, dy) > PAN_SLOP) {
         panning = true
         bgDown = null
         if (holdTimer) clearTimeout(holdTimer)
@@ -1662,13 +1699,13 @@ function mountSky(root: HTMLDivElement) {
       }
     }
     if (!drag) {
-      if (bgDown && Math.hypot(e.clientX - bgDown.x, e.clientY - bgDown.y) > 9) {
+      if (bgDown && Math.hypot(e.clientX - bgDown.x, e.clientY - bgDown.y) > TAP_SLOP) {
         bgDown = null
         if (holdTimer) clearTimeout(holdTimer)
       }
       return
     }
-    if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 9) {
+    if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > TAP_SLOP) {
       drag.moved = true
       if (holdTimer) clearTimeout(holdTimer)
       drag.el.classList.add('dragging')
@@ -1738,7 +1775,10 @@ function mountSky(root: HTMLDivElement) {
       }
     }
   })
-  stage.addEventListener('pointerup', (e) => {
+  // Release is heard at the window, not the stage: a finger that wanders over
+  // the tab bar or off the edge still ends its gesture. Pointer capture already
+  // routes these through the stage, so this hears each release exactly once.
+  const onUp = (e: PointerEvent) => {
     touches.delete(e.pointerId)
     if (pinch) {
       if (touches.size < 2) pinch = null
@@ -1756,7 +1796,7 @@ function mountSky(root: HTMLDivElement) {
       return
     }
     if (!drag) {
-      if (bgDown && Math.hypot(e.clientX - bgDown.x, e.clientY - bgDown.y) < 9) {
+      if (bgDown && Math.hypot(e.clientX - bgDown.x, e.clientY - bgDown.y) < TAP_SLOP) {
         const now = performance.now()
         if (now - lastTap < 320) {
           // two taps on open water: frame the whole sky
@@ -1802,12 +1842,13 @@ function mountSky(root: HTMLDivElement) {
       p.vy = Math.max(-14, Math.min(14, d.vy))
     }
     persistLayout()
-  })
-  stage.addEventListener('pointercancel', (e) => {
+  }
+  const onCancel = (e: PointerEvent) => {
     touches.delete(e.pointerId)
     if (touches.size < 2) pinch = null
     panning = false
     panFrom = null
+    bgDown = null
     hideTide()
     if (holdTimer) clearTimeout(holdTimer)
     endHold(false)
@@ -1815,6 +1856,14 @@ function mountSky(root: HTMLDivElement) {
     drag = null
     meter.classList.remove('on', 'zero')
     clearFuse()
+  }
+  addEventListener('pointerup', onUp)
+  addEventListener('pointercancel', onCancel)
+  // iOS takes the pointer back for its own reasons. Losing it while we still
+  // believe the finger is down is the case that used to strand a gesture —
+  // losing it on an ordinary release is just the release, already handled.
+  stage.addEventListener('lostpointercapture', (e) => {
+    if (touches.has(e.pointerId)) onCancel(e)
   })
   function onTap(id: string, isMember: boolean) {
     hint.style.opacity = '0'
@@ -2246,6 +2295,9 @@ function mountSky(root: HTMLDivElement) {
     cancelAnimationFrame(raf)
     unsub()
     removeEventListener('resize', onResize)
+    removeEventListener('pointerup', onUp)
+    removeEventListener('pointercancel', onCancel)
+    document.body.classList.remove('sky-held')
     stopMic()
     if (layoutT) clearTimeout(layoutT)
     if (undoT) clearTimeout(undoT)

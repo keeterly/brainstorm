@@ -11,6 +11,13 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* While the sky is the view, the document itself never moves — every gesture
+   here belongs to the world, not to the page under it. */
+body.sky-held {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 .sky-stage {
   position: fixed;
   inset: 0;
