@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AuthGate } from '@/features/auth/AuthGate'
+import { installWaterTouch } from '@/lib/touch-water'
 import { TabBar } from '@/components/TabBar'
 import { OfflineBanner } from '@/components/OfflineBanner'
 import { Atmosphere } from '@/world/Atmosphere'
@@ -12,6 +14,8 @@ import RunsPage from '@/features/runs/RunsPage'
 import ImportPage from '@/features/importer/ImportPage'
 
 export default function App() {
+  // every button in the app answers a touch the way water does
+  useEffect(() => installWaterTouch(), [])
   return (
     <AuthGate>
       <Atmosphere />

@@ -92,7 +92,7 @@
   --sab: env(safe-area-inset-bottom, 0px);
 
   --maxw-page: 44rem;
-  --tabbar-h: 58px;
+  --tabbar-h: 96px;
 
   /* legacy aliases — earlier components referenced the light-theme names;
      they now resolve into the world so nothing falls back to defaults */

@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useGraph } from '@/store/graph'
 import { computeWorld } from './engine'
-import { WATER_H, drawWater, invalidateWaterline } from './water'
+import { SURFACE, WATER_H, drawWater, invalidateWaterline } from './water'
 import { tickDaylight } from './daylight'
 
 export function Atmosphere() {
@@ -35,6 +35,9 @@ export function Atmosphere() {
       canvas.style.height = `${WATER_H}px`
       ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0)
       invalidateWaterline()
+      // how far the water's surface sits above the bottom edge, so anything
+      // that wants to float on it can be placed in CSS without guessing
+      document.documentElement.style.setProperty('--water-line-up', `${WATER_H - SURFACE}px`)
     }
     size()
     window.addEventListener('resize', size)
@@ -122,7 +125,8 @@ export function Atmosphere() {
           position: 'absolute',
           left: 0,
           right: 0,
-          bottom: 'calc(var(--tabbar-h) + var(--sab))',
+          // the ocean runs to the bottom edge of the glass; the tabs float on it
+          bottom: 0,
         }}
       />
       <div

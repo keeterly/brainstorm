@@ -20,8 +20,9 @@ body.sky-held {
 
 .sky-stage {
   position: fixed;
+  /* the world runs to the bottom edge now — the tabs float in it rather than
+     sitting on a bar that cut it off */
   inset: 0;
-  bottom: calc(var(--tabbar-h) + var(--sab));
   overflow: hidden;
   touch-action: none;
   z-index: 1;

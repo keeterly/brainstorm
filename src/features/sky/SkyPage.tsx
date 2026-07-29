@@ -428,7 +428,9 @@ function mountSky(root: HTMLDivElement) {
     const { x0, y0, x1, y1 } = b
     const top = 76
     const bottom = waterlineY() - 18
-    const k = Math.max(MIN_K, Math.min(MAX_K, Math.min(W / Math.max(1, x1 - x0), (bottom - top) / Math.max(1, y1 - y0))))
+    // framing, never magnifying: a nearly empty sky used to zoom in past 1:1
+    // and push what little was in it off the edges
+    const k = Math.max(MIN_K, Math.min(1, Math.min(W / Math.max(1, x1 - x0), (bottom - top) / Math.max(1, y1 - y0))))
     const target = {
       k,
       x: (W - (x1 - x0) * k) / 2 - x0 * k,
@@ -2074,9 +2076,12 @@ function mountSky(root: HTMLDivElement) {
           }
         }
       }
-      // the constellation drifts back into frame as a whole — a uniform
-      // nudge, so your own arrangement is preserved, just re-centred
-      if (view.tls.length && !openPool) {
+      // The constellation drifts back into frame as a whole — a uniform nudge,
+      // so your own arrangement is preserved, just re-centred. "Frame" means
+      // what the camera is actually showing: aiming at a fixed point in the
+      // world instead put this in a tug of war with fitAll, and drops ended up
+      // pushed off the edge of a sky that had just framed them.
+      if (view.tls.length && !openPool && !drag && !panning && !pinch && !camTarget) {
         let cx = 0
         let cy = 0
         for (const tl of view.tls) {
@@ -2086,8 +2091,8 @@ function mountSky(root: HTMLDivElement) {
         }
         cx /= view.tls.length
         cy /= view.tls.length
-        const dx = (worldW() / 2 - cx) * 0.011
-        const dy = (worldH() / 2 - cy) * 0.011
+        const dx = (toWorldX(W / 2) - cx) * 0.011
+        const dy = (toWorldY((76 + waterlineY() - 18) / 2) - cy) * 0.011
         if (Math.abs(dx) > 0.008 || Math.abs(dy) > 0.008) {
           for (const tl of view.tls) {
             const p = posOf(tl.t.id)

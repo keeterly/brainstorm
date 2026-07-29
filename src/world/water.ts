@@ -2,8 +2,11 @@
 // sink into — a body with depth, not a line at the bottom of the screen.
 import { sky } from './daylight'
 
-export const WATER_H = 150
-const SURFACE = 26
+// A band at the very bottom edge, not a quarter of the screen. The ocean used
+// to sit above the tab bar, so everything from the waterline down read as
+// water and the sky lost a fifth of its height to it.
+export const WATER_H = 112
+export const SURFACE = 26
 
 // The y of the water's surface at x. Three harmonics at frequencies that share
 // no common multiple, so the surface never repeats itself — real water has no
