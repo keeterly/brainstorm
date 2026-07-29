@@ -17,6 +17,12 @@
   pointer-events: none;
   z-index: 100;
 }
+/* The sky keeps a voice drop at the right of the same shelf. It is fixed to
+   the right edge and the capsule is centred on the whole width, so at three
+   names the two were standing in the same place — the capsule's end under the
+   drop, and Memory's right side unreachable. Give the drop its own room and
+   let the capsule centre on what is left. */
+body.sky-voice .tabs { right: var(--say-room, 86px); }
 
 /* the echo lives behind the glass, so its rings are seen through the lens */
 .tabs-echo {

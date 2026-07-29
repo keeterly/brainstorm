@@ -12,7 +12,7 @@ import { seaLineAt, waterlineY } from '@/world/water'
 import { armUpright, stepUpright, worldTilt } from '@/world/upright'
 import { deepenThought } from './deepenFlow'
 import { haptics } from '@/lib/haptics'
-import { echoRing, wabiPill } from '@/world/echo'
+import { echoRing, wabiBlob, wabiSeed } from '@/world/echo'
 import { type Body, card, contact, disc, oilPath, pull } from '@/world/shape'
 import type { Thought } from '@/domain/types'
 import './sky.css'
@@ -752,9 +752,10 @@ function mountSky(root: HTMLDivElement) {
     const hw = el.offsetWidth / 2
     const hh = el.offsetHeight / 2
     if (!hw || !hh) return
-    // a card carries the corner it was drawn with; everything else is a disc
-    const rr = el.classList.contains('peek') ? Number(el.dataset.corner) || 24 : Math.min(hw, hh)
-    shapes.set(id, { hw, hh, r: Math.max(0, Math.min(rr, Math.min(hw, hh))) })
+    // Every body's corners now run to the full half of its short side — a disc
+    // is that all the way round, an opened card is that at both ends. Nothing
+    // is measured as a rectangle any more, because nothing is drawn as one.
+    shapes.set(id, { hw, hh, r: Math.min(hw, hh) })
   }
   function measureShapes() {
     for (const [id, el] of els) measureOne(id, el)
@@ -803,7 +804,7 @@ function mountSky(root: HTMLDivElement) {
     const x = p?.x ?? 0
     const y = p?.y ?? 0
     const s = shapes.get(id)
-    return s ? card(x, y, s.hw, s.hh, s.r) : disc(x, y, fallbackR)
+    return s ? card(x, y, s.hw, s.hh, s.r, wabiSeed(id)) : disc(x, y, fallbackR, wabiSeed(id))
   }
   /** The same body where it is being *drawn* this frame, not where it is
    *  heading — anything drawn between two bodies has to be built from the
@@ -814,7 +815,9 @@ function mountSky(root: HTMLDivElement) {
     const y = p?.ry ?? 0
     const k = p?.s ?? 1
     const s = shapes.get(id)
-    return s ? card(x, y, s.hw * k, s.hh * k, s.r * k) : disc(x, y, fallbackR * k)
+    return s
+      ? card(x, y, s.hw * k, s.hh * k, s.r * k, wabiSeed(id))
+      : disc(x, y, fallbackR * k, wabiSeed(id))
   }
   /**
    * Let an open pool's members settle against one another.
@@ -973,10 +976,14 @@ function mountSky(root: HTMLDivElement) {
             me.classList.add('member')
             me.style.width = box.w + 'px'
             me.style.height = 'auto'
-            me.style.padding = box.pad + 'px'
-            const corner = Math.round(box.pad * 1.5)
-            me.dataset.corner = String(corner)
-            me.style.setProperty('--blob', wabiPill(m.id, corner))
+            // wider at the ends than at the top and bottom: the body narrows
+            // toward each end, and a first line that came out longer than the
+            // rest would otherwise run at the curve
+            me.style.padding = `${(box.pad * 0.85).toFixed(1)}px ${(box.pad * 1.7).toFixed(1)}px`
+            // its corners are set from the box, not in pixels, so they eat
+            // almost the whole of the sides: what opens is a blob that happens
+            // to hold a sentence, not a rectangle with the edges taken off
+            me.style.setProperty('--blob', wabiBlob(m.id))
             me.innerHTML = `<div class="t"></div>`
             const tx = me.querySelector('.t') as HTMLDivElement
             tx.style.fontSize = box.font.toFixed(1) + 'px'
@@ -1545,6 +1552,8 @@ function mountSky(root: HTMLDivElement) {
     (window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike }).SpeechRecognition
   const speechOK = !!SRCls
   sayBtn.classList.toggle('show', speechOK)
+  // the tab capsule steps aside for the voice drop, but only when there is one
+  document.body.classList.toggle('sky-voice', speechOK)
   let rec: SpeechRecognitionLike | null = null
   let micUsed = false
   // the stored thumbnail is far too small to read text from, so a capture also
@@ -2933,6 +2942,7 @@ function mountSky(root: HTMLDivElement) {
     if (deafT) clearTimeout(deafT)
     document.documentElement.style.removeProperty('--kb')
     document.body.classList.remove('sky-held')
+    document.body.classList.remove('sky-voice')
     stopMic()
     if (layoutT) clearTimeout(layoutT)
     if (undoT) clearTimeout(undoT)

@@ -62,3 +62,33 @@ export function wabiPill(seed: string, r: number, spread = 5): string {
   const p = (n: number) => (r - spread / 2 + v(n) * spread).toFixed(1)
   return `${p(1)}px ${p(2)}px ${p(3)}px ${p(4)}px / ${p(5)}px ${p(6)}px ${p(7)}px ${p(8)}px`
 }
+
+/**
+ * An amorphous body for something much wider than it is tall.
+ *
+ * A pill is still a rectangle wearing round ends: the straight run along its
+ * top is plainly a side, and nothing else in this world has one. Set in per
+ * cent rather than pixels, each corner takes its size from the box — at these
+ * proportions that makes it an ellipse far wider than it is tall, the four of
+ * them eat nearly the whole of the edges, and what straight run survives is
+ * short enough to read as a flattening rather than as a side.
+ *
+ * Same noise as everything else here, so the same thought opens the same shape
+ * every time.
+ */
+export function wabiBlob(seed: string, spread = 13): string {
+  const v = noise(seed)
+  // across: how far in from each end its corner reaches — most of the way
+  const h = (n: number) => (41 - spread / 2 + v(n) * spread).toFixed(1)
+  // down: near enough the whole half-height that no end is ever flat
+  const y = (n: number) => (50 - v(n) * 5).toFixed(1)
+  return `${h(1)}% ${h(2)}% ${h(3)}% ${h(4)}% / ${y(5)}% ${y(6)}% ${y(7)}% ${y(8)}%`
+}
+
+/** The seed as a number, for anything that needs the same imperfection in
+ *  geometry that `wabiRadius` and friends put into the outline. */
+export function wabiSeed(seed: string): number {
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0
+  return (Math.abs(h) % 10000) / 10000
+}

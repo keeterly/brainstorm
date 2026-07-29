@@ -23,17 +23,49 @@ export interface Body {
   hh: number
   /** corner radius */
   r: number
+  /** how far the surface wanders off the primitive, in pixels */
+  wob?: number
+  /** which wander — 0…1, fixed by the thing's id */
+  seed?: number
 }
 
-export const disc = (x: number, y: number, r: number): Body => ({ x, y, hw: r, hh: r, r })
+export const disc = (x: number, y: number, r: number, seed?: number): Body => ({
+  x,
+  y,
+  hw: r,
+  hh: r,
+  r,
+  wob: seed === undefined ? 0 : r * 0.045,
+  seed,
+})
 
-export const card = (x: number, y: number, hw: number, hh: number, r: number): Body => ({
+export const card = (x: number, y: number, hw: number, hh: number, r: number, seed?: number): Body => ({
   x,
   y,
   hw,
   hh,
   r: Math.max(0, Math.min(r, Math.min(hw, hh))),
+  wob: seed === undefined ? 0 : Math.min(hw, hh) * 0.06,
+  seed,
 })
+
+/**
+ * How far this body's surface stands off the primitive at a given bearing.
+ *
+ * Nothing here is a true circle or a true rectangle, and the geometry has to
+ * agree with the outline or the two quietly drift apart — drops stopping a few
+ * pixels off a surface that is not where the maths thinks it is. Integer
+ * harmonics only, so the wander closes on itself, and the same three the echo
+ * rings use, because it is the same imperfection.
+ */
+function wander(b: Body, ang: number): number {
+  if (!b.wob) return 0
+  const s = (b.seed ?? 0) * 6.283
+  return (
+    b.wob *
+    (0.52 * Math.sin(3 * ang + s * 1.7) + 0.31 * Math.sin(5 * ang + s * 3.1 + 1.2) + 0.17 * Math.sin(2 * ang + s * 5.3 + 2.4))
+  )
+}
 
 /**
  * Signed distance from a point to the body's surface: negative inside,
@@ -45,7 +77,8 @@ export function sd(b: Body, px: number, py: number): number {
   const qx = Math.abs(px - b.x) - (b.hw - b.r)
   const qy = Math.abs(py - b.y) - (b.hh - b.r)
   const out = Math.hypot(Math.max(qx, 0), Math.max(qy, 0))
-  return out + Math.min(Math.max(qx, qy), 0) - b.r
+  const base = out + Math.min(Math.max(qx, qy), 0) - b.r
+  return b.wob ? base - wander(b, Math.atan2(py - b.y, px - b.x)) : base
 }
 
 /** The outward direction at a point — the way out, along the shortest path. */
@@ -74,7 +107,7 @@ export function normal(b: Body, px: number, py: number): [number, number] {
  * `nx, ny` points from A toward B.
  */
 export function contact(a: Body, b: Body, gap = 0): { depth: number; nx: number; ny: number } | null {
-  const sum: Body = { x: a.x, y: a.y, hw: a.hw + b.hw, hh: a.hh + b.hh, r: a.r + b.r }
+  const sum = minkowski(a, b)
   const d = sd(sum, b.x, b.y)
   if (d >= gap) return null
   const [nx, ny] = normal(sum, b.x, b.y)
@@ -82,8 +115,24 @@ export function contact(a: Body, b: Body, gap = 0): { depth: number; nx: number;
 }
 
 /** How much clear air is between two surfaces. Negative once they overlap. */
-export const clearance = (a: Body, b: Body): number =>
-  sd({ x: a.x, y: a.y, hw: a.hw + b.hw, hh: a.hh + b.hh, r: a.r + b.r }, b.x, b.y)
+export const clearance = (a: Body, b: Body): number => sd(minkowski(a, b), b.x, b.y)
+
+/**
+ * A grown by B: every place B's centre can sit and be touching A. Exact for
+ * the primitives, and each body's own wander is folded in on top — A's facing
+ * B, and B's facing back — so two irregular surfaces meet where they really
+ * meet rather than where their primitives would have.
+ *
+ * The wander goes into the corner radius, which along the line between two
+ * centres is the same as moving the surface, and costs nothing to measure.
+ */
+function minkowski(a: Body, b: Body): Body {
+  const ang = Math.atan2(b.y - a.y, b.x - a.x)
+  const off = wander(a, ang) + wander(b, ang + Math.PI)
+  const hw = a.hw + b.hw
+  const hh = a.hh + b.hh
+  return { x: a.x, y: a.y, hw, hh, r: Math.max(0, Math.min(a.r + b.r + off, Math.min(hw, hh))), wob: 0 }
+}
 
 /**
  * The point on a body's surface in a given direction from its centre.

@@ -13,6 +13,7 @@
 
 /* While the sky is the view, the document itself never moves — every gesture
    here belongs to the world, not to the page under it. */
+body.sky-voice { --say-room: 86px; }
 body.sky-held {
   overflow: hidden;
   overscroll-behavior: none;
@@ -75,9 +76,13 @@ body.sky-held {
     1.5px -0.5px 2px rgba(255, 190, 130, 0.09),
     0 20px 60px rgba(0, 0, 0, 0.62);
 }
-/* while a pool holds the stage, the rest of the sky recedes — far enough back
-   that its words stop competing with the ring you are actually reading */
-.skyb.recede { opacity: 0.06; }
+/* While a pool holds the stage, the rest of the sky recedes — far enough back
+   that its words stop competing with the ring you are actually reading. And
+   far enough back to be out of reach: at six per cent they are barely there to
+   look at, but they were still catching taps meant for what is in front, so
+   pressing one of them opened a thought you could not even see. A tap out
+   there now falls through to the sky, which is the way back out. */
+.skyb.recede { opacity: 0.06; pointer-events: none; }
 .skyb.saturated {
   border-color: rgba(var(--accent-rgb), 0.5);
   box-shadow:
@@ -470,6 +475,10 @@ body.sky-held {
 /* Speaking is the shortest path to a thought, so it gets a permanent place in
    the sky rather than living two taps deep inside the capture page. A drop of
    the same water, resting just above the tabs. */
+/* The voice drop keeps the right of the shelf the tabs rest on. --say-room is
+   how much of that shelf it takes — its own width, its inset, and air between
+   the two — and the tab bar reads it so the capsule can centre on what is
+   left instead of running underneath. */
 .sky-say {
   position: fixed;
   z-index: 101;

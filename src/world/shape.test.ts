@@ -90,6 +90,46 @@ describe('finding a body’s surface', () => {
   })
 })
 
+describe('nothing here is a true circle', () => {
+  it('leaves a body without a seed exactly the primitive it is', () => {
+    const d = disc(0, 0, 40)
+    for (const a of [0, 1, 2.2, -3]) expect(sd(d, Math.cos(a) * 40, Math.sin(a) * 40)).toBeCloseTo(0, 6)
+  })
+  it('wanders off the primitive once it has one, but only just', () => {
+    const d = disc(0, 0, 40, 0.37)
+    const offs: number[] = []
+    for (let a = -Math.PI; a < Math.PI; a += 0.05) offs.push(-sd(d, Math.cos(a) * 40, Math.sin(a) * 40))
+    const hi = Math.max(...offs)
+    const lo = Math.min(...offs)
+    expect(hi - lo).toBeGreaterThan(1) // genuinely irregular
+    expect(hi).toBeLessThan(40 * 0.06) // and still a drop
+    expect(lo).toBeGreaterThan(-40 * 0.06)
+  })
+  it('closes on itself — the same bearing is the same surface', () => {
+    const d = disc(0, 0, 40, 0.61)
+    for (const a of [0.3, 1.9, -2.2]) {
+      expect(sd(d, Math.cos(a) * 50, Math.sin(a) * 50)).toBeCloseTo(sd(d, Math.cos(a + Math.PI * 2) * 50, Math.sin(a + Math.PI * 2) * 50), 6)
+    }
+  })
+  it('gives every thought its own imperfection, and the same one every time', () => {
+    const at = (seed: number) => sd(disc(0, 0, 40, seed), 44, 0)
+    expect(at(0.2)).not.toBeCloseTo(at(0.8), 2)
+    expect(at(0.2)).toBe(at(0.2))
+  })
+  it('still finds the surface, and still separates, with the wander on', () => {
+    const c = card(0, 0, 150, 40, 40, 0.44)
+    for (let a = -Math.PI; a < Math.PI; a += 0.09) {
+      const [x, y] = rim(c, a)
+      expect(Math.abs(sd(c, x, y))).toBeLessThan(0.02)
+    }
+    const d = disc(120, 20, 34, 0.7)
+    const hit = contact(c, d, 8)!
+    expect(hit.depth).toBeGreaterThan(0)
+    const moved = disc(d.x + hit.nx * hit.depth, d.y + hit.ny * hit.depth, 34, 0.7)
+    expect(clearance(c, moved)).toBeGreaterThan(8 - 1)
+  })
+})
+
 describe('bodies globbing into each other', () => {
   it('does not reach across the room', () => {
     expect(pull(disc(0, 0, 40), disc(400, 0, 40))).toBe(0)
