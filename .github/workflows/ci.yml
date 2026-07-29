@@ -1,0 +1,30 @@
+# Check every push. Deploying is Netlify's job — it builds this repo from Git
+# on its own, and a second deploy from here only ever raced it. This workflow
+# is here to tell you when a push breaks the build, not to ship it.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      # The client bundle reads these at build time. They are the project URL
+      # and the publishable anon key — nothing secret — and the build has to
+      # pass without them anyway, so a missing one is not a failure.
+      - run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
