@@ -13,6 +13,7 @@ import { organize } from './actions/organize'
 import { namePool } from './actions/name-pool'
 import { cluster } from './actions/cluster'
 import { deepen } from './actions/deepen'
+import { notice } from './actions/notice'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const ACTION_REGISTRY: Record<string, ActionDef<any, any>> = {
@@ -30,6 +31,7 @@ export const ACTION_REGISTRY: Record<string, ActionDef<any, any>> = {
   [namePool.name]: namePool,
   [cluster.name]: cluster,
   [deepen.name]: deepen,
+  [notice.name]: notice,
 }
 
 export type ActionName = keyof typeof ACTION_REGISTRY

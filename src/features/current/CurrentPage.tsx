@@ -9,6 +9,7 @@ import { useAction } from '@/ai/useAction'
 import type { PrioritizeOutput } from '@shared/ai/actions/prioritize'
 import { evaporateAt } from '@/world/Atmosphere'
 import { FocusOverlay } from './FocusOverlay'
+import { NoticedPanel } from './Noticed'
 import type { Thought } from '@/domain/types'
 
 export default function CurrentPage() {
@@ -239,6 +240,9 @@ export default function CurrentPage() {
           </button>
         </p>
       )}
+
+      {/* the read on you sits under the one thing to do, never above it */}
+      <NoticedPanel openCount={prepass.visible.length} />
 
       {focusThought && (
         <FocusOverlay

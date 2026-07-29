@@ -42,6 +42,17 @@ export default function SkyPage() {
       <button className="sky-tidy" data-sky="tidy" aria-label="Gather loose thoughts into pools">
         ✦ tidy
       </button>
+      {/* speaking is one tap: no page to open first, no button to find inside it */}
+      <button className="sky-say" data-sky="say" aria-label="Say something">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
+          <path
+            d="M12 3.6a2.7 2.7 0 0 1 2.7 2.7v5.4a2.7 2.7 0 0 1-5.4 0V6.3A2.7 2.7 0 0 1 12 3.6ZM5.6 11a6.4 6.4 0 0 0 12.8 0M12 17.4v3"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+          />
+        </svg>
+      </button>
       <div className="sky-undo" data-sky="undo">
         <span className="lb" data-sky="undoLb" />
         <b data-sky="undoGo">bring it back</b>
@@ -298,6 +309,7 @@ function mountSky(root: HTMLDivElement) {
   const pageD = $('pageD')
   const pageX = $('pageX')
   const pageMic = $('pageMic')
+  const sayBtn = $('say')
   const pagePic = $('pagePic')
   const pageAbsorb = $('pageAbsorb')
   const pageLater = $('pageLater')
@@ -1273,6 +1285,7 @@ function mountSky(root: HTMLDivElement) {
     (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionLike }).webkitSpeechRecognition ||
     (window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike }).SpeechRecognition
   const speechOK = !!SRCls
+  sayBtn.classList.toggle('show', speechOK)
   let rec: SpeechRecognitionLike | null = null
   let micUsed = false
   // the stored thumbnail is far too small to read text from, so a capture also
@@ -1289,13 +1302,12 @@ function mountSky(root: HTMLDivElement) {
       }
     }
     pageMic.classList.remove('live')
+    sayBtn.classList.remove('live')
   }
-  pageMic.addEventListener('click', () => {
-    if (rec) {
-      stopMic()
-      return
-    }
-    if (!SRCls) return
+  /** Begin listening. Shared, because speaking can start from the sky itself
+   *  as well as from inside the page — and both must behave identically. */
+  function startMic(): boolean {
+    if (rec || !SRCls) return false
     rec = new SRCls()
     rec.continuous = true
     rec.interimResults = false
@@ -1312,15 +1324,41 @@ function mountSky(root: HTMLDivElement) {
     rec.onend = () => {
       rec = null
       pageMic.classList.remove('live')
+      sayBtn.classList.remove('live')
     }
     rec.onerror = () => stopMic()
     try {
       rec.start()
       pageMic.classList.add('live')
+      sayBtn.classList.add('live')
       pageN.textContent = 'listening…'
+      return true
     } catch {
       rec = null
+      return false
     }
+  }
+  pageMic.addEventListener('click', () => {
+    if (rec) stopMic()
+    else startMic()
+  })
+  // One tap from the sky: the page opens already listening, so speaking a
+  // thought is the same gesture as having it — no page to find first.
+  sayBtn.addEventListener('click', () => {
+    if (rec) {
+      stopMic()
+      return
+    }
+    if (!speechOK) {
+      say('this browser will not listen')
+      return
+    }
+    clearAll()
+    openPage('capture', undefined, W / 2, H * 0.38)
+    // let the page settle before the browser's own permission prompt lands
+    setTimeout(() => {
+      if (!startMic()) pageN.textContent = 'could not start listening'
+    }, 90)
   })
   pagePic.addEventListener('click', () => pageFile.click())
   pageFile.addEventListener('change', () => {
