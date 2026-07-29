@@ -1,5 +1,7 @@
 // One ocean, drawn once, shared by every surface. The water is a place things
 // sink into — a body with depth, not a line at the bottom of the screen.
+import { sky } from './daylight'
+
 export const WATER_H = 150
 const SURFACE = 26
 
@@ -32,6 +34,7 @@ export function waterlineY() {
 }
 
 export function drawWater(ctx: CanvasRenderingContext2D, W: number, t: number, reduced: boolean) {
+  const [wr, wg, wb] = sky.water
   ctx.clearRect(0, 0, W, WATER_H)
   const amp = reduced ? 0 : 2.6
 
@@ -40,10 +43,11 @@ export function drawWater(ctx: CanvasRenderingContext2D, W: number, t: number, r
   for (let x = 0; x <= W; x += 6) ctx.lineTo(x, surfaceY(x, t, amp, 0.9, 0))
   ctx.lineTo(W, WATER_H)
   ctx.closePath()
+  // the ocean takes the hour's colour with it
   const body = ctx.createLinearGradient(0, SURFACE - 12, 0, WATER_H)
-  body.addColorStop(0, 'rgba(84, 170, 226, 0.07)')
-  body.addColorStop(0.5, 'rgba(38, 96, 150, 0.11)')
-  body.addColorStop(1, 'rgba(10, 32, 58, 0.3)')
+  body.addColorStop(0, `rgba(${wr + 44},${wg + 54},${wb + 50},0.07)`)
+  body.addColorStop(0.5, `rgba(${wr},${wg},${wb},0.13)`)
+  body.addColorStop(1, `rgba(${Math.round(wr * 0.4)},${Math.round(wg * 0.45)},${Math.round(wb * 0.6)},0.32)`)
   ctx.fillStyle = body
   ctx.fill()
 
@@ -53,7 +57,7 @@ export function drawWater(ctx: CanvasRenderingContext2D, W: number, t: number, r
     if (x === 0) ctx.moveTo(x, y)
     else ctx.lineTo(x, y)
   }
-  ctx.strokeStyle = 'rgba(168, 220, 255, 0.3)'
+  ctx.strokeStyle = `rgba(${Math.min(255, wr + 130)},${Math.min(255, wg + 110)},${Math.min(255, wb + 80)},0.3)`
   ctx.lineWidth = 1
   ctx.stroke()
 
@@ -63,6 +67,6 @@ export function drawWater(ctx: CanvasRenderingContext2D, W: number, t: number, r
     if (x === 0) ctx.moveTo(x, y)
     else ctx.lineTo(x, y)
   }
-  ctx.strokeStyle = 'rgba(150, 210, 255, 0.09)'
+  ctx.strokeStyle = `rgba(${Math.min(255, wr + 110)},${Math.min(255, wg + 100)},${Math.min(255, wb + 80)},0.09)`
   ctx.stroke()
 }

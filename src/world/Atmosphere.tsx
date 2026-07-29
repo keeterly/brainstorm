@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useGraph } from '@/store/graph'
 import { computeWorld } from './engine'
 import { WATER_H, drawWater, invalidateWaterline } from './water'
+import { tickDaylight } from './daylight'
 
 export function Atmosphere() {
   const thoughts = useGraph((s) => s.thoughts)
@@ -38,6 +39,16 @@ export function Atmosphere() {
     size()
     window.addEventListener('resize', size)
 
+    // the sky follows the clock — recomputed on a slow timer and whenever the
+    // app comes back to the front, so an evening that arrives while it is in
+    // your pocket is already there when you look
+    tickDaylight()
+    const clock = setInterval(() => tickDaylight(), 120000)
+    const wake = () => {
+      if (document.visibilityState === 'visible') tickDaylight()
+    }
+    document.addEventListener('visibilitychange', wake)
+
     const frame = () => {
       t += 0.016
       const rate = reduced ? 0.08 : 0.004
@@ -53,6 +64,8 @@ export function Atmosphere() {
     return () => {
       cancelAnimationFrame(raf)
       window.removeEventListener('resize', size)
+      clearInterval(clock)
+      document.removeEventListener('visibilitychange', wake)
     }
   }, [])
 
@@ -65,9 +78,10 @@ export function Atmosphere() {
           position: 'absolute',
           inset: 0,
           background:
-            'radial-gradient(ellipse 150% 60% at 50% -10%, #0e1424 0%, transparent 62%),' +
-            'radial-gradient(ellipse 110% 42% at 50% 108%, rgba(28, 74, 116, 0.34), transparent 66%),' +
-            'linear-gradient(#04060c 0%, #05070f 52%, #070d18 100%)',
+            'radial-gradient(ellipse 150% 60% at 50% -10%, var(--sky-top, #0e1424) 0%, transparent 62%),' +
+            'radial-gradient(ellipse 110% 42% at 50% 108%, var(--sky-horizon, rgba(28,74,116,0.34)), transparent 66%),' +
+            'linear-gradient(var(--sky-ground, #04060c) 0%, var(--sky-ground, #05070f) 52%, #070d18 100%)',
+          transition: 'background 4s linear',
         }}
       />
       <div

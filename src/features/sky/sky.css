@@ -56,8 +56,8 @@
   background:
     radial-gradient(circle 11% at 31% 19%, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.08) 58%, transparent 74%),
     radial-gradient(ellipse 66% 34% at 50% 11%, transparent 54%, rgba(222, 241, 255, 0.16) 64%, transparent 74%),
-    radial-gradient(ellipse 58% 31% at 50% 91%, transparent 53%, rgba(150, 210, 255, 0.17) 63%, transparent 73%),
-    radial-gradient(circle at 50% 118%, rgba(122, 215, 255, 0.2), transparent 58%),
+    radial-gradient(ellipse 58% 31% at 50% 91%, transparent 53%, var(--drop-rim, rgba(150, 210, 255, 0.17)) 63%, transparent 73%),
+    radial-gradient(circle at 50% 118%, var(--drop-glow, rgba(122, 215, 255, 0.2)), transparent 58%),
     radial-gradient(circle at 44% 28%, rgba(48, 59, 79, 0.96), rgba(21, 27, 38, 0.97) 72%);
   border: 0.5px solid rgba(205, 228, 255, 0.34);
   box-shadow:
