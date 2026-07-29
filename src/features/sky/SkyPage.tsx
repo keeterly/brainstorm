@@ -1141,6 +1141,35 @@ function mountSky(root: HTMLDivElement) {
       { ph: 'later', pt: 'Show the pool to someone who gets it', detail: 'Not for approval — to watch what happens.' },
     ].slice(0, 5)
   }
+  /** Ignore whatever is left of the press that opened the page. */
+  let deafT: ReturnType<typeof setTimeout> | null = null
+  function deafenPage() {
+    page.style.pointerEvents = 'none'
+    if (deafT) clearTimeout(deafT)
+    const hear = () => {
+      page.style.pointerEvents = ''
+      removeEventListener('pointerup', hear)
+      removeEventListener('pointercancel', hear)
+    }
+    addEventListener('pointerup', hear, { once: true })
+    addEventListener('pointercancel', hear, { once: true })
+    // and a backstop, in case that release never arrives
+    deafT = setTimeout(hear, 1400)
+  }
+
+  // How much of the glass the keyboard is covering. iOS never resizes the
+  // layout viewport for it, so a fixed page has no idea it is there and puts
+  // its own controls underneath it.
+  const vv = window.visualViewport
+  function measureKeyboard() {
+    if (!vv) return
+    const covered = Math.max(0, innerHeight - vv.height - vv.offsetTop)
+    document.documentElement.style.setProperty('--kb', `${Math.round(covered)}px`)
+  }
+  vv?.addEventListener('resize', measureKeyboard)
+  vv?.addEventListener('scroll', measureKeyboard)
+  measureKeyboard()
+
   function openPage(mode: PageMode, tl: TL | undefined, ox: number, oy: number) {
     pageFor = { mode, tl, ox, oy }
     pageA.style.display = 'none'
@@ -1797,6 +1826,11 @@ function mountSky(root: HTMLDivElement) {
             bgDown = null
             clearAll()
             openPage('capture', undefined, b.x, b.y)
+            // Your finger is still down, and the page has just appeared under
+            // it. iOS then treats the rest of that press as a long-press on
+            // the text — magnifier, selection handles, callout. Let the page
+            // ignore this gesture; it starts listening once you have let go.
+            deafenPage()
           }
         }, 420)
       }
@@ -2529,6 +2563,10 @@ function mountSky(root: HTMLDivElement) {
     removeEventListener('resize', onResize)
     removeEventListener('pointerup', onUp)
     removeEventListener('pointercancel', onCancel)
+    vv?.removeEventListener('resize', measureKeyboard)
+    vv?.removeEventListener('scroll', measureKeyboard)
+    if (deafT) clearTimeout(deafT)
+    document.documentElement.style.removeProperty('--kb')
     document.body.classList.remove('sky-held')
     stopMic()
     if (layoutT) clearTimeout(layoutT)

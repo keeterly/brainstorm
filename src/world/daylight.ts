@@ -171,6 +171,16 @@ export function tickDaylight(now = new Date()) {
   r.setProperty('--ink-soft', rgb(mix3([152, 160, 172], a, 0.18)))
   r.setProperty('--ink-faint', rgb(mix3([86, 93, 104], a, 0.16)))
 
+  // The writing page: paper, not a lightbox. Coming out of a dark sky into
+  // near-white at full brightness is a slap, so this sits well below it and
+  // takes the hour's colour with everything else. Ink is checked against it in
+  // the tests, because softening a surface is how contrast quietly goes.
+  const paper = mix3([214, 222, 232], a, 0.1)
+  r.setProperty('--paper', rgb(paper))
+  r.setProperty('--paper-lit', rgb(mix3(paper, [255, 255, 255], 0.55), 0.75))
+  r.setProperty('--paper-ink', rgb(mix3([24, 32, 44], a, 0.06)))
+  r.setProperty('--paper-soft', rgb(mix3([70, 84, 100], a, 0.1)))
+
   // the glass drops in the sky, lit by the same accent. Their bodies lift with
   // the room: held at midnight they would read as holes cut in a bright sky
   // rather than as water hanging in it.

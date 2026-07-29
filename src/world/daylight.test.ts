@@ -151,6 +151,21 @@ describe('publishing the hour', () => {
     const night = Number(/([\d.]+)\)$/.exec(read('--sky-vignette'))![1])
     expect(noon).toBeLessThan(night)
   })
+  it('keeps the writing page readable now that it is no longer near-white', () => {
+    for (let h = 0; h < 24; h++) {
+      tickDaylight(new Date(2026, 6, 29, h, 0, 0))
+      const paper = nums('--paper')
+      // it is paper, not a lightbox: well below white at every hour
+      expect(lum(paper), `paper at ${h}:00`).toBeLessThan(0.78)
+      expect(ratio(nums('--paper-ink'), paper), `page ink at ${h}:00`).toBeGreaterThan(7)
+      expect(ratio(nums('--paper-soft'), paper), `page's quiet text at ${h}:00`).toBeGreaterThan(4.5)
+    }
+  })
+  it('softens the page without letting it go grey — it still reads as light', () => {
+    tickDaylight(new Date(2026, 6, 29, 12, 0, 0))
+    // brighter than any surface in the dark world it opens out of
+    expect(lum(nums('--paper'))).toBeGreaterThan(lum(nums('--glass-solid')) * 8)
+  })
   it('lets the glass drops lift with the room instead of staying at midnight', () => {
     tickDaylight(new Date(2026, 6, 29, 2, 0, 0))
     const night = lum(nums('--drop-body-hi'))
