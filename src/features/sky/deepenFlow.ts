@@ -12,7 +12,9 @@ import type { PromptImage } from '@shared/ai/types'
 
 export type DeepenResult =
   | { kind: 'deepened'; note: string; added: number; output: DeepenOutput }
-  | { kind: 'failed' }
+  /** why, in the user's terms — a silent failure here is indistinguishable
+   *  from the button doing nothing, which is exactly how it felt */
+  | { kind: 'failed'; why?: string }
 
 export async function deepenThought(
   subjectId: string,
@@ -90,8 +92,9 @@ export async function deepenThought(
     }
 
     return { kind: 'deepened', note: output.note, added: output.steps.length, output }
-  } catch {
-    return { kind: 'failed' }
+  } catch (e) {
+    const why = (e as Error)?.message
+    return { kind: 'failed', why: why && why.length < 90 ? why.toLowerCase() : undefined }
   }
 }
 

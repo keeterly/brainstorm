@@ -80,6 +80,8 @@ export const deepen: ActionDef<DeepenInput, DeepenOutput> = {
   modelTier: 'smart',
   maxTokens: 8000,
   searchMaxUses: 6,
+  // measured at 51s against the live model: far past any request timeout
+  background: true,
   inputSchema: Input,
   outputSchema: Output,
   buildPrompt(input, ctx) {

@@ -1,7 +1,12 @@
 // Client for the AI Action Engine (/api/ai). Buffered actions return JSON;
-// streamed actions emit SSE events which we surface via onDelta.
+// streamed actions emit SSE events which we surface via onDelta; and the ones
+// too slow to fit in a request run in the background and are watched.
 import { supabase } from '@/lib/supabase'
 import { useGraph } from '@/store/graph'
+import { ACTION_REGISTRY } from '@shared/ai/registry'
+
+/** Long enough for real research, short enough to give up eventually. */
+const BG_GIVE_UP_MS = 4 * 60 * 1000
 
 export class AIError extends Error {
   constructor(
@@ -33,12 +38,57 @@ export interface RunOptions {
   signal?: AbortSignal
 }
 
+/**
+ * Actions that cannot finish inside a request.
+ *
+ * The work happens in a background function, which has no way to answer, so
+ * the client names the run up front and then watches that row. Reading it back
+ * is safe: agent_runs is the user's own under RLS.
+ */
+async function runInBackground<O>(
+  action: string,
+  input: unknown,
+  auth: string,
+  opts: RunOptions,
+): Promise<{ runId: string | null; output: O }> {
+  const runId = crypto.randomUUID()
+  const res = await fetch('/.netlify/functions/ai-background', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: auth },
+    body: JSON.stringify({ action, input, runId, ctx: buildCtx() }),
+    signal: opts.signal,
+  })
+  // 202 is the happy path here; anything else was refused before it began
+  if (res.status !== 202 && !res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new AIError(body.error ?? `HTTP ${res.status}`, runId, res.status)
+  }
+
+  const started = Date.now()
+  let wait = 1500
+  while (Date.now() - started < BG_GIVE_UP_MS) {
+    await new Promise((r) => setTimeout(r, wait))
+    wait = Math.min(wait * 1.4, 6000)
+    if (opts.signal?.aborted) throw new AIError('Cancelled', runId)
+    const { data } = await supabase
+      .from('agent_runs')
+      .select('status,output,error')
+      .eq('id', runId)
+      .maybeSingle()
+    if (!data || data.status === 'running') continue
+    if (data.status === 'succeeded') return { runId, output: data.output as O }
+    throw new AIError(data.error || 'The agent could not finish', runId)
+  }
+  throw new AIError('Still working — it may land on its own', runId)
+}
+
 export async function runAction<O = unknown>(
   action: string,
   input: unknown,
   opts: RunOptions = {},
 ): Promise<{ runId: string | null; output: O }> {
   const auth = await authHeader()
+  if (ACTION_REGISTRY[action]?.background) return runInBackground<O>(action, input, auth, opts)
   const res = await fetch('/api/ai', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: auth },

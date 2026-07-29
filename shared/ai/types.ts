@@ -34,6 +34,9 @@ export interface ActionDef<I = unknown, O = unknown> {
   /** Let this action look things up on the web, up to this many searches.
    *  Absent or zero means it answers from what it was given. */
   searchMaxUses?: number
+  /** This one cannot finish inside a request. Run it in the background and
+   *  collect the answer from agent_runs. */
+  background?: boolean
   inputSchema: z.ZodType<I>
   outputSchema: z.ZodType<O>
   buildPrompt(input: I, ctx: PromptCtx): BuiltPrompt

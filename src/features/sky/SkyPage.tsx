@@ -361,6 +361,10 @@ function mountSky(root: HTMLDivElement) {
   const worldW = () => W * 1.9
   const worldH = () => (waterlineY() - 74) * 1.7
   const toWorldX = (sx: number) => (sx - cam.x) / cam.k
+  // and back: anything positioned against the glass rather than the world —
+  // the writing page opening out of a drop, for one — needs screen space
+  const toScreenX = (wx: number) => wx * cam.k + cam.x
+  const toScreenY = (wy: number) => wy * cam.k + cam.y
   const toWorldY = (sy: number) => (sy - cam.y) / cam.k
   function applyCam() {
     const t = `translate(${cam.x}px, ${cam.y}px) scale(${cam.k})`
@@ -648,7 +652,13 @@ function mountSky(root: HTMLDivElement) {
     const first = String(texts[0] || 'Pool')
       .split(/\s+/)
       .filter((w) => w.length > 3 && !STOP.has(w.toLowerCase()))
-    return first.slice(0, 2).join(' ') || 'Pool'
+    const guess = first.slice(0, 2).join(' ')
+    // Never name a group after one of the things inside it. With nothing in
+    // common the fallback took words off the first member, so a new group and
+    // its own child wore the same label until the real name landed.
+    const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+    if (!guess || texts.some((t) => same(guess, t))) return `${texts.length} together`
+    return guess
   }
   function sigOf(tl: TL) {
     return tl.kind === 'pool'
@@ -956,7 +966,15 @@ function mountSky(root: HTMLDivElement) {
     setTimeout(() => ring.remove(), 1160)
   }
 
-  function poolTogether(a: TL, b: TL, at: { x: number; y: number }) {
+  function poolTogether(a: TL, b: TL, at: { x: number; y: number }, parent?: string) {
+    // one home each: whatever either of these belonged to, it belongs to the
+    // result now. Leaving the old edge behind gives a node two parents, and
+    // which one wins is then a matter of row order.
+    const rehome = (id: string, to: string) => {
+      const old = partOfRel(id)
+      if (old) S().deleteRelationship(old.id)
+      if (id !== to) S().addRelationship(id, to, 'part_of')
+    }
     const pa = posOf(a.t.id)
     const pb = posOf(b.t.id)
     coalesce(
@@ -977,8 +995,8 @@ function mountSky(root: HTMLDivElement) {
     } else if (a.kind === 'pool' || b.kind === 'pool') {
       const pool = a.kind === 'pool' ? a : b
       const drop = a.kind === 'pool' ? b : a
-      S().addRelationship(drop.t.id, pool.t.id, 'part_of')
-      say(`absorbed into “${label(pool.t)}”`)
+      rehome(drop.t.id, pool.t.id)
+      say(`inside “${label(pool.t)}”`)
     } else {
       // the local guess lands instantly so the drag never waits; a real name
       // replaces it a moment later
@@ -988,11 +1006,13 @@ function mountSky(root: HTMLDivElement) {
       p.x = p.rx = at.x
       p.y = p.ry = at.y
       p.s = 0.18 // the spring swells it out of the meeting point
-      S().addRelationship(a.t.id, g.id, 'part_of')
-      S().addRelationship(b.t.id, g.id, 'part_of')
+      rehome(a.t.id, g.id)
+      rehome(b.t.id, g.id)
+      // a group made inside a group stays inside it
+      if (parent && parent !== g.id) S().addRelationship(g.id, parent, 'part_of')
       const texts = [a, b].flatMap((tl) => (tl.kind === 'pool' ? tl.members.map(label) : [label(tl.t)]))
       nameThePool(g.id, texts)
-      say(`pooled — “${name}”`)
+      say(parent ? `a group inside — “${name}”` : `pooled — “${name}”`)
     }
     splash(at.x)
     haptics.join()
@@ -1170,9 +1190,19 @@ function mountSky(root: HTMLDivElement) {
     pageLater.classList.toggle('show', mode === 'edit')
     page.classList.add('show')
     page.style.clipPath = `circle(0px at ${ox}px ${oy}px)`
+    // Far enough to reach every corner from wherever it opened. A fixed screen
+    // diagonal is only enough when the origin is on screen — and a drop's
+    // position is in world space, so after a pan it may be nowhere near it.
+    // Getting that wrong leaves the page frozen as a giant arc across a corner.
+    const reach = Math.max(
+      Math.hypot(ox, oy),
+      Math.hypot(W - ox, oy),
+      Math.hypot(ox, innerHeight - oy),
+      Math.hypot(W - ox, innerHeight - oy),
+    )
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
-        page.style.clipPath = `circle(${Math.hypot(W, innerHeight)}px at ${ox}px ${oy}px)`
+        page.style.clipPath = `circle(${Math.ceil(reach) + 4}px at ${ox}px ${oy}px)`
         page.classList.add('on')
       }),
     )
@@ -1480,7 +1510,7 @@ function mountSky(root: HTMLDivElement) {
         lb: isRipe(tl.t) ? 'deepen' : 'grow',
         run: () => {
           closeMoons()
-          openPage('grow', tl, p.x, p.y)
+          openPage('grow', tl, toScreenX(p.x), toScreenY(p.y))
         },
       })
     }
@@ -1583,7 +1613,7 @@ function mountSky(root: HTMLDivElement) {
       setTimeout(() => splash(p.x), 480)
     }
     haptics.arrive()
-    setTimeout(() => openPage('path', tl, p.x, p.y), reduced ? 0 : 430)
+    setTimeout(() => openPage('path', tl, toScreenX(p.x), toScreenY(p.y)), reduced ? 0 : 430)
   }
   // ⚡ — the agent goes away and does the legwork on one drop, and what it
   // finds arrives as real work hanging under it rather than as a wall of prose.
@@ -1593,17 +1623,24 @@ function mountSky(root: HTMLDivElement) {
     working = tl.t.id
     const el = els.get(tl.t.id)
     el?.classList.add('working')
-    say('going to find out…')
+    // It really is gone for a minute: the research runs as a background job
+    // because it does not fit inside a request. Say so, and keep saying so —
+    // a glowing drop and silence reads as nothing happening.
+    say('out finding out — this takes a minute')
+    const patience = setInterval(() => {
+      if (working === tl.t.id) say('still out there…')
+    }, 22000)
     // if the drop is a picture, the picture is the thing being asked about
     const img = ex(tl.t).img as string | undefined
     const b64 = img?.includes(',') ? img.split(',')[1] : undefined
     const res = await deepenThought(tl.t.id, {
       image: b64 ? { mediaType: 'image/jpeg', dataB64: b64 } : undefined,
     })
+    clearInterval(patience)
     working = null
     els.get(tl.t.id)?.classList.remove('working')
     if (res.kind === 'failed') {
-      say('could not get out there just now')
+      say(res.why ?? 'could not get out there just now')
       return
     }
     // the new steps arrive around the thing they belong to
@@ -1748,16 +1785,17 @@ function mountSky(root: HTMLDivElement) {
     }
     const id = bubEl.dataset.id as string
     if (id === '__invite') {
-      openPage('capture', undefined, invitePos.x, invitePos.y)
+      openPage('capture', undefined, toScreenX(invitePos.x), toScreenY(invitePos.y))
       return
     }
-    const tl = view.byId.get(id)
-    const memberPool = tl
-      ? undefined
-      : view.tls.find((x) => x.kind === 'pool' && x.members.some((m) => m.id === id))?.t.id
-    const memberT = memberPool ? S().thoughts.find((t) => t.id === id) : undefined
-    const ent: TL | undefined = tl ?? (memberT ? { kind: 'drop', t: memberT, members: [] } : undefined)
+    // Every node lives in byId now, however deep, so "is this a member?" can no
+    // longer be answered by whether it is there. It is a member when the group
+    // it belongs to is the group currently open — which is also exactly when it
+    // is on screen in orbit.
+    const ent = view.byId.get(id)
     if (!ent) return
+    const parent = view.parentOf.get(id)
+    const memberPool = parent && parent === openPool ? parent : undefined
     const p = posOf(id)
     drag = {
       id,
@@ -1853,10 +1891,17 @@ function mountSky(root: HTMLDivElement) {
       drag.touching = false
       return
     }
-    if (!drag.isMember) {
+    {
+      // Inside an opened group you are looking for a sibling; out on the water
+      // you are looking for anything. Two siblings brought together become a
+      // group of their own, nested inside the one holding them.
+      const siblings = drag.isMember && drag.memberPool ? (view.byId.get(drag.memberPool)?.members ?? []) : null
+      const candidates: TL[] = siblings
+        ? siblings.map((m) => view.byId.get(m.id)).filter((x): x is TL => !!x)
+        : view.tls
       let best: TL | null = null
       let bestD = Infinity
-      for (const tl of view.tls) {
+      for (const tl of candidates) {
         if (tl.t.id === drag.id) continue
         const tp = posOf(tl.t.id)
         const d = Math.hypot(tp.x - p.x, tp.y - p.y)
@@ -1865,10 +1910,11 @@ function mountSky(root: HTMLDivElement) {
           best = tl
         }
       }
-      if (best && bestD < radiusOf(drag.tl) + radiusOf(best) + 110) {
+      const rOf = (tl: TL) => (siblings ? memberR(siblings.length) : radiusOf(tl))
+      if (best && bestD < rOf(drag.tl) + rOf(best) + (siblings ? 60 : 110)) {
         const bp = posOf(best.t.id)
-        const ra = radiusOf(drag.tl)
-        const rb = radiusOf(best)
+        const ra = rOf(drag.tl)
+        const rb = rOf(best)
         const touching = bestD < (ra + rb) * 0.94
         // the two bodies are now in each other's field — the frame loop draws
         // the neck and leans them into one another
@@ -1943,7 +1989,7 @@ function mountSky(root: HTMLDivElement) {
       persistLayout()
       return
     }
-    if (d.isMember && d.memberPool) {
+    if (d.isMember && d.memberPool && !d.target) {
       const gp = posOf(d.memberPool)
       const p = posOf(d.id)
       const g = view.byId.get(d.memberPool)
@@ -1952,7 +1998,8 @@ function mountSky(root: HTMLDivElement) {
     if (d.target) {
       const p = posOf(d.id)
       const tp = posOf(d.target.t.id)
-      poolTogether(d.target, d.tl, { x: (p.x + tp.x) / 2, y: (p.y + tp.y) / 2 })
+      // brought together inside a group, what they become belongs to that group
+      poolTogether(d.target, d.tl, { x: (p.x + tp.x) / 2, y: (p.y + tp.y) / 2 }, d.memberPool)
     } else if (Math.hypot(d.vx, d.vy) > 2.5) {
       const p = posOf(d.id)
       p.vx = Math.max(-14, Math.min(14, d.vx))
@@ -1997,7 +2044,7 @@ function mountSky(root: HTMLDivElement) {
       const t = S().thoughts.find((x) => x.id === id)
       if (t) {
         const p = posOf(id)
-        openPage('edit', { kind: 'drop', t, members: [] }, p.x, p.y)
+        openPage('edit', { kind: 'drop', t, members: [] }, toScreenX(p.x), toScreenY(p.y))
       }
       return
     }
@@ -2018,7 +2065,7 @@ function mountSky(root: HTMLDivElement) {
     }
     if (moonsFor === id) {
       closeMoons()
-      openPage('edit', tl, p.x, p.y)
+      openPage('edit', tl, toScreenX(p.x), toScreenY(p.y))
     } else {
       clearAll()
       showMoons(tl)

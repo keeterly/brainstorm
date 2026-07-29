@@ -15,6 +15,8 @@ import {
   isEnrolled as isPasskeyEnrolled,
 } from '@/lib/passkey'
 import { TypeBadge } from '@/components/TypeBadge'
+import { humanDate } from '@/domain/human-date'
+import { todayISO } from '@/domain/prioritize-prepass'
 
 // Account — set a password (this is where a reset finishes), and choose
 // whether this device opens with Face ID.
@@ -102,10 +104,20 @@ export default function MemoryPage() {
   const distill = useAction<DistillOutput>('distill_memory')
 
   const autonomy = profile?.settings.autonomy ?? 'suggest'
-  const ocean = thoughts
+  const finished = thoughts
     .filter((t) => t.status === 'done')
     .sort((a, b) => ((a.completed_at ?? '') < (b.completed_at ?? '') ? 1 : -1))
-    .slice(0, 30)
+  const oceanCount = finished.length
+  const ocean = finished.slice(0, 40)
+  // by the day it settled: a flat list of forty finished things is a wall, and
+  // the same title finished twice on different days is not a duplicate
+  const oceanDays = Object.entries(
+    ocean.reduce<Record<string, typeof ocean>>((acc, t) => {
+      const day = t.completed_at ? humanDate(t.completed_at.slice(0, 10), todayISO()) : 'some time ago'
+      ;(acc[day] ??= []).push(t)
+      return acc
+    }, {}),
+  )
 
   useEffect(() => {
     const since = new Date()
@@ -164,7 +176,9 @@ export default function MemoryPage() {
           ))}
           {memories.length === 0 && (
             <p className="faint" style={{ fontSize: 'var(--fs-label)' }}>
-              Nothing remembered yet.
+              Nothing yet. This fills itself as you use the app — anything ⚡ or the
+              daily read works out about how you work lands here, and you can edit
+              or delete any of it.
             </p>
           )}
         </div>
@@ -218,48 +232,66 @@ export default function MemoryPage() {
       </section>
 
       <section className="card" style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>The ocean</h2>
-        <p className="muted" style={{ fontSize: 'var(--fs-label)', marginBottom: 10 }}>
-          Finished work settles here. Tap to reopen.
-        </p>
-        {ocean.length === 0 && (
-          <p className="faint" style={{ fontSize: 'var(--fs-label)' }}>
-            Still empty — completed thoughts will collect below.
+        <details>
+          <summary style={{ cursor: 'pointer', listStyle: 'none' }}>
+            <h2 style={{ fontSize: 'var(--fs-md)', display: 'inline' }}>The ocean</h2>
+            <span className="faint" style={{ fontSize: 'var(--fs-label)', marginLeft: 8 }}>
+              {oceanCount === 0 ? 'still empty' : `${oceanCount} finished`}
+            </span>
+          </summary>
+          <p className="muted" style={{ fontSize: 'var(--fs-label)', margin: '10px 0' }}>
+            Finished work settles here. Tap the mark to bring one back.
           </p>
-        )}
-        <div style={{ display: 'grid', gap: 6 }}>
-          {ocean.map((t) => (
-            <div key={t.id} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <button
-                aria-label="Reopen"
-                onClick={() => toggleDone(t.id)}
-                style={{
-                  width: 18,
-                  height: 18,
-                  borderRadius: '50%',
-                  background: 'var(--ok)',
-                  flexShrink: 0,
-                  opacity: 0.7,
-                }}
-              />
-              <Link
-                to={`/thought/${t.id}`}
-                style={{
-                  flex: 1,
-                  fontSize: 'var(--fs-label)',
-                  color: 'var(--ink-soft)',
-                  textDecoration: 'none',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {t.title || t.raw_content.slice(0, 80)}
-              </Link>
-              <TypeBadge type={t.type} />
+          {oceanDays.map(([day, items]) => (
+            <div key={day} style={{ marginBottom: 14 }}>
+              <div className="eyebrow" style={{ marginBottom: 6 }}>
+                {day}
+              </div>
+              <div style={{ display: 'grid', gap: 7 }}>
+                {items.map((t) => (
+                  <div key={t.id} style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
+                    <button
+                      aria-label={`Bring back ${t.title || 'this'}`}
+                      onClick={() => toggleDone(t.id)}
+                      style={{
+                        width: 13,
+                        height: 13,
+                        borderRadius: '50%',
+                        border: '1px solid rgba(var(--accent-rgb), 0.5)',
+                        background: 'rgba(var(--accent-rgb), 0.16)',
+                        flexShrink: 0,
+                      }}
+                    />
+                    <Link
+                      to={`/thought/${t.id}`}
+                      style={{
+                        // flex items refuse to shrink below their content
+                        // without this, which is what pushed long titles off
+                        // the right edge of the screen instead of clipping them
+                        flex: '1 1 auto',
+                        minWidth: 0,
+                        fontSize: 'var(--fs-label)',
+                        color: 'var(--ink-soft)',
+                        textDecoration: 'none',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {t.title || t.raw_content.slice(0, 80)}
+                    </Link>
+                    <TypeBadge type={t.type} />
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
-        </div>
+          {oceanCount > ocean.length && (
+            <p className="faint" style={{ fontSize: 'var(--fs-caption)' }}>
+              and {oceanCount - ocean.length} older
+            </p>
+          )}
+        </details>
       </section>
 
       <section className="card" style={{ marginBottom: 16 }}>

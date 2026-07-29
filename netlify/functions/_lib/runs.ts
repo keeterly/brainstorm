@@ -17,6 +17,8 @@ function headers(userToken: string): Record<string, string> {
 export async function insertRun(
   userToken: string,
   row: {
+    /** the caller may name the run, so a background job can be watched */
+    id?: string
     user_id: string
     action: string
     action_version: number
