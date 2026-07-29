@@ -166,6 +166,16 @@ describe('publishing the hour', () => {
     // brighter than any surface in the dark world it opens out of
     expect(lum(nums('--paper'))).toBeGreaterThan(lum(nums('--glass-solid')) * 8)
   })
+  it('keeps the join between two drops the same water as the drops', () => {
+    for (const h of [2, 8, 12, 16, 19, 22]) {
+      tickDaylight(new Date(2026, 6, 29, h, 0, 0))
+      const neck = lum(nums('--drop-neck'))
+      // between the lit top of a body and its shaded flank: outside that range
+      // the join reads as a separate object rather than as the same mass
+      expect(neck, `neck at ${h}:00`).toBeLessThan(lum(nums('--drop-body-hi')))
+      expect(neck, `neck at ${h}:00`).toBeGreaterThan(lum(nums('--drop-body-lo')))
+    }
+  })
   it('lets the glass drops lift with the room instead of staying at midnight', () => {
     tickDaylight(new Date(2026, 6, 29, 2, 0, 0))
     const night = lum(nums('--drop-body-hi'))

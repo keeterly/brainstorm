@@ -187,6 +187,11 @@ export function tickDaylight(now = new Date()) {
   r.setProperty('--drop-body-hi', rgb(mix3(s.surface, [255, 255, 255], 0.14), 0.96))
   r.setProperty('--drop-body-lo', rgb(mix3(s.surface, [0, 0, 0], 0.42), 0.97))
   r.setProperty('--drop-fill', rgb(mix3(s.surface, [255, 255, 255], 0.06), 0.94))
+  // where two drops have run into each other. It has to read as the same water
+  // as the bodies it joins, so it sits between the two ends of their gradient —
+  // the drop's own fill is lighter than its flanks and made the join look like
+  // a separate darker thing laid between them.
+  r.setProperty('--drop-neck', rgb(mix3(mix3(s.surface, [0, 0, 0], 0.2), a, 0.06), 0.96))
   r.setProperty('--drop-glow', rgb(a, 0.2))
   r.setProperty('--drop-rim', rgb(a, 0.17))
   // the echo a live drop sends out carries the same hour, but has to survive

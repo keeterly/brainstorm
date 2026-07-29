@@ -584,6 +584,28 @@ body.sky-held {
 }
 .sky-goo.ready { stroke: rgba(var(--accent-rgb), 0.55); }
 
+/* The oil between things standing close together. No stroke: this is the gap
+   between two bodies filling in, not an outline drawn around the pair — a rim
+   here would read as a line joining them rather than as one mass. */
+.sky-oil { pointer-events: none; }
+.sky-oil .oil-fill {
+  fill: var(--drop-neck, rgba(28, 35, 48, 0.96));
+  stroke: none;
+  opacity: 0;
+}
+/* only the join's own two edges are stroked. A drop is glass, so a closed
+   path filled and stroked together would draw its chords straight across the
+   face of the drop it is meant to be disappearing into. */
+.sky-oil .oil-rim {
+  fill: none;
+  stroke: rgba(205, 228, 255, 0.26);
+  stroke-width: 0.5;
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sky-oil { display: none; }
+}
+
 /* the echo a live drop sends out — irregular rings, stacked, out of step */
 .sky-echo { pointer-events: none; }
 .sky-echo path {
@@ -607,8 +629,11 @@ body.sky-held {
     0 0 34px rgba(var(--accent-rgb), 0.2),
     0 24px 60px rgba(0, 0, 0, 0.62);
 }
-/* the group dims while you read something out of it */
-.skyb.behind { opacity: 0.3; }
+/* The group and the rest of the ring step back while you read one of them —
+   but only a step. They are being physically pushed aside to make the room,
+   and you should be able to see that happen; dimming them to a whisper made
+   the card look like it was floating on nothing. */
+.skyb.behind { opacity: 0.52; }
 
 /* A card, not a disc: text set to the full width of the box, left-aligned and
    unclamped, because a sentence read in a circle is a sentence read badly. */

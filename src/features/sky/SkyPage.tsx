@@ -13,6 +13,7 @@ import { armUpright, stepUpright, worldTilt } from '@/world/upright'
 import { deepenThought } from './deepenFlow'
 import { haptics } from '@/lib/haptics'
 import { echoRing, wabiPill } from '@/world/echo'
+import { type Body, card, contact, disc, oilPath, pull } from '@/world/shape'
 import type { Thought } from '@/domain/types'
 import './sky.css'
 
@@ -25,6 +26,7 @@ export default function SkyPage() {
         <svg className="sky-links" aria-hidden="true">
           <g data-sky="links">
             <g className="sky-echo" data-sky="echo" />
+            <g className="sky-oil" data-sky="oil" />
             <path className="sky-goo" data-sky="goo" />
           </g>
         </svg>
@@ -294,6 +296,7 @@ function mountSky(root: HTMLDivElement) {
   const meter = $('meter')
   const tide = $('tide')
   const goo = root.querySelector('[data-sky="goo"]') as unknown as SVGPathElement
+  const oilG = root.querySelector('[data-sky="oil"]') as unknown as SVGGElement
   const echoG = root.querySelector('[data-sky="echo"]') as unknown as SVGGElement
   const seaWord = $('seaword')
   const restEl = $('rest')
@@ -699,6 +702,20 @@ function mountSky(root: HTMLDivElement) {
   }
   /** The one member you have tapped open, so it can be read. */
   let peek: string | null = null
+  /** Where on the ring it was standing when you tapped it. It grows from
+   *  there rather than travelling anywhere, so what you opened is still the
+   *  thing under your finger. */
+  let peekAt: { a: number; r: number } | null = null
+  /** The ring turns, slowly, so an open pool is never quite still. */
+  const ringSpin = () => t * 0.05
+  /** Frames left in which the view may still slide to fit the opening card.
+   *  It settles once and then lets go — asserting it forever would mean you
+   *  could never pan away from the thing you were reading. */
+  let peekSettle = 0
+  /** The radius the open ring is *actually* standing at this frame. It grows
+   *  to make room for a card, and anything placed outside the ring has to know
+   *  that or it ends up sitting in the middle of the members. */
+  let ringR = 0
   /**
    * How much room a member takes up.
    *
@@ -720,6 +737,135 @@ function mountSky(root: HTMLDivElement) {
     const k = camTarget?.k ?? cam.k
     const per = 1 / Math.max(0.2, k)
     return { w: Math.min(300, W - 56) * per, font: 15 * per, pad: 17 * per }
+  }
+  /**
+   * What shape each thing on stage actually is, measured off the real element.
+   *
+   * Everything that has to reason about crowding — who is overlapping whom,
+   * which way to move, where two surfaces meet — asks this rather than assuming
+   * a circle, because once one member is a card the circles stop being true.
+   * Measured when the paint changes and not per frame: sizes only move when
+   * something is repainted, and reading them back forces a layout.
+   */
+  const shapes = new Map<string, { hw: number; hh: number; r: number }>()
+  function measureOne(id: string, el: HTMLDivElement) {
+    const hw = el.offsetWidth / 2
+    const hh = el.offsetHeight / 2
+    if (!hw || !hh) return
+    // a card carries the corner it was drawn with; everything else is a disc
+    const rr = el.classList.contains('peek') ? Number(el.dataset.corner) || 24 : Math.min(hw, hh)
+    shapes.set(id, { hw, hh, r: Math.max(0, Math.min(rr, Math.min(hw, hh))) })
+  }
+  function measureShapes() {
+    for (const [id, el] of els) measureOne(id, el)
+    for (const id of [...shapes.keys()]) if (!els.has(id)) shapes.delete(id)
+  }
+  /**
+   * Bring the thing being read fully onto the glass.
+   *
+   * A card opens where it stood, and a card that stood near the edge of the
+   * ring opens over the edge of the screen. Moving the card to fix that is the
+   * one thing it must not do — so the view comes to the card instead. Only the
+   * camera slides, and only as far as it has to; the zoom is left alone,
+   * because the card is sized off the zoom and chasing one with the other never
+   * settles.
+   */
+  function bringIntoView(id: string, box: { hw: number; hh: number }) {
+    const p = pos.get(id)
+    if (!p) return
+    const k = cam.k
+    const pad = 14
+    const left = toScreenX(p.x - box.hw)
+    const right = toScreenX(p.x + box.hw)
+    const top = toScreenY(p.y - box.hh)
+    const bottom = toScreenY(p.y + box.hh)
+    let dx = 0
+    let dy = 0
+    // if it is wider than the glass there is no framing that contains it;
+    // centre it and let both ends run off rather than pinning one edge
+    if (right - left > W - pad * 2) dx = W / 2 - (left + right) / 2
+    else if (left < pad) dx = pad - left
+    else if (right > W - pad) dx = W - pad - right
+    const ceil = 68
+    const floor = waterlineY() - 108
+    if (bottom - top > floor - ceil) dy = (ceil + floor) / 2 - (top + bottom) / 2
+    else if (top < ceil) dy = ceil - top
+    else if (bottom > floor) dy = floor - bottom
+    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return
+    // fold into whatever the camera was already doing rather than fighting it
+    const to = camTarget ?? { x: cam.x, y: cam.y, k }
+    camTarget = { x: to.x + dx, y: to.y + dy, k: to.k }
+  }
+
+  /** A body at its live position, in world coordinates. */
+  function bodyOf(id: string, fallbackR = 40): Body {
+    const p = pos.get(id)
+    const x = p?.x ?? 0
+    const y = p?.y ?? 0
+    const s = shapes.get(id)
+    return s ? card(x, y, s.hw, s.hh, s.r) : disc(x, y, fallbackR)
+  }
+  /** The same body where it is being *drawn* this frame, not where it is
+   *  heading — anything drawn between two bodies has to be built from the
+   *  positions they are actually at or it trails a frame behind them. */
+  function drawnBodyOf(id: string, fallbackR = 40): Body {
+    const p = pos.get(id)
+    const x = p?.rx ?? 0
+    const y = p?.ry ?? 0
+    const k = p?.s ?? 1
+    const s = shapes.get(id)
+    return s ? card(x, y, s.hw * k, s.hh * k, s.r * k) : disc(x, y, fallbackR * k)
+  }
+  /**
+   * Let an open pool's members settle against one another.
+   *
+   * The ring only ever says roughly where each thing belongs. What decides
+   * where it actually ends up is not being on top of its neighbours — and that
+   * is measured against their real outlines, so a drop can tuck into the space
+   * beside a card rather than orbiting a corner the card does not have.
+   *
+   * The thing you are reading is the one thing that never gives way: it is what
+   * you asked for, so everything else moves around it.
+   */
+  const SETTLE_GAP = 8
+  function separate(g: TL, gp: Pos) {
+    const movers = g.members.map((m) => m.id)
+    if (movers.length < 2) return
+    const fallback = memberR(movers.length)
+    const bodies = movers.map((id) => bodyOf(id, fallback))
+    const held = movers.map((id) => id === peek || (drag && drag.id === id))
+    const pool = { ...bodyOf(g.t.id, radiusOf(g)), x: gp.x, y: gp.y }
+    // four passes rather than three: the ring is pulling them back together
+    // every frame, and three left a few pixels of overlap standing in a crowd
+    for (let pass = 0; pass < 4; pass++) {
+      for (let i = 0; i < bodies.length; i++) {
+        for (let j = i + 1; j < bodies.length; j++) {
+          if (held[i] && held[j]) continue
+          const c = contact(bodies[i], bodies[j], SETTLE_GAP)
+          if (!c) continue
+          // whichever of the two can move takes the whole correction
+          const wi = held[i] ? 0 : held[j] ? 1 : 0.5
+          const move = c.depth * 0.58
+          bodies[i].x -= c.nx * move * wi
+          bodies[i].y -= c.ny * move * wi
+          bodies[j].x += c.nx * move * (1 - wi)
+          bodies[j].y += c.ny * move * (1 - wi)
+        }
+        if (held[i]) continue
+        // and nothing comes to rest sitting on the pool's own name
+        const c = contact(pool, bodies[i], 6)
+        if (c) {
+          bodies[i].x += c.nx * c.depth * 0.6
+          bodies[i].y += c.ny * c.depth * 0.6
+        }
+      }
+    }
+    movers.forEach((id, i) => {
+      if (held[i]) return
+      const p = posOf(id)
+      p.x = bodies[i].x
+      p.y = bodies[i].y
+    })
   }
   // The ring an opened pool lays its members out on. Big enough to clear the
   // pool's own body and its name, and big enough that no two members touch —
@@ -828,7 +974,9 @@ function mountSky(root: HTMLDivElement) {
             me.style.width = box.w + 'px'
             me.style.height = 'auto'
             me.style.padding = box.pad + 'px'
-            me.style.setProperty('--blob', wabiPill(m.id, Math.round(box.pad * 1.5)))
+            const corner = Math.round(box.pad * 1.5)
+            me.dataset.corner = String(corner)
+            me.style.setProperty('--blob', wabiPill(m.id, corner))
             me.innerHTML = `<div class="t"></div>`
             const tx = me.querySelector('.t') as HTMLDivElement
             tx.style.fontSize = box.font.toFixed(1) + 'px'
@@ -850,6 +998,7 @@ function mountSky(root: HTMLDivElement) {
     restEl.classList.toggle('show', resting > 0)
     // first-run invite
     inviteEl.style.display = view.tls.length === 0 ? '' : 'none'
+    measureShapes()
   }
 
   // the question bubble — pure invitation, not a stored thought
@@ -1659,7 +1808,7 @@ function mountSky(root: HTMLDivElement) {
         // the whole ring and wait together below it
         const gap = 78 / cam.k
         x = p.x + (slot - (n - 1) / 2) * gap - 27
-        y = p.y + orbitR(tl) + memberR(tl.members.length) + 46
+        y = p.y + Math.max(orbitR(tl), ringR) + memberR(tl.members.length) + 46
       } else {
         const ang = toCenter + (slot - (n - 1) / 2) * spread
         x = p.x + Math.cos(ang) * r - 27
@@ -1750,6 +1899,7 @@ function mountSky(root: HTMLDivElement) {
     // with the group already closed, which unmounted every member in it.
     if (peek) {
       peek = null
+      peekAt = null
       paintAll()
       return
     }
@@ -1767,6 +1917,76 @@ function mountSky(root: HTMLDivElement) {
   }
 
   let fusing: string[] = []
+  /**
+   * The oil between things standing close together.
+   *
+   * Two drops in a crowd do not simply sit near one another — brought close
+   * enough they pull a waist out between them and read as one mass with a
+   * pinch in it. Drawn behind the bodies in their own fill, so what you see is
+   * the gap between them filling in rather than a line joining them.
+   *
+   * It is shape aware: against a card the neck grows off the flat of an edge,
+   * against a drop off the curve, because both ends are found on the real
+   * surface rather than on a circle drawn round it.
+   */
+  const OIL_MAX = 14
+  const oilPaths: { fill: SVGPathElement; rim: SVGPathElement }[] = []
+  function oilPair(i: number) {
+    let pair = oilPaths[i]
+    if (!pair) {
+      const mk = (cls: string) => {
+        const el = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+        el.setAttribute('class', cls)
+        oilG.appendChild(el)
+        return el
+      }
+      // every fill first, then every rim, so one join's body never paints over
+      // the edge of the one beside it
+      pair = { fill: mk('oil-fill'), rim: mk('oil-rim') }
+      oilPaths.push(pair)
+    }
+    return pair
+  }
+  function paintOil() {
+    let used = 0
+    const g = openPool && !reduced ? view.byId.get(openPool) : null
+    if (g && g.members.length > 1) {
+      const fallback = memberR(g.members.length)
+      const bodies = g.members.map((m) => drawnBodyOf(m.id, fallback))
+      // strongest joins first, so a crowded ring spends its paths on the
+      // couplings that are actually carrying the shape
+      const joins: { i: number; j: number; v: number }[] = []
+      for (let i = 0; i < bodies.length; i++) {
+        for (let j = i + 1; j < bodies.length; j++) {
+          // the pair being dragged together has its own join, drawn with a lit
+          // rim because it is about to become one thing; two necks over the
+          // same gap only ever muddied it
+          if (fuse && ((fuse.a === g.members[i].id && fuse.b === g.members[j].id) || (fuse.a === g.members[j].id && fuse.b === g.members[i].id))) continue
+          const v = pull(bodies[i], bodies[j])
+          if (v > 0.06) joins.push({ i, j, v })
+        }
+      }
+      joins.sort((a, b) => b.v - a.v)
+      for (const jn of joins.slice(0, OIL_MAX)) {
+        const d = oilPath(bodies[jn.i], bodies[jn.j], jn.v)
+        if (!d) continue
+        const pair = oilPair(used)
+        pair.fill.setAttribute('d', d.fill)
+        pair.rim.setAttribute('d', d.rim)
+        // faint between neighbours merely standing together, and properly
+        // there where something is genuinely pressed against something else
+        const o = Math.pow(jn.v, 1.1)
+        pair.fill.style.opacity = o.toFixed(3)
+        pair.rim.style.opacity = o.toFixed(3)
+        used++
+      }
+    }
+    for (let i = used; i < oilPaths.length; i++) {
+      oilPaths[i].fill.style.opacity = '0'
+      oilPaths[i].rim.style.opacity = '0'
+    }
+  }
+
   function setFusing(ids: string[]) {
     if (ids.length === fusing.length && ids.every((id, i) => id === fusing[i])) return
     for (const id of fusing) els.get(id)?.classList.remove('fusing')
@@ -2137,6 +2357,7 @@ function mountSky(root: HTMLDivElement) {
       // a group inside a group opens like any other: you go in one more level
       if (tl && tl.kind === 'pool') {
         peek = null
+        peekAt = null
         openPool = tl.t.id
         closeMoons()
         frameOpen(tl)
@@ -2147,7 +2368,18 @@ function mountSky(root: HTMLDivElement) {
       // first tap opens this one up and pushes the ring apart around it; the
       // second, on a thing you can now actually see, takes you in to write.
       if (peek !== id) {
+        // hold the slot it is standing in now, before the paint makes it a card
+        const g = openPool ? view.byId.get(openPool) : null
+        const mp = pos.get(id)
+        if (g && mp) {
+          const gp = posOf(g.t.id)
+          peekAt = {
+            a: Math.atan2(mp.y - gp.y, mp.x - gp.x) - ringSpin(),
+            r: Math.hypot(mp.x - gp.x, mp.y - gp.y),
+          }
+        } else peekAt = null
         peek = id
+        peekSettle = 96
         paintAll()
         haptics.grab()
         return
@@ -2162,6 +2394,14 @@ function mountSky(root: HTMLDivElement) {
     if (!tl) return
     const p = posOf(id)
     if (tl.kind === 'pool') {
+      // tapping the group you are reading out of puts the card away: the thing
+      // it was covering is the obvious place to press to get it back
+      if (openPool === tl.t.id && peek) {
+        peek = null
+        peekAt = null
+        paintAll()
+        return
+      }
       if (openPool === tl.t.id) showMoons(tl)
       else {
         clearAll()
@@ -2393,42 +2633,115 @@ function mountSky(root: HTMLDivElement) {
     if (openPool) {
       const g = view.byId.get(openPool)
       if (g) {
+        // A card does not snap to its size, it opens out over half a second.
+        // Measuring it once when it was painted read the size it was leaving,
+        // not the size it was going to — so the layout spent the whole of the
+        // rest of the session placing a card that was 68 pixels wide.
+        const pe = peek ? els.get(peek) : null
+        if (pe) measureOne(peek as string, pe)
         const gp = posOf(g.t.id)
         const n = g.members.length
-        const or = orbitR(g)
         const mr = memberR(n)
+        const spin = ringSpin()
+        // The one you are reading holds the place it was already standing in.
+        // It used to come to the middle of the pool, which meant tapping a
+        // thing sent it somewhere else to be read — you lost track of which of
+        // twenty you had opened. It grows where it is instead, and the ring
+        // opens up around it.
+        const reader = peek && peekAt ? { id: peek, ...peekAt } : null
+        let readBox: { hw: number; hh: number } | null = null
+        if (reader) {
+          const s = shapes.get(reader.id)
+          if (s) readBox = { hw: s.hw, hh: s.hh }
+        }
+        // how much of the ring the card eats, across it and along it, at the
+        // angle it is actually sitting at
+        const ra = reader ? reader.a + spin : 0
+        const across = readBox ? readBox.hw * Math.abs(Math.sin(ra)) + readBox.hh * Math.abs(Math.cos(ra)) : 0
+        const along = readBox ? readBox.hw * Math.abs(Math.cos(ra)) + readBox.hh * Math.abs(Math.sin(ra)) : 0
+
         // Each member takes as much of the ring as its own size needs, rather
         // than an equal slice — so longer titles get more room than short ones.
-        // The one you are reading is not on the ring at all: opened out to a
-        // full card it is bigger than the ring can hold, and squeezing it in
-        // just crushed everything else. It comes to the middle instead, which
-        // is where the room actually is, and the others close the gap behind it.
-        const widths = g.members.map((m) =>
-          peek === m.id ? 0 : Math.asin(Math.min(0.98, (memberRadiusOf(m.id, n) + 7) / or)),
-        )
+        // With a card on the ring the total wants more room than a circle has,
+        // so the ring itself grows until everything fits: that growth is the
+        // others being pushed away, which is the whole point of opening one.
+        const slice = (m: Thought, or: number) =>
+          m.id === reader?.id
+            ? Math.asin(Math.min(0.98, (across + 14) / or))
+            : Math.asin(Math.min(0.98, (memberRadiusOf(m.id, n) + 7) / or))
+        // …but only so far. Opening the ring all the way out to fit a card
+        // walks the far side of it off the screen; past a point the room has
+        // to come from the members near the card giving way locally, which is
+        // what settling against each other below does.
+        const base0 = orbitR(g)
+        let or = base0
+        for (let i = 0; i < 4 && reader; i++) {
+          const need = g.members.reduce((sum, m) => sum + slice(m, or), 0) * 2
+          if (need <= Math.PI * 2) break
+          or = Math.min(base0 * 1.25, or * (need / (Math.PI * 2)))
+        }
+        ringR = or
+        const widths = g.members.map((m) => slice(m, or))
         const span = widths.reduce((sum, w) => sum + w, 0) * 2
         const scale = (Math.PI * 2) / Math.max(Math.PI * 2, span)
+
+        // The walk normally starts at the top of the ring. While you are
+        // reading it starts at the card, so the card keeps its angle and every
+        // shuffle happens on the far side of the ring from it.
+        const start = reader ? g.members.findIndex((m) => m.id === reader.id) : 0
+        const from = start < 0 ? 0 : start
+        const base = reader ? ra : -Math.PI / 2 + spin
+        // the walk lands each member in the middle of its own share; shifting
+        // back by the first one's puts the member we started from exactly on
+        // the angle it is meant to hold
+        const anchor = reader ? widths[from] * scale : 0
         let walked = 0
-        g.members.forEach((m, i) => {
+        for (let k = 0; k < g.members.length; k++) {
+          const i = (from + k) % g.members.length
+          const m = g.members[i]
           // step to the middle of this one's share, then past it
           walked += widths[i] * scale
-          const a = -Math.PI / 2 + walked + t * 0.05
+          const a = base + walked - anchor
           walked += widths[i] * scale
-          const reading = peek === m.id
           const mp = posOf(m.id)
           if (!(drag && drag.id === m.id)) {
             const ease = peek ? 0.16 : 0.1
-            const tx = reading ? gp.x : gp.x + Math.cos(a) * or
-            const ty = reading ? gp.y : gp.y + Math.sin(a) * or
-            mp.x += (tx - mp.x) * ease
-            mp.y += (ty - mp.y) * ease
+            // The card stays on the radius it was opened at. The only claim on
+            // it is the group's own name at the centre of the pool: the card is
+            // opaque and sits in front, so covering the pool's body is fine,
+            // but covering what the group is called is not. So it is pushed out
+            // just far enough to leave that core clear, which is usually a few
+            // pixels and never a journey.
+            const core = Math.min(52, radiusOf(g) * 0.4)
+            const rad = reader && reader.id === m.id ? Math.max(reader.r, core + along) : or
+            mp.x += (gp.x + Math.cos(a) * rad - mp.x) * ease
+            mp.y += (gp.y + Math.sin(a) * rad - mp.y) * ease
           }
-          // members stay in the world, not in the window — clamping them to the
-          // glass is what used to fold one side of the ring onto the other
-          const r = memberRadiusOf(m.id, n)
-          mp.x = Math.max(r, Math.min(worldW() - r, mp.x))
-          mp.y = Math.max(r, Math.min(worldH() - r, mp.y))
-        })
+          // Members stay in the world, not in the window — clamping them to the
+          // glass is what used to fold one side of the ring onto the other.
+          // Held to each axis separately and to the body's real extents: a card
+          // is wide and short, and the circle drawn round it is wider than half
+          // the world, which pinned the thing you had just opened to a fixed
+          // spot instead of leaving it where you tapped it.
+          const s = shapes.get(m.id)
+          const hx = s ? s.hw : memberRadiusOf(m.id, n)
+          const hy = s ? s.hh : memberRadiusOf(m.id, n)
+          if (worldW() > hx * 2) mp.x = Math.max(hx, Math.min(worldW() - hx, mp.x))
+          if (worldH() > hy * 2) mp.y = Math.max(hy, Math.min(worldH() - hy, mp.y))
+        }
+        // Now let the shapes settle against each other. The ring is only a
+        // suggestion; what actually decides where a member ends up is not
+        // bumping into its neighbours, measured against their true outlines
+        // rather than circles drawn round them. This is what lets a drop tuck
+        // into the space beside a card instead of orbiting the corner it does
+        // not have.
+        separate(g, gp)
+        // and the glass comes to the card, once, while it is opening
+        if (drag || panning || pinch) peekSettle = 0
+        if (reader && readBox && peekSettle > 0) {
+          peekSettle--
+          bringIntoView(reader.id, readBox)
+        }
         // clear the orbit's room: the rest of the sky drifts out of the way
         const clear = or + mr + 34
         for (const other of view.tls) {
@@ -2507,6 +2820,7 @@ function mountSky(root: HTMLDivElement) {
       // something too faint to have replaced them
       setFusing(path && joined ? [fuse.a, fuse.b] : [])
     }
+    paintOil()
     const up = stepUpright(reduced)
     const level = Math.abs(up) > 0.2 ? ` rotate(${up.toFixed(2)}deg)` : ''
     for (const [id, el] of els) {
