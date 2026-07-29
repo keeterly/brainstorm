@@ -28,12 +28,12 @@ export function SignIn() {
       if (mode === 'magic') {
         const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } })
         if (error) throw error
-        setNotice('Check your email — tap the link, or type the 6-digit code below.')
+        setNotice('Check your email. The link signs you in wherever it opens — often a different browser than this one. If the email carries a 6-digit code, type it below to stay here instead.')
         setSentKind('email')
       } else if (mode === 'reset') {
         const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
         if (error) throw error
-        setNotice('Reset sent. Type the 6-digit code from the email to get back in, then set a new password in Memory.')
+        setNotice('Reset sent. Open the link to get back in, then set a password under Memory → Account. If the email carries a 6-digit code, type it below to do it all in this browser.')
         setSentKind('recovery')
       } else if (mode === 'password') {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
@@ -131,7 +131,7 @@ export function SignIn() {
             type="text"
             inputMode="numeric"
             autoComplete="one-time-code"
-            placeholder="6-digit code"
+            placeholder="6-digit code, if the email has one"
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
             style={{ ...inputStyle, flex: 1 }}
