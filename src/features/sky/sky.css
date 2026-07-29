@@ -547,6 +547,20 @@ body.sky-held {
   .sky-echo { display: none; }
 }
 
+/* a drop the agent has gone away to work on — lit, and breathing while it is
+   out there, so you can put the phone down and know it is still going */
+.skyb.working {
+  border-color: rgba(var(--accent-rgb), 0.72);
+  animation: sky-working 2.1s ease-in-out infinite;
+}
+@keyframes sky-working {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.14), 0 0 24px rgba(var(--accent-rgb), 0.14), 0 14px 44px rgba(0, 0, 0, 0.5); }
+  50% { box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.3), 0 0 46px rgba(var(--accent-rgb), 0.32), 0 14px 44px rgba(0, 0, 0, 0.5); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skyb.working { animation: none; }
+}
+
 /* two drops sharing one surface give up their own edges to the neck */
 .skyb.fusing {
   border-color: transparent;

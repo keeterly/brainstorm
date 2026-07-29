@@ -13,6 +13,8 @@ export interface CompleteResult {
   json: unknown
   usage: Usage
   model: string
+  /** What it actually went and looked up, when it was allowed to look. */
+  searched?: string[]
 }
 
 export interface LLMProvider {
@@ -30,11 +32,33 @@ export interface LLMProvider {
     outputSchema: z.ZodType<unknown>
     stream?: boolean
     onDelta?: (chunk: string) => void
+    /** Let it search the web up to this many times before it answers. */
+    searchMaxUses?: number
   }): Promise<CompleteResult>
 }
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
 const ANTHROPIC_VERSION = '2023-06-01'
+
+interface Block {
+  type: string
+  name?: string
+  input?: unknown
+}
+interface AnthropicResponse {
+  content?: Block[]
+  usage?: { input_tokens?: number; output_tokens?: number }
+  model?: string
+}
+
+/** What it typed into the search box, for the record shown to the user. */
+function queriesIn(content: Block[]): string[] | undefined {
+  const qs = content
+    .filter((b) => b.type === 'server_tool_use' && b.name === 'web_search')
+    .map((b) => (b.input as { query?: string } | undefined)?.query)
+    .filter((q): q is string => !!q)
+  return qs.length ? qs : undefined
+}
 
 export class AnthropicProvider implements LLMProvider {
   constructor(private apiKey: string) {}
@@ -48,36 +72,88 @@ export class AnthropicProvider implements LLMProvider {
     outputSchema: z.ZodType<unknown>
     stream?: boolean
     onDelta?: (chunk: string) => void
+    searchMaxUses?: number
   }): Promise<CompleteResult> {
     const emitTool = {
       name: 'emit',
       description: 'Emit the structured result. Always call this exactly once.',
       input_schema: zodToJsonSchema(opts.outputSchema, { $refStrategy: 'none' }),
     }
+    // Searching and forcing a tool call are mutually exclusive: a forced emit
+    // fires immediately and never gets the chance to look anything up. So when
+    // research is allowed the choice is left open, and if it finishes without
+    // emitting, a second pass forces it with everything it found in hand.
+    const searching = (opts.searchMaxUses ?? 0) > 0
+    const tools: unknown[] = [emitTool]
+    if (searching) {
+      tools.push({ type: 'web_search_20250305', name: 'web_search', max_uses: opts.searchMaxUses })
+    }
+    const userContent = opts.images?.length
+      ? [
+          ...opts.images.map((im) => ({
+            type: 'image' as const,
+            source: { type: 'base64' as const, media_type: im.mediaType, data: im.dataB64 },
+          })),
+          { type: 'text' as const, text: opts.user },
+        ]
+      : opts.user
     const body = {
       model: opts.model,
       max_tokens: opts.maxTokens,
       system: opts.system,
       // an image-bearing turn becomes content blocks; text-only stays a plain
       // string so nothing about the existing actions changes
-      messages: [
-        {
-          role: 'user',
-          content: opts.images?.length
-            ? [
-                ...opts.images.map((im) => ({
-                  type: 'image' as const,
-                  source: { type: 'base64' as const, media_type: im.mediaType, data: im.dataB64 },
-                })),
-                { type: 'text' as const, text: opts.user },
-              ]
-            : opts.user,
-        },
-      ],
-      tools: [emitTool],
-      tool_choice: { type: 'tool', name: 'emit' },
+      messages: [{ role: 'user', content: userContent }],
+      tools,
+      tool_choice: searching ? { type: 'auto' } : { type: 'tool', name: 'emit' },
       stream: !!opts.stream,
     }
+    const r = await this.post(body)
+
+    if (opts.stream && r.body) {
+      return this.readStream(r.body, opts.model, opts.onDelta)
+    }
+
+    const data = (await r.json()) as AnthropicResponse
+    let content = data.content || []
+    let usage = data.usage
+    const searched = queriesIn(content)
+
+    let toolBlock = content.find((b) => b.type === 'tool_use' && b.name === 'emit')
+    if (!toolBlock && searching) {
+      // it went looking and stopped to think out loud; ask again, holding it to
+      // the schema this time, with the searches still on the table
+      const second = (await (
+        await this.post({
+          ...body,
+          messages: [
+            { role: 'user', content: userContent },
+            { role: 'assistant', content },
+            { role: 'user', content: 'Now emit the result.' },
+          ],
+          tool_choice: { type: 'tool', name: 'emit' },
+        })
+      ).json()) as AnthropicResponse
+      content = second.content || []
+      toolBlock = content.find((b) => b.type === 'tool_use' && b.name === 'emit')
+      usage = {
+        input_tokens: (usage?.input_tokens ?? 0) + (second.usage?.input_tokens ?? 0),
+        output_tokens: (usage?.output_tokens ?? 0) + (second.usage?.output_tokens ?? 0),
+      }
+    }
+    if (!toolBlock) throw new Error('Model did not emit structured output')
+    return {
+      json: toolBlock.input,
+      usage: {
+        inputTokens: usage?.input_tokens ?? 0,
+        outputTokens: usage?.output_tokens ?? 0,
+      },
+      model: data.model ?? opts.model,
+      searched,
+    }
+  }
+
+  private async post(body: unknown): Promise<Response> {
     const r = await fetch(ANTHROPIC_URL, {
       method: 'POST',
       headers: {
@@ -99,26 +175,7 @@ export class AnthropicProvider implements LLMProvider {
       err.status = r.status
       throw err
     }
-
-    if (opts.stream && r.body) {
-      return this.readStream(r.body, opts.model, opts.onDelta)
-    }
-
-    const data = (await r.json()) as {
-      content?: { type: string; input?: unknown }[]
-      usage?: { input_tokens?: number; output_tokens?: number }
-      model?: string
-    }
-    const toolBlock = (data.content || []).find((b) => b.type === 'tool_use')
-    if (!toolBlock) throw new Error('Model did not emit structured output')
-    return {
-      json: toolBlock.input,
-      usage: {
-        inputTokens: data.usage?.input_tokens ?? 0,
-        outputTokens: data.usage?.output_tokens ?? 0,
-      },
-      model: data.model ?? opts.model,
-    }
+    return r
   }
 
   private async readStream(

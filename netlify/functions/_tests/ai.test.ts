@@ -172,3 +172,65 @@ describe('/api/ai', () => {
     expect(r.status).toBe(429)
   })
 })
+
+const DEEPEN_REQ = {
+  action: 'deepen',
+  input: { subject: { id: 'g1', title: 'Get a $100k SBA loan' }, context: [] },
+}
+const DEEPEN_OUT = {
+  read: 'A 7(a) working-capital loan',
+  found: [{ point: '7(a) caps at $5M', why: 'Well above what you need' }],
+  steps: [{ tempId: 's1', title: 'Pull two years of returns', why: 'Lenders open with this', effort: 2, dependsOn: [] }],
+  watchOuts: [],
+  sources: [{ title: 'SBA', url: 'https://www.sba.gov/x' }],
+  learned: [],
+  note: 'It is a 7(a).',
+}
+
+describe('going out to look things up', () => {
+  it('offers the search tool and does not force the answer before it can search', async () => {
+    state.anthropicResponses = [anthropicToolResponse(DEEPEN_OUT)]
+    const r = await handler(req(DEEPEN_REQ))
+    expect(r.status).toBe(200)
+    const call = state.anthropicCalls[0] as {
+      tools: { name?: string; type?: string }[]
+      tool_choice: { type: string }
+    }
+    expect(call.tools.some((t) => t.type === 'web_search_20250305')).toBe(true)
+    // forcing emit would fire before it ever reached the search
+    expect(call.tool_choice.type).toBe('auto')
+  })
+
+  it('asks again, holding it to the schema, when it searched but never emitted', async () => {
+    state.anthropicResponses = [
+      {
+        content: [
+          { type: 'server_tool_use', name: 'web_search', input: { query: 'SBA 7(a) requirements' } },
+          { type: 'text', text: 'Here is what I found...' },
+        ],
+        usage: { input_tokens: 300, output_tokens: 90 },
+        model: 'claude-sonnet-5',
+      },
+      anthropicToolResponse(DEEPEN_OUT),
+    ]
+    const r = await handler(req(DEEPEN_REQ))
+    expect(r.status).toBe(200)
+    expect(state.anthropicCalls).toHaveLength(2)
+    const second = state.anthropicCalls[1] as {
+      tool_choice: { type: string; name?: string }
+      messages: { role: string }[]
+    }
+    expect(second.tool_choice).toMatchObject({ type: 'tool', name: 'emit' })
+    // the searching turn is carried forward, so nothing it found is thrown away
+    expect(second.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user'])
+    // and both passes are paid for
+    expect(state.runPatches[0].input_tokens).toBe(420)
+  })
+
+  it('leaves every other action answering from what it was given', async () => {
+    state.anthropicResponses = [anthropicToolResponse(GOOD_OUTPUT)]
+    await handler(req(VALID))
+    const call = state.anthropicCalls[0] as { tools: { type?: string }[] }
+    expect(call.tools.some((t) => t.type === 'web_search_20250305')).toBe(false)
+  })
+})

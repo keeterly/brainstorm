@@ -93,6 +93,7 @@ export default async (req: Request): Promise<Response> => {
         outputSchema: def.outputSchema,
         stream: def.stream,
         onDelta,
+        searchMaxUses: def.searchMaxUses,
       })
     } catch (e) {
       const status = (e as { status?: number }).status
@@ -106,6 +107,7 @@ export default async (req: Request): Promise<Response> => {
           outputSchema: def.outputSchema,
           stream: def.stream,
           onDelta,
+          searchMaxUses: def.searchMaxUses,
         })
       }
       throw e

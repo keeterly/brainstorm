@@ -10,6 +10,7 @@ import type { ClassifyOutput } from '@shared/ai/actions/classify-thought'
 import { nameThePool, organizeText, tidySky } from './absorbFlow'
 import { seaLineAt, waterlineY } from '@/world/water'
 import { armUpright, stepUpright, worldTilt } from '@/world/upright'
+import { deepenThought } from './deepenFlow'
 import { haptics } from '@/lib/haptics'
 import { echoRing } from '@/world/echo'
 import type { Thought } from '@/domain/types'
@@ -137,6 +138,8 @@ const MOON_ICONS: Record<string, string> = {
   grow: 'M12 3.4c.72 4.3 1.94 5.52 6.24 6.24-4.3.72-5.52 1.94-6.24 6.24-.72-4.3-1.94-5.52-6.24-6.24 4.3-.72 5.52-1.94 6.24-6.24ZM17.7 15.6c.32 1.9.88 2.46 2.78 2.78-1.9.32-2.46.88-2.78 2.78-.32-1.9-.88-2.46-2.78-2.78 1.9-.32 2.46-.88 2.78-2.78Z',
   gather: 'M3.2 12h5.4M20.8 12h-5.4M6.2 9.2 8.9 12l-2.7 2.8M17.8 9.2 15.1 12l2.7 2.8',
   rain: 'M7.6 13.6a3.7 3.7 0 0 1-.44-7.37 4.95 4.95 0 0 1 9.5-1.06 3.36 3.36 0 0 1 .3 6.67 3.6 3.6 0 0 1-.53.03H7.6M8.4 16.4l-1 3M13 16.4l-1 3M17.6 16.4l-1 3',
+  // the bolt from the first Brainstorm: hand it over and it goes to work
+  work: 'M13.2 2.8 5.4 13.1a.5.5 0 0 0 .4.8h4.3l-1.3 7.3 7.8-10.3a.5.5 0 0 0-.4-.8h-4.3l1.3-7.3Z',
 }
 function moonSvg(key: string) {
   return (
@@ -1394,6 +1397,16 @@ function mountSky(root: HTMLDivElement) {
         },
       })
     }
+    // ⚡ — hand it to the agent and let it go and find out
+    acts.push({
+      icon: 'work',
+      lb: 'work it',
+      dim: S().offline,
+      run: () => {
+        closeMoons()
+        void runDeepen(tl)
+      },
+    })
     const kin = kinOf(tl)
     acts.push({ icon: 'gather', lb: 'gather', dim: kin.length === 0, run: () => startPull(tl, true) })
     const canRain = tl.kind === 'drop' || tl.members.length >= 1
@@ -1485,6 +1498,44 @@ function mountSky(root: HTMLDivElement) {
     haptics.arrive()
     setTimeout(() => openPage('path', tl, p.x, p.y), reduced ? 0 : 430)
   }
+  // ⚡ — the agent goes away and does the legwork on one drop, and what it
+  // finds arrives as real work hanging under it rather than as a wall of prose.
+  let working: string | null = null
+  async function runDeepen(tl: TL) {
+    if (working || S().offline) return
+    working = tl.t.id
+    const el = els.get(tl.t.id)
+    el?.classList.add('working')
+    say('going to find out…')
+    // if the drop is a picture, the picture is the thing being asked about
+    const img = ex(tl.t).img as string | undefined
+    const b64 = img?.includes(',') ? img.split(',')[1] : undefined
+    const res = await deepenThought(tl.t.id, {
+      image: b64 ? { mediaType: 'image/jpeg', dataB64: b64 } : undefined,
+    })
+    working = null
+    els.get(tl.t.id)?.classList.remove('working')
+    if (res.kind === 'failed') {
+      say('could not get out there just now')
+      return
+    }
+    // the new steps arrive around the thing they belong to
+    const gp = posOf(tl.t.id)
+    const kids = S().relationships.filter((r) => r.type === 'part_of' && r.to_id === tl.t.id)
+    kids.slice(-res.added).forEach((r, i, all) => {
+      const p = posOf(r.from_id)
+      const a = -Math.PI / 2 + (i / Math.max(1, all.length)) * Math.PI * 2
+      p.x = p.rx = gp.x + Math.cos(a) * 150
+      p.y = p.ry = gp.y + Math.sin(a) * 120
+      p.s = 0.3
+    })
+    rebuild()
+    paintAll()
+    haptics.join()
+    say(res.note || `${res.added} steps — tap to open`)
+    fitWhenSettled()
+  }
+
   let openPool: string | null = null
   function clearAll() {
     closeMoons()

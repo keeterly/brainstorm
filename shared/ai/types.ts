@@ -31,6 +31,9 @@ export interface ActionDef<I = unknown, O = unknown> {
   modelTier: ModelTier
   maxTokens: number
   stream?: boolean
+  /** Let this action look things up on the web, up to this many searches.
+   *  Absent or zero means it answers from what it was given. */
+  searchMaxUses?: number
   inputSchema: z.ZodType<I>
   outputSchema: z.ZodType<O>
   buildPrompt(input: I, ctx: PromptCtx): BuiltPrompt

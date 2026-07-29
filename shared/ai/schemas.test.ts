@@ -40,6 +40,7 @@ function sampleInput(name: string): never {
     organize: { text: 'a long messy dump about the campaign and the pop-up', thoughts: [ref], spoken: true },
     name_pool: { members: ['shoot on expired film', 'letters sealed with wax'] },
     cluster: { loose: [ref], pools: [{ id: 'p1', name: 'SS27 show', members: ['book the space'] }] },
+    deepen: { subject: ref, context: ['book the space'] },
   }
   return inputs[name] as never
 }
@@ -254,5 +255,78 @@ describe('name_pool', () => {
   it('needs at least two members to name anything', () => {
     expect(namePool.inputSchema.safeParse({ members: ['just one'] }).success).toBe(false)
     expect(namePool.inputSchema.safeParse({ members: ['a', 'b'] }).success).toBe(true)
+  })
+})
+
+describe('deepen — the ⚡ that goes and finds out', () => {
+  const deepen = ACTION_REGISTRY.deepen
+  const ctx = { nowISO: '2026-07-29T12:00:00Z', tzOffsetMin: -420, memory: ['Two-person label in LA'] }
+
+  it('is allowed to go and look things up', () => {
+    expect(deepen.searchMaxUses).toBeGreaterThan(0)
+  })
+  it('asks for the specific thing, not a restatement', () => {
+    const p = deepen.buildPrompt(
+      { subject: { id: 'g1', title: 'Get a $100k SBA loan' }, context: [] },
+      ctx,
+    )
+    expect(p.system).toContain('Search the web')
+    expect(p.user).toContain('Get a $100k SBA loan')
+    expect(p.user).toContain('name it back')
+    // it should be told not to hand back what the user already wrote
+    expect(p.user).toContain('could not have written themselves')
+  })
+  it('carries what is already inside, so it does not repeat you', () => {
+    const p = deepen.buildPrompt(
+      { subject: { id: 'g1', title: 'SS27 show' }, context: ['book the space', 'buyer invitations'] },
+      ctx,
+    )
+    expect(p.user).toContain('Already inside it')
+    expect(p.user).toContain('buyer invitations')
+  })
+  it('reads a picture as the subject when one is attached', () => {
+    const p = deepen.buildPrompt(
+      {
+        subject: { id: 'd1', title: 'Photo' },
+        context: [],
+        image: { mediaType: 'image/jpeg', dataB64: 'AAAA' },
+      },
+      ctx,
+    )
+    expect(p.images).toEqual([{ mediaType: 'image/jpeg', dataB64: 'AAAA' }])
+    expect(p.user).toContain('An image is attached')
+    expect(p.user).toContain('makers, materials or techniques'.split(',')[0])
+  })
+  it('accepts a full result and rejects a shapeless one', () => {
+    const good = deepen.outputSchema.safeParse({
+      read: 'A 7(a) loan for working capital, not a 504',
+      found: [{ point: '7(a) caps at $5M; 504 is for property', why: 'You want cash, so 7(a)' }],
+      steps: [
+        { tempId: 's1', title: 'Pull two years of business tax returns', why: 'Every lender opens with this', effort: 2, dependsOn: [] },
+        { tempId: 's2', title: 'Book a call with an SBA preferred lender', why: 'They can approve without SBA review', effort: 1, dependsOn: ['s1'] },
+      ],
+      watchOuts: ['Personal guarantee is required above 20% ownership'],
+      sources: [{ title: 'SBA 7(a) overview', url: 'https://www.sba.gov/x' }],
+      learned: ['Runs a two-person label and does the finance herself'],
+      note: 'It is a 7(a) — here is the order to do it in.',
+    })
+    expect(good.success).toBe(true)
+    // no steps is not an answer
+    expect(
+      deepen.outputSchema.safeParse({ read: 'x', found: [], steps: [], watchOuts: [], sources: [], learned: [], note: '' })
+        .success,
+    ).toBe(false)
+  })
+  it('needs an effort a person can act on', () => {
+    const bad = deepen.outputSchema.safeParse({
+      read: 'x',
+      found: [],
+      steps: [{ tempId: 's1', title: 'do it', why: '', effort: 9, dependsOn: [] }],
+      watchOuts: [],
+      sources: [],
+      learned: [],
+      note: '',
+    })
+    expect(bad.success).toBe(false)
   })
 })
