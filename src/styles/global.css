@@ -101,8 +101,8 @@ a {
   color: #0a0c12;
 }
 .btn--accent {
-  border-color: rgba(122, 215, 255, 0.5);
-  background: rgba(122, 215, 255, 0.12);
+  border-color: rgba(var(--accent-rgb), 0.5);
+  background: rgba(var(--accent-rgb), 0.12);
   color: var(--water);
 }
 .btn--ghost {
@@ -143,8 +143,8 @@ a {
   color: var(--ink);
 }
 .chip--ai {
-  border-color: rgba(122, 215, 255, 0.4);
-  background: rgba(122, 215, 255, 0.1);
+  border-color: rgba(var(--accent-rgb), 0.4);
+  background: rgba(var(--accent-rgb), 0.1);
   color: var(--water);
 }
 
@@ -225,7 +225,7 @@ a {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(122, 215, 255, 0.07), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--accent-rgb), 0.07), transparent);
   animation: aiwork 1.6s ease-in-out infinite;
 }
 @keyframes aiwork {
@@ -240,7 +240,7 @@ a {
 /* rain / ripple / vapor — the motion language, shared across views */
 .ripple {
   position: fixed;
-  border: 1px solid rgba(122, 215, 255, 0.45);
+  border: 1px solid rgba(var(--accent-rgb), 0.45);
   border-radius: 50%;
   pointer-events: none;
   z-index: 3;

@@ -345,7 +345,7 @@ function mountSky(root: HTMLDivElement) {
     tide.style.top = line - 120 + 'px'
     tide.style.height = 260 + 'px'
     tide.style.background =
-      `linear-gradient(rgba(122,215,255,0) 0%, rgba(122,215,255,${(0.05 * near).toFixed(3)}) 44%,` +
+      `linear-gradient(rgba(var(--accent-rgb), 0) 0%, rgba(var(--accent-rgb), ${(0.05 * near).toFixed(3)}) 44%,` +
       ` rgba(150,215,255,${(0.16 * near).toFixed(3)}) 47%, rgba(90,170,230,${(0.1 * near).toFixed(3)}) 60%, transparent 100%)`
     tide.classList.toggle('on', near > 0.02)
     seaWord.style.top = line - 52 + 'px'

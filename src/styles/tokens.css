@@ -7,8 +7,14 @@
   --ground: #04050a;
   --ground-high: #0a0d16;
   --grid: rgba(160, 200, 255, 0.045);
-  --water: #7ad7ff;
-  --water-soft: rgba(122, 215, 255, 0.14);
+  /* The accent's raw channels, so anything can mix its own alpha off it.
+     The World Engine rewrites this every couple of minutes: the whole app
+     takes the hour from here — indigo at night, rose at first light, clear
+     blue while you work, gold, then orange at sunset. What is written below
+     is only what you see before the first tick. */
+  --accent-rgb: 122, 215, 255;
+  --water: rgb(var(--accent-rgb));
+  --water-soft: rgba(var(--accent-rgb), 0.14);
 
   /* surfaces (glass over dark water) */
   --glass: rgba(22, 27, 36, 0.82);
@@ -99,7 +105,7 @@
   --line-mid: rgba(255, 255, 255, 0.22);
   --line-strong: rgba(255, 255, 255, 0.6);
   --accent: var(--water);
-  --accent-soft: rgba(122, 215, 255, 0.12);
+  --accent-soft: rgba(var(--accent-rgb), 0.12);
   --accent-ink: var(--water);
   --warn-soft: rgba(216, 184, 120, 0.14);
   --map-1: #3f6a50;

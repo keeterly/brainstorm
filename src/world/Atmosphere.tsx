@@ -79,8 +79,12 @@ export function Atmosphere() {
           inset: 0,
           background:
             'radial-gradient(ellipse 150% 60% at 50% -10%, var(--sky-top, #0e1424) 0%, transparent 62%),' +
-            'radial-gradient(ellipse 110% 42% at 50% 108%, var(--sky-horizon, rgba(28,74,116,0.34)), transparent 66%),' +
-            'linear-gradient(var(--sky-ground, #04060c) 0%, var(--sky-ground, #05070f) 52%, #070d18 100%)',
+            // the hour's glow sits just above the waterline, where a sunset
+            // actually is — pushed below it, the whole warmth was under water
+            'radial-gradient(ellipse 125% 48% at 50% 97%, var(--sky-horizon, rgba(28,74,116,0.34)), transparent 70%),' +
+            // the floor takes the hour too — a fixed blue here was quietly
+            // holding the bottom of every screen at midnight all day long
+            'linear-gradient(var(--sky-ground, #04060c) 0%, var(--sky-ground, #05070f) 52%, var(--ground-high, #070d18) 100%)',
           transition: 'background 4s linear',
         }}
       />
@@ -90,8 +94,11 @@ export function Atmosphere() {
           position: 'absolute',
           inset: 0,
           opacity: 0.4,
+          // haze is lit by whatever light there is, so it carries the hour
           background:
-            'radial-gradient(ellipse 95% 45% at 50% 6%, rgba(150, 170, 200, 0.13), transparent 70%), linear-gradient(rgba(140, 160, 190, 0.07), transparent 48%)',
+            'radial-gradient(ellipse 95% 45% at 50% 6%, rgba(var(--accent-rgb), 0.11), transparent 70%),' +
+            'linear-gradient(rgba(var(--accent-rgb), 0.06), transparent 48%)',
+          transition: 'background 4s linear',
         }}
       />
       <div
@@ -100,8 +107,12 @@ export function Atmosphere() {
           position: 'absolute',
           inset: 0,
           opacity: 0.1,
+          // the shaft is the hour's own light: cool and white overhead at
+          // midday, low and orange at sunset
           background:
-            'radial-gradient(ellipse 65% 55% at 50% 0%, rgba(255, 236, 200, 0.16), transparent 65%), radial-gradient(ellipse 28% 75% at 63% 0%, rgba(255, 244, 220, 0.12), transparent 70%)',
+            'radial-gradient(ellipse 65% 55% at 50% 0%, rgba(var(--accent-rgb), 0.2), transparent 65%),' +
+            'radial-gradient(ellipse 28% 75% at 63% 0%, rgba(255, 244, 220, 0.1), transparent 70%)',
+          transition: 'background 4s linear',
         }}
       />
       <canvas

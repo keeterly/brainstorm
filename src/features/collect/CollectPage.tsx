@@ -260,7 +260,7 @@ export default function CollectPage() {
       {/* one quiet card — a question if the AI just asked one, else the single
           next thing, else nothing at all */}
       {question ? (
-        <div className="card" style={{ marginTop: 'var(--sp-5)', borderColor: 'rgba(122,215,255,0.4)' }}>
+        <div className="card" style={{ marginTop: 'var(--sp-5)', borderColor: 'rgba(var(--accent-rgb), 0.4)' }}>
           <p style={{ fontWeight: 550 }}>{question.q}</p>
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
             <button className="btn btn--sm btn--ghost" onClick={() => navigate(`/thought/${question.id}`)}>
@@ -275,7 +275,7 @@ export default function CollectPage() {
         <button
           onClick={() => navigate('/think')}
           className="card"
-          style={{ marginTop: 'var(--sp-5)', width: '100%', textAlign: 'left', borderColor: 'rgba(122,215,255,0.4)' }}
+          style={{ marginTop: 'var(--sp-5)', width: '100%', textAlign: 'left', borderColor: 'rgba(var(--accent-rgb), 0.4)' }}
         >
           <div style={{ fontWeight: 600 }}>“{best.cloud.title}” is ready to rain</div>
           <p className="muted" style={{ fontSize: 'var(--fs-label)', marginTop: 4 }}>
@@ -286,7 +286,7 @@ export default function CollectPage() {
         <button
           onClick={() => navigate('/current')}
           className="card"
-          style={{ marginTop: 'var(--sp-5)', width: '100%', textAlign: 'left', borderColor: 'rgba(122,215,255,0.4)' }}
+          style={{ marginTop: 'var(--sp-5)', width: '100%', textAlign: 'left', borderColor: 'rgba(var(--accent-rgb), 0.4)' }}
         >
           <div style={{ fontWeight: 600 }}>{best.thought.title || best.thought.raw_content}</div>
           <p className="muted" style={{ fontSize: 'var(--fs-label)', marginTop: 4 }}>

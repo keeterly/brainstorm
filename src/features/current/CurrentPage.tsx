@@ -106,7 +106,7 @@ export default function CurrentPage() {
       )}
 
       {suggestion && (
-        <div className="card" style={{ borderColor: 'rgba(122,215,255,0.4)', marginBottom: 'var(--sp-4)' }}>
+        <div className="card" style={{ borderColor: 'rgba(var(--accent-rgb), 0.4)', marginBottom: 'var(--sp-4)' }}>
           <p className="muted" style={{ fontSize: 'var(--fs-label)', marginBottom: 10 }}>
             First: <strong>{thoughts.find((t) => t.id === suggestion.recommended.id)?.title ?? '—'}</strong> —{' '}
             {suggestion.recommended.why}
