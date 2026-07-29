@@ -31,8 +31,18 @@ export function SignIn() {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
       } else {
-        const { error } = await supabase.auth.signUp({ email, password })
+        const { data, error } = await supabase.auth.signUp({ email, password })
         if (error) throw error
+        // Supabase will not admit that an email is already registered — it
+        // returns success and sends nothing, so attackers cannot enumerate
+        // accounts. The giveaway is an empty identities array. We can tell
+        // our own user the truth rather than leave them waiting on an email
+        // that is never coming.
+        if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+          setMode('password')
+          setNotice('You already have an account. Enter your password to sign in — or use a magic link.')
+          return
+        }
         setNotice('Account created — confirm via the email link or the code below.')
         setSentKind('signup')
       }
