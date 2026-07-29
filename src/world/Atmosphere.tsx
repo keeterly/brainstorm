@@ -57,6 +57,7 @@ export function Atmosphere() {
   }, [])
 
   return (
+    <>
     <div aria-hidden style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
       {/* depth, not graph paper — night above, the water's glow below */}
       <div
@@ -107,7 +108,25 @@ export function Atmosphere() {
         }}
       />
     </div>
+    {/* film grain over the whole world — the one thing that sits above
+        everything, so nothing in the app renders perfectly clean */}
+    <div aria-hidden style={GRAIN} />
+    </>
   )
+}
+
+const GRAIN: React.CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  zIndex: 300,
+  pointerEvents: 'none',
+  // plain alpha rather than a blend mode: it reads stronger on the dark world
+  // and costs nothing, where mix-blend-mode would force the whole animating
+  // scene into one composited layer
+  opacity: 0.07,
+  backgroundSize: '160px 160px',
+  backgroundImage:
+    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E\")",
 }
 
 /** Motion-language helpers shared by surfaces. */

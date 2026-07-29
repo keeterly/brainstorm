@@ -17,7 +17,7 @@ export default function SkyPage() {
   const rootRef = useRef<HTMLDivElement>(null)
   useEffect(() => mountSky(rootRef.current as HTMLDivElement), [])
   return (
-    <div ref={rootRef}>
+    <div ref={rootRef} className="sky-root">
       <div className="sky-stage" data-sky="stage">
         <svg className="sky-links" data-sky="links" aria-hidden="true" />
         <div data-sky="field" />
@@ -126,6 +126,18 @@ function moonSvg(key: string) {
     `<path d="${MOON_ICONS[key] ?? MOON_ICONS.grow}" stroke="currentColor" stroke-width="1.5" ` +
     `stroke-linecap="round" stroke-linejoin="round"/></svg>`
   )
+}
+
+// Wabi-sabi: a real droplet is never a true circle. Each drop gets its own
+// quiet asymmetry, derived from its id so it is the same one every time.
+function blobOf(id: string) {
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0
+  const v = (n: number) => {
+    const x = Math.sin(h * 0.0001 + n * 12.9898) * 43758.5453
+    return (46.6 + (x - Math.floor(x)) * 6.8).toFixed(1)
+  }
+  return `${v(1)}% ${v(2)}% ${v(3)}% ${v(4)}% / ${v(5)}% ${v(6)}% ${v(7)}% ${v(8)}%`
 }
 
 function mountSky(root: HTMLDivElement) {
@@ -342,6 +354,7 @@ function mountSky(root: HTMLDivElement) {
     const el = document.createElement('div')
     el.className = cls
     el.dataset.id = id
+    el.style.setProperty('--blob', blobOf(id))
     field.appendChild(el)
     els.set(id, el)
     return el

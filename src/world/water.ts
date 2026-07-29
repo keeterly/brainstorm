@@ -3,9 +3,17 @@
 export const WATER_H = 150
 const SURFACE = 26
 
-// The y of the water's surface at x, in canvas-local coordinates.
+// The y of the water's surface at x. Three harmonics at frequencies that share
+// no common multiple, so the surface never repeats itself — real water has no
+// wavelength you can point at.
 export function surfaceY(x: number, t: number, amp: number, speed: number, off: number) {
-  return SURFACE + Math.sin(x * 0.016 + t * speed + off) * amp + Math.sin(x * 0.031 - t * speed * 0.7) * amp * 0.5
+  return (
+    SURFACE +
+    Math.sin(x * 0.016 + t * speed + off) * amp +
+    Math.sin(x * 0.0313 - t * speed * 0.71) * amp * 0.5 +
+    Math.sin(x * 0.00714 + t * speed * 0.29 + 1.7) * amp * 0.62 +
+    Math.sin(x * 0.0537 + t * speed * 1.13) * amp * 0.16
+  )
 }
 
 // The waterline in page coordinates — where a drop meets the ocean. Measured
