@@ -27,6 +27,8 @@ export default function SkyPage() {
       <header className="sky-head">
         <div className="hint" data-sky="hint" />
       </header>
+      <div className="sky-tide" data-sky="tide" aria-hidden="true" />
+      <div className="sky-sea-word" data-sky="seaword" aria-hidden="true" />
       <div className="sky-meter" data-sky="meter" aria-hidden="true" />
       <button className="sky-rest" data-sky="rest" aria-label="Resting thoughts">
         ☁
@@ -152,6 +154,8 @@ function mountSky(root: HTMLDivElement) {
   const links = root.querySelector('[data-sky="links"]') as unknown as SVGGElement
   const hint = $('hint')
   const meter = $('meter')
+  const tide = $('tide')
+  const seaWord = $('seaword')
   const restEl = $('rest')
   const tidyEl = $('tidy')
   const undoEl = $('undo')
@@ -171,6 +175,29 @@ function mountSky(root: HTMLDivElement) {
   const pageFile = root.querySelector('[data-sky="pageFile"]') as HTMLInputElement
 
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
+  // how close a dragged drop is to the sea, 0 → 1, and whether it would go
+  let seaNear = 0
+  function showTide(near: number, ready: boolean) {
+    if (near === seaNear) return
+    seaNear = near
+    const line = waterlineY()
+    tide.style.top = line - 120 + 'px'
+    tide.style.height = 260 + 'px'
+    tide.style.background =
+      `linear-gradient(rgba(122,215,255,0) 0%, rgba(122,215,255,${(0.05 * near).toFixed(3)}) 44%,` +
+      ` rgba(150,215,255,${(0.16 * near).toFixed(3)}) 47%, rgba(90,170,230,${(0.1 * near).toFixed(3)}) 60%, transparent 100%)`
+    tide.classList.toggle('on', near > 0.02)
+    seaWord.style.top = line - 52 + 'px'
+    seaWord.textContent = ready ? 'let go' : 'the ocean keeps what’s done'
+    seaWord.classList.toggle('on', near > 0.25)
+    seaWord.classList.toggle('ready', ready)
+  }
+  function hideTide() {
+    if (seaNear === 0 && !tide.classList.contains('on')) return
+    seaNear = 0
+    tide.classList.remove('on')
+    seaWord.classList.remove('on', 'ready')
+  }
   const S = () => useGraph.getState()
   const todayISO = () => new Date().toISOString().slice(0, 10)
   const ex = (t: Thought) => (t.extra ?? {}) as Record<string, unknown>
@@ -582,12 +609,19 @@ function mountSky(root: HTMLDivElement) {
     }
     if (el) {
       els.delete(t.id)
-      el.style.transition = 'transform 720ms cubic-bezier(0.5, 0, 0.8, 0.6), opacity 720ms'
-      el.style.transform = `translate3d(${p.x - 20}px, ${waterlineY() + 6}px, 0) scale(0.22)`
-      el.style.opacity = '0'
-      setTimeout(() => el.remove(), reduced ? 0 : 760)
+      const r = el.clientWidth / 2 || 40
+      const line = waterlineY()
+      // pulled under: it flattens as it meets the surface, then goes down
+      el.style.transition = 'transform 560ms cubic-bezier(0.35, 0, 0.7, 0.55), opacity 560ms ease-in 180ms'
+      el.style.transform = `translate3d(${p.rx - r}px, ${(line - cam.y) / cam.k - r}px, 0) scale(1.06, 0.7)`
+      setTimeout(() => {
+        el.style.transition = 'transform 620ms cubic-bezier(0.5, 0, 0.9, 0.5), opacity 620ms'
+        el.style.transform = `translate3d(${p.rx - r}px, ${(line + 90 - cam.y) / cam.k - r}px, 0) scale(0.3, 0.24)`
+        el.style.opacity = '0'
+      }, reduced ? 0 : 420)
+      setTimeout(() => el.remove(), reduced ? 0 : 1120)
     }
-    setTimeout(() => splash(p.x), reduced ? 0 : 480)
+    setTimeout(() => splash(p.rx * cam.k + cam.x), reduced ? 0 : 420)
     haptics.sink()
     say(poolDone ? 'returned to the ocean — the pool with it' : 'returned to the ocean')
     offerUndo(`“${trim(label(t), 26)}” returned to the ocean`, () => {
@@ -645,7 +679,43 @@ function mountSky(root: HTMLDivElement) {
   function partOfRel(childId: string) {
     return S().relationships.find((r) => r.type === 'part_of' && r.from_id === childId)
   }
+  // Two drops do not blink into a pool — they rush together, meet, and the
+  // pool grows out of where they met.
+  function coalesce(from: { x: number; y: number; r: number }[], at: { x: number; y: number }) {
+    if (reduced) return
+    for (const f of from) {
+      const g = document.createElement('div')
+      g.className = 'sky-ghost'
+      g.style.width = g.style.height = f.r * 2 + 'px'
+      g.style.transform = `translate3d(${f.x - f.r}px, ${f.y - f.r}px, 0) scale(1)`
+      field.appendChild(g)
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          g.style.transform = `translate3d(${at.x - f.r}px, ${at.y - f.r}px, 0) scale(0.22)`
+          g.style.opacity = '0'
+        }),
+      )
+      setTimeout(() => g.remove(), 640)
+    }
+    const ring = document.createElement('div')
+    ring.className = 'sky-join'
+    const rr = Math.max(...from.map((f) => f.r)) * 2.1
+    ring.style.width = ring.style.height = rr + 'px'
+    ring.style.transform = `translate3d(${at.x - rr / 2}px, ${at.y - rr / 2}px, 0)`
+    field.appendChild(ring)
+    setTimeout(() => ring.remove(), 1160)
+  }
+
   function poolTogether(a: TL, b: TL, at: { x: number; y: number }) {
+    const pa = posOf(a.t.id)
+    const pb = posOf(b.t.id)
+    coalesce(
+      [
+        { x: pa.x, y: pa.y, r: radiusOf(a) },
+        { x: pb.x, y: pb.y, r: radiusOf(b) },
+      ],
+      at,
+    )
     if (a.kind === 'pool' && b.kind === 'pool') {
       for (const m of b.members) {
         const rel = partOfRel(m.id)
@@ -667,6 +737,7 @@ function mountSky(root: HTMLDivElement) {
       const p = posOf(g.id)
       p.x = p.rx = at.x
       p.y = p.ry = at.y
+      p.s = 0.18 // the spring swells it out of the meeting point
       S().addRelationship(a.t.id, g.id, 'part_of')
       S().addRelationship(b.t.id, g.id, 'part_of')
       const texts = [a, b].flatMap((tl) => (tl.kind === 'pool' ? tl.members.map(label) : [label(tl.t)]))
@@ -1380,7 +1451,22 @@ function mountSky(root: HTMLDivElement) {
     drag.vy = (ny - p.y) * 0.6 + drag.vy * 0.4
     p.x = nx
     p.y = ny
+    // the closer to the water, the more the sea reaches up for it
+    if (drag.tl.kind === 'drop') {
+      const line = waterlineY()
+      const reach = 190
+      const near = Math.max(0, Math.min(1, (e.clientY - (line - reach)) / reach))
+      const ready = e.clientY > line - 12
+      showTide(Math.round(near * 20) / 20, ready)
+      drag.el.classList.toggle('sinking', ready)
+    }
     drag.target = null
+    // at the water you are letting go, not merging — one signal at a time
+    if (seaNear > 0.55) {
+      meter.classList.remove('on', 'zero')
+      drag.touching = false
+      return
+    }
     if (!drag.isMember) {
       let best: TL | null = null
       let bestD = Infinity
@@ -1447,7 +1533,8 @@ function mountSky(root: HTMLDivElement) {
     const d = drag
     drag = null
     meter.classList.remove('on', 'zero')
-    d.el.classList.remove('dragging')
+    d.el.classList.remove('dragging', 'sinking')
+    hideTide()
     if (!d.moved) {
       onTap(d.id, d.isMember)
       return
@@ -1479,6 +1566,7 @@ function mountSky(root: HTMLDivElement) {
     if (touches.size < 2) pinch = null
     panning = false
     panFrom = null
+    hideTide()
     if (holdTimer) clearTimeout(holdTimer)
     endHold(false)
     if (drag) drag.el.classList.remove('dragging')
