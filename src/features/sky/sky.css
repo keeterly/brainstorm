@@ -196,14 +196,19 @@
   position: fixed;
   z-index: 8;
   transform: translate(-50%, -50%);
-  font-size: 54px;
-  font-weight: 200;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);
-  text-shadow: 0 0 24px rgba(0, 0, 0, 0.9);
+  max-width: 60vw;
+  font-size: 14px;
+  font-weight: 550;
+  letter-spacing: -0.005em;
+  color: var(--ink-soft);
+  text-align: center;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.95);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 160ms;
+  transition: opacity 160ms, color 200ms;
 }
 .sky-meter.on { opacity: 1; }
 .sky-meter.zero { color: var(--water); }
@@ -501,4 +506,25 @@
 .skyb.sinking { border-color: rgba(122, 215, 255, 0.75); }
 @media (prefers-reduced-motion: reduce) {
   .sky-ghost, .sky-join, .sky-tide, .sky-sea-word { transition: none; animation: none; }
+}
+
+/* the neck of water between two drops reaching for each other */
+.sky-goo {
+  fill: rgba(31, 39, 53, 0.94);
+  stroke: rgba(205, 228, 255, 0.3);
+  stroke-width: 0.5;
+  opacity: 0;
+  transition: opacity 180ms ease;
+  pointer-events: none;
+}
+.sky-goo.on { opacity: 1; }
+.sky-goo.ready { stroke: rgba(122, 215, 255, 0.55); }
+
+/* two drops sharing one surface give up their own edges to the neck */
+.skyb.fusing {
+  border-color: transparent;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.14),
+    inset 0 -20px 40px rgba(74, 142, 200, 0.12),
+    0 20px 60px rgba(0, 0, 0, 0.62);
 }

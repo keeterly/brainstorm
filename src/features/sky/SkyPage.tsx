@@ -20,7 +20,9 @@ export default function SkyPage() {
     <div ref={rootRef} className="sky-root">
       <div className="sky-stage" data-sky="stage">
         <svg className="sky-links" aria-hidden="true">
-          <g data-sky="links" />
+          <g data-sky="links">
+            <path className="sky-goo" data-sky="goo" />
+          </g>
         </svg>
         <div data-sky="field" />
       </div>
@@ -147,6 +149,74 @@ function blobOf(id: string) {
   return `${v(1)}% ${v(2)}% ${v(3)}% ${v(4)}% / ${v(5)}% ${v(6)}% ${v(7)}% ${v(8)}%`
 }
 
+// The neck two droplets form as they reach for each other. Circles do not
+// merge by overlapping — surface tension draws a waisted bridge between them
+// that thickens as they close. Drawn as a path rather than an SVG blur filter,
+// because that filter renders as flat grey rectangles on iOS.
+export function metaballPath(
+  x1: number,
+  y1: number,
+  r1: number,
+  x2: number,
+  y2: number,
+  r2: number,
+): string | null {
+  const dx = x2 - x1
+  const dy = y2 - y1
+  const d = Math.hypot(dx, dy)
+  const maxReach = (r1 + r2) * 1.62
+  if (d <= 0 || d > maxReach) return null
+  if (d <= Math.abs(r1 - r2)) {
+    // fully inside one another: there is no neck left, only one surface
+    const [cx, cy, r] = r1 >= r2 ? [x1, y1, r1] : [x2, y2, r2]
+    return (
+      `M ${(cx - r).toFixed(1)} ${cy.toFixed(1)}` +
+      ` A ${r.toFixed(1)} ${r.toFixed(1)} 0 1 0 ${(cx + r).toFixed(1)} ${cy.toFixed(1)}` +
+      ` A ${r.toFixed(1)} ${r.toFixed(1)} 0 1 0 ${(cx - r).toFixed(1)} ${cy.toFixed(1)} Z`
+    )
+  }
+
+  // how far into the reach we are, 0 (just touching range) → 1 (overlapping)
+  const v = Math.max(0, Math.min(1, 1 - (d - (r1 + r2) * 0.42) / (maxReach - (r1 + r2) * 0.42)))
+  const spread = Math.PI / 2.6
+  const angle = Math.atan2(dy, dx)
+
+  let u1 = 0
+  let u2 = 0
+  if (d < r1 + r2) {
+    u1 = Math.acos(Math.max(-1, Math.min(1, (r1 * r1 + d * d - r2 * r2) / (2 * r1 * d))))
+    u2 = Math.acos(Math.max(-1, Math.min(1, (r2 * r2 + d * d - r1 * r1) / (2 * r2 * d))))
+  }
+  const a1 = angle + u1 + (spread - u1) * v
+  const a2 = angle - u1 - (spread - u1) * v
+  const a3 = angle + Math.PI - u2 - (Math.PI - u2 - spread) * v
+  const a4 = angle - Math.PI + u2 + (Math.PI - u2 - spread) * v
+
+  const p = (cx: number, cy: number, r: number, a: number) => [cx + Math.cos(a) * r, cy + Math.sin(a) * r]
+  const [p1x, p1y] = p(x1, y1, r1, a1)
+  const [p2x, p2y] = p(x1, y1, r1, a2)
+  const [p3x, p3y] = p(x2, y2, r2, a3)
+  const [p4x, p4y] = p(x2, y2, r2, a4)
+
+  // the waist: control handles pulled along each rim, shortened as they close
+  const totalRadius = r1 + r2
+  const d2 = Math.min(v * 0.7, Math.hypot(p1x - p3x, p1y - p3y) / totalRadius) * Math.min(1, (d * 2) / totalRadius)
+  const h1 = r1 * d2 * 2.4
+  const h2 = r2 * d2 * 2.4
+  const c1 = p(p1x, p1y, h1, a1 - Math.PI / 2)
+  const c2 = p(p3x, p3y, h2, a3 + Math.PI / 2)
+  const c3 = p(p4x, p4y, h2, a4 - Math.PI / 2)
+  const c4 = p(p2x, p2y, h1, a2 + Math.PI / 2)
+
+  return (
+    `M ${p1x.toFixed(1)} ${p1y.toFixed(1)}` +
+    ` C ${c1[0].toFixed(1)} ${c1[1].toFixed(1)}, ${c2[0].toFixed(1)} ${c2[1].toFixed(1)}, ${p3x.toFixed(1)} ${p3y.toFixed(1)}` +
+    ` A ${r2.toFixed(1)} ${r2.toFixed(1)} 0 0 1 ${p4x.toFixed(1)} ${p4y.toFixed(1)}` +
+    ` C ${c3[0].toFixed(1)} ${c3[1].toFixed(1)}, ${c4[0].toFixed(1)} ${c4[1].toFixed(1)}, ${p2x.toFixed(1)} ${p2y.toFixed(1)}` +
+    ` A ${r1.toFixed(1)} ${r1.toFixed(1)} 0 0 1 ${p1x.toFixed(1)} ${p1y.toFixed(1)} Z`
+  )
+}
+
 function mountSky(root: HTMLDivElement) {
   const $ = <T extends HTMLElement>(k: string) => root.querySelector(`[data-sky="${k}"]`) as T
   const stage = $('stage')
@@ -155,6 +225,7 @@ function mountSky(root: HTMLDivElement) {
   const hint = $('hint')
   const meter = $('meter')
   const tide = $('tide')
+  const goo = root.querySelector('[data-sky="goo"]') as unknown as SVGPathElement
   const seaWord = $('seaword')
   const restEl = $('rest')
   const tidyEl = $('tidy')
@@ -423,6 +494,13 @@ function mountSky(root: HTMLDivElement) {
   }
   function hasThread(a: string, b: string) {
     return view.threads.some((t) => (t.a === a && t.b === b) || (t.a === b && t.b === a))
+  }
+  function sharedConcept(texts: string[]): string | null {
+    const counts = new Map<string, number>()
+    for (const t of texts) for (const w of words(t)) counts.set(w, (counts.get(w) ?? 0) + 1)
+    let best: string | null = null
+    for (const [w, n] of counts) if (n >= 2 && (!best || n > (counts.get(best) ?? 0))) best = w
+    return best ? best[0].toUpperCase() + best.slice(1) : null
   }
   function conceptName(texts: string[]) {
     const counts = new Map<string, number>()
@@ -1303,6 +1381,14 @@ function mountSky(root: HTMLDivElement) {
     paintAll()
   }
 
+  let fusing: string[] = []
+  function setFusing(ids: string[]) {
+    if (ids.length === fusing.length && ids.every((id, i) => id === fusing[i])) return
+    for (const id of fusing) els.get(id)?.classList.remove('fusing')
+    fusing = ids
+    for (const id of ids) els.get(id)?.classList.add('fusing')
+  }
+
   // ---------- pointer ----------
   let drag: {
     id: string
@@ -1464,6 +1550,9 @@ function mountSky(root: HTMLDivElement) {
     // at the water you are letting go, not merging — one signal at a time
     if (seaNear > 0.55) {
       meter.classList.remove('on', 'zero')
+      goo.classList.remove('on', 'ready')
+      goo.setAttribute('d', '')
+      setFusing([])
       drag.touching = false
       return
     }
@@ -1480,19 +1569,35 @@ function mountSky(root: HTMLDivElement) {
         }
       }
       if (best && bestD < radiusOf(drag.tl) + radiusOf(best) + 110) {
-        const gap = Math.max(0, bestD - (radiusOf(drag.tl) + radiusOf(best)) * 0.55)
-        const deg = Math.round(gap / 4)
-        meter.textContent = String(deg)
         const bp = posOf(best.t.id)
+        const ra = radiusOf(drag.tl)
+        const rb = radiusOf(best)
+        const touching = bestD < (ra + rb) * 0.94
+        // the neck of water between them, thickening as they close
+        const path = metaballPath(p.x, p.y, ra, bp.x, bp.y, rb)
+        goo.setAttribute('d', path ?? '')
+        goo.classList.toggle('on', !!path)
+        goo.classList.toggle('ready', touching)
+        // one surface, not two overlapping outlines: the path traces the fused
+        // silhouette, so the drops themselves give up their rims while it holds
+        setFusing(path ? [drag.id, best.t.id] : [])
+        // and what they would become, which is the only useful thing to say
+        meter.textContent =
+          best.kind === 'pool'
+            ? label(best.t)
+            : (sharedConcept([label(drag.tl.t), label(best.t)]) ?? 'a new pool')
         meter.style.left = ((p.x + bp.x) / 2) * cam.k + cam.x + 'px'
-        meter.style.top = ((p.y + bp.y) / 2) * cam.k + cam.y + 'px'
+        meter.style.top = ((p.y + bp.y) / 2) * cam.k + cam.y - (Math.max(ra, rb) * cam.k + 26) + 'px'
         meter.classList.add('on')
-        meter.classList.toggle('zero', deg === 0)
-        if (deg === 0 && !drag.touching) haptics.grab()
-        drag.touching = deg === 0
-        if (deg === 0) drag.target = best
+        meter.classList.toggle('zero', touching)
+        if (touching && !drag.touching) haptics.grab()
+        drag.touching = touching
+        if (touching) drag.target = best
       } else {
         meter.classList.remove('on', 'zero')
+        goo.classList.remove('on', 'ready')
+        goo.setAttribute('d', '')
+        setFusing([])
         drag.touching = false
       }
     }
@@ -1534,6 +1639,9 @@ function mountSky(root: HTMLDivElement) {
     drag = null
     meter.classList.remove('on', 'zero')
     d.el.classList.remove('dragging', 'sinking')
+    goo.classList.remove('on', 'ready')
+    goo.setAttribute('d', '')
+    setFusing([])
     hideTide()
     if (!d.moved) {
       onTap(d.id, d.isMember)
@@ -1572,6 +1680,9 @@ function mountSky(root: HTMLDivElement) {
     if (drag) drag.el.classList.remove('dragging')
     drag = null
     meter.classList.remove('on', 'zero')
+    goo.classList.remove('on', 'ready')
+    goo.setAttribute('d', '')
+    setFusing([])
   })
   function onTap(id: string, isMember: boolean) {
     hint.style.opacity = '0'
