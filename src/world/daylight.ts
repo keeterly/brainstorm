@@ -94,5 +94,8 @@ export function tickDaylight(now = new Date()) {
   const glow = mix3([122, 215, 255], [255, 184, 118], s.warm)
   r.setProperty('--drop-glow', rgb(glow, 0.2))
   r.setProperty('--drop-rim', rgb(glow, 0.17))
+  // the echo a live drop sends out carries the same hour, but has to survive
+  // being drawn as a hairline — its own alpha does the fading
+  r.setProperty('--drop-echo', rgb(glow, 0.7))
   return s
 }

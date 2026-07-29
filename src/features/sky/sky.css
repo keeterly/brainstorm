@@ -98,6 +98,12 @@
 }
 @keyframes sky-pop { from { scale: 0.25; opacity: 0; } to { scale: 1; opacity: 1; } }
 
+/* the body deforms as it reaches for another; the words ride it undistorted */
+.skyb > .t,
+.skyb > .q,
+.skyb > .state,
+.skyb > .peek,
+.skyb > .dots { transform: var(--unlean, none); }
 .skyb .q { width: 76%; font-size: 15px; line-height: 1.5; font-weight: 300; color: var(--ink-soft); text-wrap: balance; pointer-events: none; }
 .skyb .t {
   /* type scales with the drop — set inline; measure kept narrow so a circle reads */
@@ -509,16 +515,28 @@
 }
 
 /* the neck of water between two drops reaching for each other */
+/* opacity is driven per frame from how far into the join the two drops are —
+   it fades in on approach and hands the surface back once they have merged */
 .sky-goo {
   fill: rgba(31, 39, 53, 0.94);
   stroke: rgba(205, 228, 255, 0.3);
   stroke-width: 0.5;
   opacity: 0;
-  transition: opacity 180ms ease;
   pointer-events: none;
 }
-.sky-goo.on { opacity: 1; }
 .sky-goo.ready { stroke: rgba(122, 215, 255, 0.55); }
+
+/* the echo a live drop sends out — irregular rings, stacked, out of step */
+.sky-echo { pointer-events: none; }
+.sky-echo path {
+  fill: none;
+  stroke: var(--drop-echo, rgba(122, 215, 255, 0.9));
+  stroke-linejoin: round;
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sky-echo { display: none; }
+}
 
 /* two drops sharing one surface give up their own edges to the neck */
 .skyb.fusing {

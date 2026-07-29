@@ -21,6 +21,7 @@ export default function SkyPage() {
       <div className="sky-stage" data-sky="stage">
         <svg className="sky-links" aria-hidden="true">
           <g data-sky="links">
+            <g className="sky-echo" data-sky="echo" />
             <path className="sky-goo" data-sky="goo" />
           </g>
         </svg>
@@ -113,6 +114,12 @@ interface Pos {
   s: number
   vx: number
   vy: number
+  // how far this drop is leaning toward another — mk eases toward mt, and
+  // mx/my is the unit direction of the pull
+  mk: number
+  mt: number
+  mx: number
+  my: number
 }
 
 const QUESTIONS = [
@@ -149,10 +156,19 @@ function blobOf(id: string) {
   return `${v(1)}% ${v(2)}% ${v(3)}% ${v(4)}% / ${v(5)}% ${v(6)}% ${v(7)}% ${v(8)}%`
 }
 
+// How much of a drop's stretch toward its partner is paid for by narrowing
+// across it. Water has a volume; a body that reaches has to thin somewhere.
+export const MORPH_PERP = 0.55
+
 // The neck two droplets form as they reach for each other. Circles do not
 // merge by overlapping — surface tension draws a waisted bridge between them
 // that thickens as they close. Drawn as a path rather than an SVG blur filter,
 // because that filter renders as flat grey rectangles on iOS.
+//
+// k1/k2 are how far each body has deformed toward the other: 0 leaves it a
+// circle, 0.16 stretches it 16% along the line between them and narrows it
+// across. The drop elements are transformed by exactly the same amounts, so
+// the silhouette this path traces is the silhouette you see.
 export function metaballPath(
   x1: number,
   y1: number,
@@ -160,61 +176,133 @@ export function metaballPath(
   x2: number,
   y2: number,
   r2: number,
+  k1 = 0,
+  k2 = 0,
 ): string | null {
   const dx = x2 - x1
   const dy = y2 - y1
   const d = Math.hypot(dx, dy)
-  const maxReach = (r1 + r2) * 1.62
+  // semi-axes: a along the line between them, b across it
+  const a1r = r1 * (1 + k1)
+  const b1r = r1 * (1 - k1 * MORPH_PERP)
+  const a2r = r2 * (1 + k2)
+  const b2r = r2 * (1 - k2 * MORPH_PERP)
+  const maxReach = (a1r + a2r) * 1.62
   if (d <= 0 || d > maxReach) return null
-  if (d <= Math.abs(r1 - r2)) {
+  const angle = Math.atan2(dy, dx)
+  const ca = Math.cos(angle)
+  const sa = Math.sin(angle)
+  const deg = ((angle * 180) / Math.PI).toFixed(1)
+  // a point on a body, at parameter t measured from the line between them
+  const rim = (cx: number, cy: number, a: number, b: number, t: number) => {
+    const lx = a * Math.cos(t)
+    const ly = b * Math.sin(t)
+    return [cx + lx * ca - ly * sa, cy + lx * sa + ly * ca]
+  }
+
+  if (d <= Math.abs(a1r - a2r)) {
     // fully inside one another: there is no neck left, only one surface
-    const [cx, cy, r] = r1 >= r2 ? [x1, y1, r1] : [x2, y2, r2]
+    const [cx, cy, a, b] = a1r >= a2r ? [x1, y1, a1r, b1r] : [x2, y2, a2r, b2r]
+    const [sx, sy] = rim(cx, cy, a, b, Math.PI)
+    const [ex, ey] = rim(cx, cy, a, b, 0)
     return (
-      `M ${(cx - r).toFixed(1)} ${cy.toFixed(1)}` +
-      ` A ${r.toFixed(1)} ${r.toFixed(1)} 0 1 0 ${(cx + r).toFixed(1)} ${cy.toFixed(1)}` +
-      ` A ${r.toFixed(1)} ${r.toFixed(1)} 0 1 0 ${(cx - r).toFixed(1)} ${cy.toFixed(1)} Z`
+      `M ${sx.toFixed(1)} ${sy.toFixed(1)}` +
+      ` A ${a.toFixed(1)} ${b.toFixed(1)} ${deg} 1 0 ${ex.toFixed(1)} ${ey.toFixed(1)}` +
+      ` A ${a.toFixed(1)} ${b.toFixed(1)} ${deg} 1 0 ${sx.toFixed(1)} ${sy.toFixed(1)} Z`
     )
   }
 
   // how far into the reach we are, 0 (just touching range) → 1 (overlapping)
-  const v = Math.max(0, Math.min(1, 1 - (d - (r1 + r2) * 0.42) / (maxReach - (r1 + r2) * 0.42)))
+  const v = Math.max(0, Math.min(1, 1 - (d - (a1r + a2r) * 0.42) / (maxReach - (a1r + a2r) * 0.42)))
   const spread = Math.PI / 2.6
-  const angle = Math.atan2(dy, dx)
 
   let u1 = 0
   let u2 = 0
-  if (d < r1 + r2) {
-    u1 = Math.acos(Math.max(-1, Math.min(1, (r1 * r1 + d * d - r2 * r2) / (2 * r1 * d))))
-    u2 = Math.acos(Math.max(-1, Math.min(1, (r2 * r2 + d * d - r1 * r1) / (2 * r2 * d))))
+  if (d < a1r + a2r) {
+    u1 = Math.acos(Math.max(-1, Math.min(1, (a1r * a1r + d * d - a2r * a2r) / (2 * a1r * d))))
+    u2 = Math.acos(Math.max(-1, Math.min(1, (a2r * a2r + d * d - a1r * a1r) / (2 * a2r * d))))
   }
-  const a1 = angle + u1 + (spread - u1) * v
-  const a2 = angle - u1 - (spread - u1) * v
-  const a3 = angle + Math.PI - u2 - (Math.PI - u2 - spread) * v
-  const a4 = angle - Math.PI + u2 + (Math.PI - u2 - spread) * v
+  // the neck attaches no further round than where the two surfaces already
+  // cross — past that it would be cutting into the body it is joining
+  const t1 = u1 + Math.max(0, spread - u1) * v
+  const t2 = -t1
+  const t3 = Math.PI - u2 - Math.max(0, Math.PI - u2 - spread) * v
+  const t4 = -t3
 
-  const p = (cx: number, cy: number, r: number, a: number) => [cx + Math.cos(a) * r, cy + Math.sin(a) * r]
-  const [p1x, p1y] = p(x1, y1, r1, a1)
-  const [p2x, p2y] = p(x1, y1, r1, a2)
-  const [p3x, p3y] = p(x2, y2, r2, a3)
-  const [p4x, p4y] = p(x2, y2, r2, a4)
+  const [p1x, p1y] = rim(x1, y1, a1r, b1r, t1)
+  const [p2x, p2y] = rim(x1, y1, a1r, b1r, t2)
+  const [p3x, p3y] = rim(x2, y2, a2r, b2r, t3)
+  const [p4x, p4y] = rim(x2, y2, a2r, b2r, t4)
 
-  // the waist: control handles pulled along each rim, shortened as they close
-  const totalRadius = r1 + r2
-  const d2 = Math.min(v * 0.7, Math.hypot(p1x - p3x, p1y - p3y) / totalRadius) * Math.min(1, (d * 2) / totalRadius)
-  const h1 = r1 * d2 * 2.4
-  const h2 = r2 * d2 * 2.4
-  const c1 = p(p1x, p1y, h1, a1 - Math.PI / 2)
-  const c2 = p(p3x, p3y, h2, a3 + Math.PI / 2)
-  const c3 = p(p4x, p4y, h2, a4 - Math.PI / 2)
-  const c4 = p(p2x, p2y, h1, a2 + Math.PI / 2)
+  // the waist: control handles run along each rim toward it, shortening as
+  // the two close. `sign` picks which way around the body the handle leaves.
+  const handle = (px: number, py: number, a: number, b: number, t: number, len: number, sign: number) => {
+    const lx = -a * Math.sin(t) * sign
+    const ly = b * Math.cos(t) * sign
+    const m = Math.hypot(lx, ly) || 1
+    const ux = (lx / m) * len
+    const uy = (ly / m) * len
+    return [px + ux * ca - uy * sa, py + ux * sa + uy * ca]
+  }
+  const totalRadius = a1r + a2r
+  // once the two are genuinely inside one another the union is already the
+  // shape; the neck stands down rather than bulging out past it
+  const over = Math.max(0, (totalRadius - d) / totalRadius)
+  const d2 =
+    Math.min(v * 0.7, Math.hypot(p1x - p3x, p1y - p3y) / totalRadius) *
+    Math.min(1, (d * 2) / totalRadius) *
+    Math.max(0, 1 - over * 1.7)
+  const h1 = a1r * d2 * 2.4
+  const h2 = a2r * d2 * 2.4
+  const c1 = handle(p1x, p1y, a1r, b1r, t1, h1, -1)
+  const c2 = handle(p3x, p3y, a2r, b2r, t3, h2, 1)
+  const c3 = handle(p4x, p4y, a2r, b2r, t4, h2, -1)
+  const c4 = handle(p2x, p2y, a1r, b1r, t2, h1, 1)
 
   return (
     `M ${p1x.toFixed(1)} ${p1y.toFixed(1)}` +
     ` C ${c1[0].toFixed(1)} ${c1[1].toFixed(1)}, ${c2[0].toFixed(1)} ${c2[1].toFixed(1)}, ${p3x.toFixed(1)} ${p3y.toFixed(1)}` +
-    ` A ${r2.toFixed(1)} ${r2.toFixed(1)} 0 0 1 ${p4x.toFixed(1)} ${p4y.toFixed(1)}` +
+    ` A ${a2r.toFixed(1)} ${b2r.toFixed(1)} ${deg} 0 1 ${p4x.toFixed(1)} ${p4y.toFixed(1)}` +
     ` C ${c3[0].toFixed(1)} ${c3[1].toFixed(1)}, ${c4[0].toFixed(1)} ${c4[1].toFixed(1)}, ${p2x.toFixed(1)} ${p2y.toFixed(1)}` +
-    ` A ${r1.toFixed(1)} ${r1.toFixed(1)} 0 0 1 ${p1x.toFixed(1)} ${p1y.toFixed(1)} Z`
+    ` A ${a1r.toFixed(1)} ${b1r.toFixed(1)} ${deg} 0 1 ${p1x.toFixed(1)} ${p1y.toFixed(1)} Z`
   )
+}
+
+// ---------- the echo a live drop sends out ----------
+// Joy Division rings: not clean circles but wobbled closed curves, stacked in
+// layers that never quite line up. Each ring's wobble is fixed by its seed so
+// it stays the same shape as it travels outward.
+function closedSpline(pts: [number, number][]): string {
+  const n = pts.length
+  let d = `M ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n]
+    const p1 = pts[i]
+    const p2 = pts[(i + 1) % n]
+    const p3 = pts[(i + 2) % n]
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6
+    const c1y = p1[1] + (p2[1] - p0[1]) / 6
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6
+    const c2y = p2[1] - (p3[1] - p1[1]) / 6
+    d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`
+  }
+  return d + ' Z'
+}
+
+export function echoRing(cx: number, cy: number, r: number, seed: number, wob: number): string {
+  const N = 26
+  const s1 = seed * 1.7
+  const s2 = seed * 3.1 + 1.2
+  const s3 = seed * 5.3 + 2.4
+  const pts: [number, number][] = []
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2
+    // integer harmonics only, so the ring closes on itself
+    const w = 0.52 * Math.sin(3 * a + s1) + 0.31 * Math.sin(5 * a + s2) + 0.17 * Math.sin(8 * a + s3)
+    const rr = r * (1 + wob * w)
+    pts.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr])
+  }
+  return closedSpline(pts)
 }
 
 function mountSky(root: HTMLDivElement) {
@@ -226,6 +314,7 @@ function mountSky(root: HTMLDivElement) {
   const meter = $('meter')
   const tide = $('tide')
   const goo = root.querySelector('[data-sky="goo"]') as unknown as SVGPathElement
+  const echoG = root.querySelector('[data-sky="echo"]') as unknown as SVGGElement
   const seaWord = $('seaword')
   const restEl = $('rest')
   const tidyEl = $('tidy')
@@ -417,6 +506,10 @@ function mountSky(root: HTMLDivElement) {
         s: born ? 0.42 : 1,
         vx: 0,
         vy: 0,
+        mk: 0,
+        mt: 0,
+        mx: 1,
+        my: 0,
       }
       pos.set(id, p)
     }
@@ -626,7 +719,7 @@ function mountSky(root: HTMLDivElement) {
   inviteEl.style.width = inviteEl.style.height = '192px'
   inviteEl.innerHTML = `<div class="q">What’s on your mind?</div>`
   field.appendChild(inviteEl)
-  const invitePos: Pos = { x: W / 2, y: H * 0.34, rx: W / 2, ry: H * 0.34, s: 1, vx: 0, vy: 0 }
+  const invitePos: Pos = { x: W / 2, y: H * 0.34, rx: W / 2, ry: H * 0.34, s: 1, vx: 0, vy: 0, mk: 0, mt: 0, mx: 1, my: 0 }
 
   // ---------- splash / say ----------
   function splash(x: number) {
@@ -1389,6 +1482,19 @@ function mountSky(root: HTMLDivElement) {
     for (const id of ids) els.get(id)?.classList.add('fusing')
   }
 
+  // Which two drops are currently reaching for each other. The neck itself is
+  // drawn in the frame loop rather than here, so it is built from the same
+  // eased positions and the same deformation the drops are rendered with —
+  // otherwise the outline lags a frame behind the bodies it is meant to hold.
+  let fuse: { a: string; b: string; ra: number; rb: number } | null = null
+  function clearFuse() {
+    fuse = null
+    goo.classList.remove('ready')
+    goo.style.opacity = '0'
+    goo.setAttribute('d', '')
+    setFusing([])
+  }
+
   // ---------- pointer ----------
   let drag: {
     id: string
@@ -1550,9 +1656,7 @@ function mountSky(root: HTMLDivElement) {
     // at the water you are letting go, not merging — one signal at a time
     if (seaNear > 0.55) {
       meter.classList.remove('on', 'zero')
-      goo.classList.remove('on', 'ready')
-      goo.setAttribute('d', '')
-      setFusing([])
+      clearFuse()
       drag.touching = false
       return
     }
@@ -1573,14 +1677,9 @@ function mountSky(root: HTMLDivElement) {
         const ra = radiusOf(drag.tl)
         const rb = radiusOf(best)
         const touching = bestD < (ra + rb) * 0.94
-        // the neck of water between them, thickening as they close
-        const path = metaballPath(p.x, p.y, ra, bp.x, bp.y, rb)
-        goo.setAttribute('d', path ?? '')
-        goo.classList.toggle('on', !!path)
-        goo.classList.toggle('ready', touching)
-        // one surface, not two overlapping outlines: the path traces the fused
-        // silhouette, so the drops themselves give up their rims while it holds
-        setFusing(path ? [drag.id, best.t.id] : [])
+        // the two bodies are now in each other's field — the frame loop draws
+        // the neck and leans them into one another
+        fuse = { a: drag.id, b: best.t.id, ra, rb }
         // and what they would become, which is the only useful thing to say
         meter.textContent =
           best.kind === 'pool'
@@ -1595,9 +1694,7 @@ function mountSky(root: HTMLDivElement) {
         if (touching) drag.target = best
       } else {
         meter.classList.remove('on', 'zero')
-        goo.classList.remove('on', 'ready')
-        goo.setAttribute('d', '')
-        setFusing([])
+        clearFuse()
         drag.touching = false
       }
     }
@@ -1639,9 +1736,7 @@ function mountSky(root: HTMLDivElement) {
     drag = null
     meter.classList.remove('on', 'zero')
     d.el.classList.remove('dragging', 'sinking')
-    goo.classList.remove('on', 'ready')
-    goo.setAttribute('d', '')
-    setFusing([])
+    clearFuse()
     hideTide()
     if (!d.moved) {
       onTap(d.id, d.isMember)
@@ -1680,9 +1775,7 @@ function mountSky(root: HTMLDivElement) {
     if (drag) drag.el.classList.remove('dragging')
     drag = null
     meter.classList.remove('on', 'zero')
-    goo.classList.remove('on', 'ready')
-    goo.setAttribute('d', '')
-    setFusing([])
+    clearFuse()
   })
   function onTap(id: string, isMember: boolean) {
     hint.style.opacity = '0'
@@ -1740,6 +1833,72 @@ function mountSky(root: HTMLDivElement) {
     p.rx += (p.x - p.rx) * k
     p.ry += (p.y - p.ry) * k
     p.s += ((dragged ? 1.045 : 1) - p.s) * 0.18
+  }
+
+  // ---------- the echo ----------
+  // Rings that leave a live drop and travel outward, several at once, each on
+  // its own clock so they never fall into step. The drop you are holding and
+  // the drop whose moons are open push hard; a saturated drop only murmurs.
+  // drops currently deformed toward another, so their text can be straightened
+  const leaning = new Set<string>()
+  const echoPool: SVGPathElement[] = []
+  let echoUsed = 0
+  const ECHO_LAYERS = 4
+  function echoFrom(id: string, cx: number, cy: number, r: number, strength: number) {
+    const h = hashN(id)
+    for (let i = 0; i < ECHO_LAYERS; i++) {
+      // each layer has its own period and its own head start — the stack never
+      // resolves into one clean pulse
+      const period = 3.1 + i * 0.83 + ((h * (i + 2)) % 1.4)
+      const off = ((h * 0.37 + i * 0.29) % 1) + i * 0.17
+      const phase = ((t / period + off) % 1 + 1) % 1
+      const fade = Math.pow(Math.sin(phase * Math.PI), 1.35)
+      const o = strength * fade * (1 - i * 0.19)
+      if (o < 0.015) continue
+      let el = echoPool[echoUsed]
+      if (!el) {
+        el = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+        echoG.appendChild(el)
+        echoPool.push(el)
+      }
+      // the ring keeps its shape as it travels, and wobbles more the further
+      // out it gets, the way a wave loses its edge
+      el.setAttribute('d', echoRing(cx, cy, r * (1.02 + phase * 0.95) + 5, h + i * 2.7, 0.028 + phase * 0.05 + i * 0.012))
+      // inline, not a presentation attribute: the stylesheet's opacity would win
+      el.style.opacity = o.toFixed(3)
+      el.style.strokeWidth = (1.15 - i * 0.16).toFixed(2)
+      echoUsed++
+    }
+  }
+  function drawEchoes() {
+    echoUsed = 0
+    if (reduced) {
+      for (const el of echoPool) el.style.opacity = '0'
+      return
+    }
+    const seen = new Set<string>()
+    const push = (id: string | null | undefined, strength: number) => {
+      if (!id || seen.has(id) || echoUsed >= 40) return
+      const tl = view.byId.get(id)
+      if (!tl) return
+      seen.add(id)
+      const p = posOf(id)
+      echoFrom(id, p.rx, p.ry, radiusOf(tl) * p.s, strength)
+    }
+    push(holding?.id, 0.4)
+    push(moonsFor, 0.3)
+    push(openPool, 0.2)
+    // whatever has gone ripe keeps a quiet pulse of its own — kept to a few, or
+    // a full sky of ripe drops turns the echo into scratches
+    let ripe = 0
+    for (const tl of view.tls) {
+      if (ripe >= 3) break
+      if (tl.kind === 'drop' && isRipe(tl.t) && !seen.has(tl.t.id)) {
+        push(tl.t.id, 0.1)
+        ripe++
+      }
+    }
+    for (let i = echoUsed; i < echoPool.length; i++) echoPool[i].style.opacity = '0'
   }
   function coast(p: Pos) {
     if (!p.vx && !p.vy) return
@@ -1883,15 +2042,93 @@ function mountSky(root: HTMLDivElement) {
         }
       }
     }
-    // render
-    for (const [id, el] of els) {
+    // render — settle every body first, then decide how each one is deformed,
+    // then draw. The neck and the drops have to be built from the same numbers
+    // or the outline reads as a reflection floating behind two hard circles.
+    for (const id of els.keys()) {
       const p = pos.get(id)
       if (!p) continue
       glide(p, drag?.id === id && drag.moved)
+      p.mt = 0
+    }
+    if (fuse && !reduced) {
+      const pa = pos.get(fuse.a)
+      const pb = pos.get(fuse.b)
+      if (pa && pb) {
+        const dx = pb.rx - pa.rx
+        const dy = pb.ry - pa.ry
+        const d = Math.hypot(dx, dy) || 1
+        const ra = fuse.ra * pa.s
+        const rb = fuse.rb * pb.s
+        // the same easing the neck uses: nothing happens until they are in
+        // each other's reach, then it comes on fast
+        const reach = (ra + rb) * 1.62
+        const v = Math.max(0, Math.min(1, 1 - (d - (ra + rb) * 0.42) / (reach - (ra + rb) * 0.42)))
+        const k = v * 0.17
+        pa.mt = k
+        pa.mx = dx / d
+        pa.my = dy / d
+        pb.mt = k
+        pb.mx = -dx / d
+        pb.my = -dy / d
+      }
+    }
+    for (const [, p] of pos) p.mk += (p.mt - p.mk) * (reduced ? 1 : 0.24)
+    if (fuse) {
+      const pa = pos.get(fuse.a)
+      const pb = pos.get(fuse.b)
+      let path: string | null = null
+      let show = 0
+      let joined = false
+      if (pa && pb) {
+        const ra = fuse.ra * pa.s * (1 + pa.mk)
+        const rb = fuse.rb * pb.s * (1 + pb.mk)
+        const dist = Math.hypot(pb.rx - pa.rx, pb.ry - pa.ry)
+        path = metaballPath(pa.rx, pa.ry, fuse.ra * pa.s, pb.rx, pb.ry, fuse.rb * pb.s, pa.mk, pb.mk)
+        // it fades in as they come into reach, and hands the shape back to the
+        // bodies once they have genuinely merged — past that it would only be
+        // drawing an outline over a mass it is no longer holding together
+        const reach = (ra + rb) * 1.62
+        const near = Math.max(0, Math.min(1, 1 - (dist - (ra + rb) * 0.42) / (reach - (ra + rb) * 0.42)))
+        const over = Math.max(0, (ra + rb - dist) / (ra + rb))
+        show = Math.min(1, near * 3.5) * Math.max(0, 1 - over / 0.16)
+        joined = near > 0.5
+      }
+      goo.setAttribute('d', path ?? '')
+      goo.style.opacity = path ? show.toFixed(3) : '0'
+      goo.classList.toggle('ready', !!path && Math.max(pa?.mk ?? 0, pb?.mk ?? 0) > 0.12)
+      // one surface, not two overlapping outlines: from the moment the neck is
+      // really carrying the join, the drops give up their own rims to it — but
+      // not while it is still a hairline, or they would lose their edges to
+      // something too faint to have replaced them
+      setFusing(path && joined ? [fuse.a, fuse.b] : [])
+    }
+    for (const [id, el] of els) {
+      const p = pos.get(id)
+      if (!p) continue
       const r = el.clientWidth / 2 || 40
       const squish = reduced ? 0 : Math.sin(t * 2 + hashN(id)) * 0.014
-      el.style.transform = `translate3d(${p.rx - r}px, ${p.ry - r}px, 0) scale(${p.s + squish}, ${p.s - squish})`
+      // a body pulled toward another stretches along the line between them and
+      // narrows across it — it does not simply grow. The words ride the surface
+      // rather than being smeared by it, so they stay readable throughout.
+      let lean = ''
+      if (p.mk > 0.002) {
+        const deg = (Math.atan2(p.my, p.mx) * 180) / Math.PI
+        const sx = 1 + p.mk
+        const sy = 1 - p.mk * MORPH_PERP
+        lean = ` rotate(${deg.toFixed(1)}deg) scale(${sx.toFixed(3)}, ${sy.toFixed(3)}) rotate(${(-deg).toFixed(1)}deg)`
+        el.style.setProperty(
+          '--unlean',
+          `rotate(${deg.toFixed(1)}deg) scale(${(1 / sx).toFixed(3)}, ${(1 / sy).toFixed(3)}) rotate(${(-deg).toFixed(1)}deg)`,
+        )
+        leaning.add(id)
+      } else if (leaning.has(id)) {
+        el.style.removeProperty('--unlean')
+        leaning.delete(id)
+      }
+      el.style.transform = `translate3d(${p.rx - r}px, ${p.ry - r}px, 0) scale(${p.s + squish}, ${p.s - squish})${lean}`
     }
+    drawEchoes()
     if (inviteEl.style.display !== 'none') {
       invitePos.x = W / 2 + Math.sin(t * 0.4) * 5
       invitePos.y = H * 0.34 + Math.cos(t * 0.3) * 4
