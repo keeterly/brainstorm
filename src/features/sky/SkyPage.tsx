@@ -692,9 +692,17 @@ function mountSky(root: HTMLDivElement) {
     els.delete(id)
   }
   // A pool with a lot inside it holds smaller members, so the ring it needs
-  // does not run away with the whole sky.
+  // does not run away with the whole sky. The cost is that at twenty members
+  // they are too small to read — which is what tapping one is for.
   function memberR(n = 1) {
     return Math.max(34, Math.min(50, 54 - n * 1.6))
+  }
+  /** The one member you have tapped open, so it can be read. */
+  let peek: string | null = null
+  /** How big a member is drawn: the one being read gets the room it needs. */
+  function memberRadiusOf(id: string, n: number) {
+    const base = memberR(n)
+    return peek === id ? Math.max(base * 2.05, 76) : base
   }
   // The ring an opened pool lays its members out on. Big enough to clear the
   // pool's own body and its name, and big enough that no two members touch —
@@ -771,11 +779,13 @@ function mountSky(root: HTMLDivElement) {
       // open pool renders its contents in orbit — and one of those may itself
       // be a pool, which is what makes groups within groups visible
       if (tl.kind === 'pool' && openPool === tl.t.id) {
-        const mr = memberR(tl.members.length)
         for (const m of tl.members) {
           alive.add(m.id)
+          const mr = memberRadiusOf(m.id, tl.members.length)
           const me = els.get(m.id) ?? mountEl(m.id, 'skyb')
           me.classList.remove('recede')
+          // opened for reading: full text, bigger, and lifted above its ring
+          me.classList.toggle('peek', peek === m.id)
           const inner = view.kidsOf.get(m.id)?.length ?? 0
           if (inner) {
             me.classList.add('pool', 'member')
@@ -1664,6 +1674,15 @@ function mountSky(root: HTMLDivElement) {
   function clearAll() {
     closeMoons()
     const wasOpen = openPool
+    // Closing a member you were reading is a step of its own: it should not
+    // also throw you out of the group you were reading it in. Decide where we
+    // end up before painting — restoring it afterwards left the paint to run
+    // with the group already closed, which unmounted every member in it.
+    if (peek) {
+      peek = null
+      paintAll()
+      return
+    }
     if (wasOpen) {
       // out of a group is into the group that held it, not all the way back to
       // the surface — going three deep and being thrown to the top is a loss
@@ -1910,12 +1929,19 @@ function mountSky(root: HTMLDivElement) {
           best = tl
         }
       }
-      const rOf = (tl: TL) => (siblings ? memberR(siblings.length) : radiusOf(tl))
-      if (best && bestD < rOf(drag.tl) + rOf(best) + (siblings ? 60 : 110)) {
+      const rOf = (tl: TL) => (siblings ? memberRadiusOf(tl.t.id, siblings.length) : radiusOf(tl))
+      // These distances are in world units, and a full ring pulls the camera
+      // out to 0.6 or less — which quietly turned a comfortable target into
+      // one a finger could not hit. Held in screen pixels instead, joining
+      // takes the same gesture however far out you are.
+      const slop = (siblings ? 46 : 90) / cam.k
+      if (best && bestD < rOf(drag.tl) + rOf(best) + slop) {
         const bp = posOf(best.t.id)
         const ra = rOf(drag.tl)
         const rb = rOf(best)
-        const touching = bestD < (ra + rb) * 0.94
+        // overlapping by a finger's worth on screen, not by a fixed fraction
+        // of two bodies that may be 30px across after the camera pulls back
+        const touching = bestD < (ra + rb) * 0.94 + (siblings ? 26 / cam.k : 0)
         // the two bodies are now in each other's field — the frame loop draws
         // the neck and leans them into one another
         fuse = { a: drag.id, b: best.t.id, ra, rb }
@@ -2035,10 +2061,20 @@ function mountSky(root: HTMLDivElement) {
     if (isMember) {
       // a group inside a group opens like any other: you go in one more level
       if (tl && tl.kind === 'pool') {
+        peek = null
         openPool = tl.t.id
         closeMoons()
         frameOpen(tl)
         paintAll()
+        return
+      }
+      // Read first, edit second. Twenty in a ring are too small to read, so the
+      // first tap opens this one up and pushes the ring apart around it; the
+      // second, on a thing you can now actually see, takes you in to write.
+      if (peek !== id) {
+        peek = id
+        paintAll()
+        haptics.grab()
         return
       }
       const t = S().thoughts.find((x) => x.id === id)
@@ -2283,19 +2319,33 @@ function mountSky(root: HTMLDivElement) {
       const g = view.byId.get(openPool)
       if (g) {
         const gp = posOf(g.t.id)
+        const n = g.members.length
         const or = orbitR(g)
-        const mr = memberR(g.members.length)
+        const mr = memberR(n)
+        // Each member takes as much of the ring as its own size needs, rather
+        // than an equal slice. So the one you have tapped open pushes its
+        // neighbours around the circle to make room instead of covering them.
+        const widths = g.members.map((m) => Math.asin(Math.min(0.98, (memberRadiusOf(m.id, n) + 7) / or)))
+        const span = widths.reduce((sum, w) => sum + w, 0) * 2
+        const scale = (Math.PI * 2) / Math.max(Math.PI * 2, span)
+        let walked = 0
         g.members.forEach((m, i) => {
-          const a = -Math.PI / 2 + (i / g.members.length) * Math.PI * 2 + t * 0.05
+          // step to the middle of this one's share, then past it
+          walked += widths[i] * scale
+          const a = -Math.PI / 2 + walked + t * 0.05
+          walked += widths[i] * scale
+          const rad = or + (peek === m.id ? memberRadiusOf(m.id, n) - mr : 0)
           const mp = posOf(m.id)
           if (!(drag && drag.id === m.id)) {
-            mp.x += (gp.x + Math.cos(a) * or - mp.x) * 0.1
-            mp.y += (gp.y + Math.sin(a) * or - mp.y) * 0.1
+            const ease = peek ? 0.16 : 0.1
+            mp.x += (gp.x + Math.cos(a) * rad - mp.x) * ease
+            mp.y += (gp.y + Math.sin(a) * rad - mp.y) * ease
           }
           // members stay in the world, not in the window — clamping them to the
           // glass is what used to fold one side of the ring onto the other
-          mp.x = Math.max(mr, Math.min(worldW() - mr, mp.x))
-          mp.y = Math.max(mr, Math.min(worldH() - mr, mp.y))
+          const r = memberRadiusOf(m.id, n)
+          mp.x = Math.max(r, Math.min(worldW() - r, mp.x))
+          mp.y = Math.max(r, Math.min(worldH() - r, mp.y))
         })
         // clear the orbit's room: the rest of the sky drifts out of the way
         const clear = or + mr + 34
