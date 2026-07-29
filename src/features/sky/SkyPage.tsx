@@ -12,7 +12,7 @@ import { seaLineAt, waterlineY } from '@/world/water'
 import { armUpright, stepUpright, worldTilt } from '@/world/upright'
 import { deepenThought } from './deepenFlow'
 import { haptics } from '@/lib/haptics'
-import { echoRing } from '@/world/echo'
+import { echoRing, wabiPill } from '@/world/echo'
 import type { Thought } from '@/domain/types'
 import './sky.css'
 
@@ -699,10 +699,27 @@ function mountSky(root: HTMLDivElement) {
   }
   /** The one member you have tapped open, so it can be read. */
   let peek: string | null = null
-  /** How big a member is drawn: the one being read gets the room it needs. */
+  /**
+   * How much room a member takes up.
+   *
+   * The one you are reading is not a circle. A circle is a poor container for
+   * a sentence — you lose the four corners and what is left is a narrow column
+   * — so it spreads into a soft rounded card sized to its own text. Everything
+   * that places members needs one number, so this reports the radius of the
+   * circle that would contain it, measured off the real element once it exists.
+   */
   function memberRadiusOf(id: string, n: number) {
     const base = memberR(n)
-    return peek === id ? Math.max(base * 2.05, 76) : base
+    if (peek !== id) return base
+    const el = els.get(id)
+    if (el?.clientWidth) return Math.hypot(el.clientWidth, el.clientHeight) / 2
+    return Math.max(base * 2.4, 96)
+  }
+  /** The opened card, sized in screen terms so it reads the same at any zoom. */
+  function peekBox() {
+    const k = camTarget?.k ?? cam.k
+    const per = 1 / Math.max(0.2, k)
+    return { w: Math.min(300, W - 56) * per, font: 15 * per, pad: 17 * per }
   }
   // The ring an opened pool lays its members out on. Big enough to clear the
   // pool's own body and its name, and big enough that no two members touch —
@@ -752,6 +769,9 @@ function mountSky(root: HTMLDivElement) {
       el.classList.toggle('pool', tl.kind === 'pool')
       // an open pool takes the stage; everything else steps back
       el.classList.toggle('recede', !!openPool && openPool !== tl.t.id)
+      // the group steps back while you read one of the things inside it, so
+      // the card is not sitting on top of its own name
+      el.classList.toggle('behind', !!peek && openPool === tl.t.id)
       if (tl.kind === 'pool') {
         const r = radiusOf(tl)
         el.style.width = el.style.height = r * 2 + 'px'
@@ -784,8 +804,11 @@ function mountSky(root: HTMLDivElement) {
           const mr = memberRadiusOf(m.id, tl.members.length)
           const me = els.get(m.id) ?? mountEl(m.id, 'skyb')
           me.classList.remove('recede')
-          // opened for reading: full text, bigger, and lifted above its ring
+          // opened for reading: full text, in the middle, above a dimmed ring.
+          // Everything else steps back — reading one thing should not mean
+          // reading it through twenty others.
           me.classList.toggle('peek', peek === m.id)
+          me.classList.toggle('behind', !!peek && peek !== m.id)
           const inner = view.kidsOf.get(m.id)?.length ?? 0
           if (inner) {
             me.classList.add('pool', 'member')
@@ -796,8 +819,26 @@ function mountSky(root: HTMLDivElement) {
             nm.style.fontSize = Math.round(Math.max(11, Math.min(15, 6 + mr * 0.11)) * 10) / 10 + 'px'
             nm.textContent = label(m)
             ;(me.querySelector('.state') as HTMLDivElement).textContent = `${inner} inside`
+          } else if (peek === m.id) {
+            // as wide as a sentence wants and only as tall as it needs, with a
+            // hand-blown rounded edge rather than a circle
+            const box = peekBox()
+            me.classList.remove('pool', 'small')
+            me.classList.add('member')
+            me.style.width = box.w + 'px'
+            me.style.height = 'auto'
+            me.style.padding = box.pad + 'px'
+            me.style.setProperty('--blob', wabiPill(m.id, Math.round(box.pad * 1.5)))
+            me.innerHTML = `<div class="t"></div>`
+            const tx = me.querySelector('.t') as HTMLDivElement
+            tx.style.fontSize = box.font.toFixed(1) + 'px'
+            tx.style.width = '100%'
+            tx.textContent = label(m)
           } else {
             me.classList.remove('pool')
+            me.style.height = ''
+            me.style.padding = ''
+            me.style.setProperty('--blob', blobOf(m.id))
             paintDropEl(m, me, mr, true)
           }
         }
@@ -2357,9 +2398,14 @@ function mountSky(root: HTMLDivElement) {
         const or = orbitR(g)
         const mr = memberR(n)
         // Each member takes as much of the ring as its own size needs, rather
-        // than an equal slice. So the one you have tapped open pushes its
-        // neighbours around the circle to make room instead of covering them.
-        const widths = g.members.map((m) => Math.asin(Math.min(0.98, (memberRadiusOf(m.id, n) + 7) / or)))
+        // than an equal slice — so longer titles get more room than short ones.
+        // The one you are reading is not on the ring at all: opened out to a
+        // full card it is bigger than the ring can hold, and squeezing it in
+        // just crushed everything else. It comes to the middle instead, which
+        // is where the room actually is, and the others close the gap behind it.
+        const widths = g.members.map((m) =>
+          peek === m.id ? 0 : Math.asin(Math.min(0.98, (memberRadiusOf(m.id, n) + 7) / or)),
+        )
         const span = widths.reduce((sum, w) => sum + w, 0) * 2
         const scale = (Math.PI * 2) / Math.max(Math.PI * 2, span)
         let walked = 0
@@ -2368,12 +2414,14 @@ function mountSky(root: HTMLDivElement) {
           walked += widths[i] * scale
           const a = -Math.PI / 2 + walked + t * 0.05
           walked += widths[i] * scale
-          const rad = or + (peek === m.id ? memberRadiusOf(m.id, n) - mr : 0)
+          const reading = peek === m.id
           const mp = posOf(m.id)
           if (!(drag && drag.id === m.id)) {
             const ease = peek ? 0.16 : 0.1
-            mp.x += (gp.x + Math.cos(a) * rad - mp.x) * ease
-            mp.y += (gp.y + Math.sin(a) * rad - mp.y) * ease
+            const tx = reading ? gp.x : gp.x + Math.cos(a) * or
+            const ty = reading ? gp.y : gp.y + Math.sin(a) * or
+            mp.x += (tx - mp.x) * ease
+            mp.y += (ty - mp.y) * ease
           }
           // members stay in the world, not in the window — clamping them to the
           // glass is what used to fold one side of the ring onto the other
@@ -2464,7 +2512,10 @@ function mountSky(root: HTMLDivElement) {
     for (const [id, el] of els) {
       const p = pos.get(id)
       if (!p) continue
-      const r = el.clientWidth / 2 || 40
+      // half of each axis: the opened card is wider than it is tall, and using
+      // one number for both hangs it off its own centre
+      const rx = el.clientWidth / 2 || 40
+      const ry = el.clientHeight / 2 || rx
       const squish = reduced ? 0 : Math.sin(t * 2 + hashN(id)) * 0.014
       // a body pulled toward another stretches along the line between them and
       // narrows across it — it does not simply grow. The words ride the surface
@@ -2489,7 +2540,7 @@ function mountSky(root: HTMLDivElement) {
       // last, so it turns the body's own contents and leaves the lean — which
       // points at another drop on screen — in screen space where it belongs.
       el.style.transform =
-        `translate3d(${p.rx - r}px, ${p.ry - r}px, 0) scale(${p.s + squish}, ${p.s - squish})${lean}${level}`
+        `translate3d(${p.rx - rx}px, ${p.ry - ry}px, 0) scale(${p.s + squish}, ${p.s - squish})${lean}${level}`
     }
     drawEchoes()
     if (inviteEl.style.display !== 'none') {
