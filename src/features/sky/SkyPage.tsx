@@ -9,6 +9,7 @@ import { runAction } from '@/ai/client'
 import type { ClassifyOutput } from '@shared/ai/actions/classify-thought'
 import { absorbText } from './absorbFlow'
 import { waterlineY } from '@/world/water'
+import { haptics } from '@/lib/haptics'
 import type { Thought } from '@/domain/types'
 import './sky.css'
 
@@ -219,7 +220,18 @@ function mountSky(root: HTMLDivElement) {
       const saved = savedLayout[id]
       const x = saved ? saved.x * W : W * (0.2 + Math.random() * 0.6)
       const y = saved ? saved.y * H : H * (0.2 + Math.random() * 0.5)
-      p = { x, y, rx: x, ry: y, s: 1, vx: 0, vy: 0 }
+      // a drop that has never been placed rises into the sky and settles;
+      // one returning from a saved layout is simply already there
+      const born = !saved && !reduced
+      p = {
+        x,
+        y,
+        rx: x,
+        ry: born ? Math.min(y + 96, waterlineY() + 10) : y,
+        s: born ? 0.42 : 1,
+        vx: 0,
+        vy: 0,
+      }
       pos.set(id, p)
     }
     return p
@@ -328,7 +340,7 @@ function mountSky(root: HTMLDivElement) {
   const els = new Map<string, HTMLDivElement>()
   function mountEl(id: string, cls: string) {
     const el = document.createElement('div')
-    el.className = cls + (reduced ? '' : ' pop')
+    el.className = cls
     el.dataset.id = id
     field.appendChild(el)
     els.set(id, el)
@@ -487,6 +499,7 @@ function mountSky(root: HTMLDivElement) {
       setTimeout(() => el.remove(), reduced ? 0 : 760)
     }
     setTimeout(() => splash(p.x), reduced ? 0 : 480)
+    haptics.sink()
     say(poolDone ? 'returned to the ocean — the pool with it' : 'returned to the ocean')
     offerUndo(`“${trim(label(t), 26)}” returned to the ocean`, () => {
       S().updateThought(t.id, { status: 'open', completed_at: null })
@@ -545,6 +558,7 @@ function mountSky(root: HTMLDivElement) {
       say(`pooled — “${name}”`)
     }
     splash(at.x)
+    haptics.join()
   }
   function releaseMember(t: Thought, poolId: string) {
     const rel = partOfRel(t.id)
@@ -567,6 +581,7 @@ function mountSky(root: HTMLDivElement) {
     closeMoons()
     holding = { id: tl.t.id, auto, started: performance.now() }
     els.get(tl.t.id)?.classList.add('holding')
+    haptics.grab()
     say(auto ? 'gathering like-minded ideas…' : 'hold — like-minded ideas are drawn in')
   }
   function stepHold() {
@@ -1035,6 +1050,7 @@ function mountSky(root: HTMLDivElement) {
       }
       setTimeout(() => splash(p.x), 480)
     }
+    haptics.arrive()
     setTimeout(() => openPage('path', tl, p.x, p.y), reduced ? 0 : 430)
   }
   let openPool: string | null = null
@@ -1057,6 +1073,7 @@ function mountSky(root: HTMLDivElement) {
     vx: number
     vy: number
     moved: boolean
+    touching: boolean
     target: TL | null
     el: HTMLDivElement
   } | null = null
@@ -1104,6 +1121,7 @@ function mountSky(root: HTMLDivElement) {
       vx: 0,
       vy: 0,
       moved: false,
+      touching: false,
       target: null,
       el: bubEl,
     }
@@ -1164,8 +1182,13 @@ function mountSky(root: HTMLDivElement) {
         meter.style.top = (p.y + bp.y) / 2 + 'px'
         meter.classList.add('on')
         meter.classList.toggle('zero', deg === 0)
+        if (deg === 0 && !drag.touching) haptics.grab()
+        drag.touching = deg === 0
         if (deg === 0) drag.target = best
-      } else meter.classList.remove('on', 'zero')
+      } else {
+        meter.classList.remove('on', 'zero')
+        drag.touching = false
+      }
     }
   })
   stage.addEventListener('pointerup', (e) => {
@@ -1338,6 +1361,28 @@ function mountSky(root: HTMLDivElement) {
             pa.y -= (dy / dist) * push
             pb.x += (dx / dist) * push
             pb.y += (dy / dist) * push
+          }
+        }
+      }
+      // the constellation drifts back into frame as a whole — a uniform
+      // nudge, so your own arrangement is preserved, just re-centred
+      if (view.tls.length && !openPool) {
+        let cx = 0
+        let cy = 0
+        for (const tl of view.tls) {
+          const p = posOf(tl.t.id)
+          cx += p.x
+          cy += p.y
+        }
+        cx /= view.tls.length
+        cy /= view.tls.length
+        const dx = (W / 2 - cx) * 0.011
+        const dy = ((74 + waterlineY()) / 2 - cy) * 0.011
+        if (Math.abs(dx) > 0.008 || Math.abs(dy) > 0.008) {
+          for (const tl of view.tls) {
+            const p = posOf(tl.t.id)
+            p.x += dx
+            p.y += dy
           }
         }
       }
