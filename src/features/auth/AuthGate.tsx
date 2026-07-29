@@ -102,17 +102,12 @@ function RealAuthGate({ children }: { children: ReactNode }) {
   if (locked) return <DeviceLock onOpen={() => setLocked(false)} />
   if (recovering) return <SetPassword onDone={() => setRecovering(false)} />
 
-  if (!hydrated) {
-    return (
-      <div className="page" aria-busy="true">
-        <h1 className="page-title">Brainstorm</h1>
-        <div className="skeleton" style={{ height: 96, marginBottom: 12 }} />
-        <div className="skeleton" style={{ height: 56, marginBottom: 8 }} />
-        <div className="skeleton" style={{ height: 56, marginBottom: 8 }} />
-        <div className="skeleton" style={{ height: 56 }} />
-      </div>
-    )
-  }
+  // Opening the app should be opening a window, not watching a page load. This
+  // used to put a page title and four grey bars on screen while the graph came
+  // down — a different app, for half a second, on every single launch. The sky
+  // is already painted behind this, so the right thing to show is the sky.
+  if (!hydrated) return <div aria-busy="true" aria-label="Opening" />
+
 
   return (
     <>

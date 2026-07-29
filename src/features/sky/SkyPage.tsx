@@ -8,7 +8,8 @@ import { parseCapture } from '@/domain/parse-blocks'
 import { runAction } from '@/ai/client'
 import type { ClassifyOutput } from '@shared/ai/actions/classify-thought'
 import { nameThePool, organizeText, tidySky } from './absorbFlow'
-import { waterlineY } from '@/world/water'
+import { seaLineAt, waterlineY } from '@/world/water'
+import { armUpright, stepUpright, worldTilt } from '@/world/upright'
 import { haptics } from '@/lib/haptics'
 import { echoRing } from '@/world/echo'
 import type { Thought } from '@/domain/types'
@@ -1546,6 +1547,9 @@ function mountSky(root: HTMLDivElement) {
   const TAP_SLOP = 9
   const PAN_SLOP = 16
   stage.addEventListener('pointerdown', (e) => {
+    // iOS only hands over the tilt sensor from inside a real gesture, so the
+    // first touch of the session is when we ask. It asks at most once.
+    armUpright()
     // A first finger arriving while we still think fingers are down means the
     // last gesture's release never reached us. Nothing survives that.
     if (e.isPrimary && touches.size) {
@@ -1688,7 +1692,9 @@ function mountSky(root: HTMLDivElement) {
     p.y = ny
     // the closer to the water, the more the sea reaches up for it
     if (drag.tl.kind === 'drop') {
-      const line = waterlineY()
+      // against the water that is actually under it, which is not level with
+      // the screen once the phone is tilted
+      const line = seaLineAt(e.clientX, worldTilt(), W)
       const reach = 190
       const near = Math.max(0, Math.min(1, (e.clientY - (line - reach)) / reach))
       const ready = e.clientY > line - 12
@@ -1788,7 +1794,7 @@ function mountSky(root: HTMLDivElement) {
       onTap(d.id, d.isMember)
       return
     }
-    if (d.tl.kind === 'drop' && e.clientY > waterlineY() - 12) {
+    if (d.tl.kind === 'drop' && e.clientY > seaLineAt(e.clientX, worldTilt(), W) - 12) {
       completeDrop(d.tl.t)
       persistLayout()
       return
@@ -2170,6 +2176,8 @@ function mountSky(root: HTMLDivElement) {
       // something too faint to have replaced them
       setFusing(path && joined ? [fuse.a, fuse.b] : [])
     }
+    const up = stepUpright(reduced)
+    const level = Math.abs(up) > 0.2 ? ` rotate(${up.toFixed(2)}deg)` : ''
     for (const [id, el] of els) {
       const p = pos.get(id)
       if (!p) continue
@@ -2193,7 +2201,12 @@ function mountSky(root: HTMLDivElement) {
         el.style.removeProperty('--unlean')
         leaning.delete(id)
       }
-      el.style.transform = `translate3d(${p.rx - r}px, ${p.ry - r}px, 0) scale(${p.s + squish}, ${p.s - squish})${lean}`
+      // A drop hangs the way a drop hangs, however the phone is being held: its
+      // highlight stays on top and its words stay the right way up. Applied
+      // last, so it turns the body's own contents and leaves the lean — which
+      // points at another drop on screen — in screen space where it belongs.
+      el.style.transform =
+        `translate3d(${p.rx - r}px, ${p.ry - r}px, 0) scale(${p.s + squish}, ${p.s - squish})${lean}${level}`
     }
     drawEchoes()
     if (inviteEl.style.display !== 'none') {

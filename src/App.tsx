@@ -17,25 +17,29 @@ export default function App() {
   // every button in the app answers a touch the way water does
   useEffect(() => installWaterTouch(), [])
   return (
-    <AuthGate>
+    <>
+      {/* the world is painted before anything asks who you are, so launching
+          the app opens onto the sky rather than onto a loading state */}
       <Atmosphere />
-      <OfflineBanner />
-      <Routes>
-        <Route path="/" element={<SkyPage />} />
-        <Route path="/collect" element={<CollectPage />} />
-        <Route path="/think" element={<Navigate to="/" replace />} />
-        <Route path="/current" element={<CurrentPage />} />
-        <Route path="/memory" element={<MemoryPage />} />
-        <Route path="/thought/:id" element={<ThoughtPage />} />
-        <Route path="/runs" element={<RunsPage />} />
-        <Route path="/import" element={<ImportPage />} />
-        {/* pre-v2 paths */}
-        <Route path="/brain" element={<Navigate to="/think" replace />} />
-        <Route path="/focus" element={<Navigate to="/current" replace />} />
-        <Route path="/settings" element={<Navigate to="/memory" replace />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-      <TabBar />
-    </AuthGate>
+      <AuthGate>
+        <OfflineBanner />
+        <Routes>
+          <Route path="/" element={<SkyPage />} />
+          <Route path="/collect" element={<CollectPage />} />
+          <Route path="/think" element={<Navigate to="/" replace />} />
+          <Route path="/current" element={<CurrentPage />} />
+          <Route path="/memory" element={<MemoryPage />} />
+          <Route path="/thought/:id" element={<ThoughtPage />} />
+          <Route path="/runs" element={<RunsPage />} />
+          <Route path="/import" element={<ImportPage />} />
+          {/* pre-v2 paths */}
+          <Route path="/brain" element={<Navigate to="/think" replace />} />
+          <Route path="/focus" element={<Navigate to="/current" replace />} />
+          <Route path="/settings" element={<Navigate to="/memory" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+        <TabBar />
+      </AuthGate>
+    </>
   )
 }

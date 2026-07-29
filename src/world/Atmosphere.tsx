@@ -4,8 +4,30 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useGraph } from '@/store/graph'
 import { computeWorld } from './engine'
-import { SURFACE, WATER_H, drawWater, invalidateWaterline } from './water'
+import { SURFACE, WATER_DEEP, WATER_DRAW_H, WATER_H, drawWater, invalidateWaterline, seaFloor } from './water'
+import { stepUpright, worldTilt } from './upright'
 import { tickDaylight } from './daylight'
+
+// Everything we draw stops at the edge of the layout viewport. On a tall phone
+// in standalone mode that leaves a strip behind the home indicator that is
+// ours in name only — iOS fills it from the document canvas and the theme
+// colour. Handing both the colour the ocean reaches at its deepest is what
+// makes the world run off the bottom of the glass instead of ending in a flat
+// bar of some colour nobody chose.
+// The ocean is drawn bigger than the window it shows through: wider on both
+// sides and deeper than the bottom edge, so however far it tilts to stay level
+// there is still water in every corner.
+const OVERDRAW_X = 0.3
+const canvasW = () => Math.round(window.innerWidth * (1 + OVERDRAW_X * 2))
+
+
+function paintBeyondTheGlass() {
+  const s = tickDaylight()
+  const floor = seaFloor(s.ground)
+  document.documentElement.style.backgroundColor = floor
+  const meta = document.querySelector('meta[name="theme-color"]')
+  if (meta) meta.setAttribute('content', floor)
+}
 
 export function Atmosphere() {
   const thoughts = useGraph((s) => s.thoughts)
@@ -28,11 +50,11 @@ export function Atmosphere() {
 
     const size = () => {
       if (!canvas || !ctx) return
-      const W = window.innerWidth
+      const W = canvasW()
       canvas.width = W * devicePixelRatio
-      canvas.height = WATER_H * devicePixelRatio
+      canvas.height = WATER_DRAW_H * devicePixelRatio
       canvas.style.width = `${W}px`
-      canvas.style.height = `${WATER_H}px`
+      canvas.style.height = `${WATER_DRAW_H}px`
       ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0)
       invalidateWaterline()
       // how far the water's surface sits above the bottom edge, so anything
@@ -45,10 +67,10 @@ export function Atmosphere() {
     // the sky follows the clock — recomputed on a slow timer and whenever the
     // app comes back to the front, so an evening that arrives while it is in
     // your pocket is already there when you look
-    tickDaylight()
-    const clock = setInterval(() => tickDaylight(), 120000)
+    paintBeyondTheGlass()
+    const clock = setInterval(paintBeyondTheGlass, 120000)
     const wake = () => {
-      if (document.visibilityState === 'visible') tickDaylight()
+      if (document.visibilityState === 'visible') paintBeyondTheGlass()
     }
     document.addEventListener('visibilitychange', wake)
 
@@ -60,7 +82,18 @@ export function Atmosphere() {
       if (fogRef.current) fogRef.current.style.opacity = cur.fog.toFixed(3)
       if (shaftRef.current) shaftRef.current.style.opacity = cur.light.toFixed(3)
 
-      if (ctx && canvas) drawWater(ctx, window.innerWidth, t, reduced)
+      // The ocean holds itself level against the phone. It is drawn wider and
+      // deeper than the glass it shows through, so tilting can never bring a
+      // dry wedge into a corner, and it pivots about the middle of its own
+      // surface — the one point that must not move.
+      stepUpright(reduced)
+      if (canvas) {
+        const deg = worldTilt()
+        canvas.style.transform = deg ? `rotate(${deg.toFixed(2)}deg)` : ''
+        canvas.style.transformOrigin = `50% ${SURFACE}px`
+      }
+
+      if (ctx && canvas) drawWater(ctx, canvasW(), t, reduced)
       raf = requestAnimationFrame(frame)
     }
     raf = requestAnimationFrame(frame)
@@ -123,10 +156,11 @@ export function Atmosphere() {
         data-water
         style={{
           position: 'absolute',
-          left: 0,
-          right: 0,
-          // the ocean runs to the bottom edge of the glass; the tabs float on it
-          bottom: 0,
+          // the ocean runs to the bottom edge of the glass and past it on every
+          // side, so it can tilt to stay level without showing where it ends
+          left: `${-OVERDRAW_X * 100}%`,
+          bottom: -WATER_DEEP,
+          willChange: 'transform',
         }}
       />
       <div

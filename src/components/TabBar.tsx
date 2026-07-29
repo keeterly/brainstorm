@@ -18,7 +18,16 @@ const TABS = [
 ]
 
 const LAYERS = 4
-const RIPPLE_MS = 1150
+
+interface Ring {
+  el: SVGPathElement
+  cx: number
+  cy: number
+  seed: number
+  /** when this layer starts — staggered, so the stack never travels together */
+  born: number
+  life: number
+}
 
 export function TabBar() {
   const { pathname } = useLocation()
@@ -45,47 +54,68 @@ export function TabBar() {
     addEventListener('resize', placeLens)
     return () => removeEventListener('resize', placeLens)
   }, [placeLens])
-  useEffect(() => () => cancelAnimationFrame(raf.current), [])
+  useEffect(
+    () => () => {
+      cancelAnimationFrame(raf.current)
+      for (const g of rings.current) g.el.remove()
+      rings.current = []
+    },
+    [],
+  )
 
   // ---- the echo ----
   // Rings leave the point you touched and travel outward in layers, each on
   // its own clock and its own wobble, so the stack never resolves into one
   // clean pulse. Drawn per frame rather than by CSS: a keyframe cannot make
   // four rings disagree with each other the way water does.
+  //
+  // One loop owns every ring that is currently alive, and a ring is only ever
+  // removed by the loop that is drawing it. Giving each tap its own loop and
+  // cancelling the previous one stranded that tap's rings in the DOM at
+  // whatever opacity they had reached — tap a few times and the water filled
+  // up with scribble that never cleared.
+  const rings = useRef<Ring[]>([])
+  const pump = useCallback(() => {
+    const now = performance.now()
+    for (let i = rings.current.length - 1; i >= 0; i--) {
+      const g = rings.current[i]
+      const u = (now - g.born) / g.life
+      if (u >= 1) {
+        g.el.remove()
+        rings.current.splice(i, 1)
+        continue
+      }
+      if (u < 0) continue
+      const r = 14 + u * 82
+      g.el.setAttribute('d', echoRing(g.cx, g.cy, r, g.seed, 0.05 + u * 0.06))
+      g.el.style.opacity = (Math.pow(Math.sin(u * Math.PI), 1.3) * 0.42).toFixed(3)
+      g.el.style.strokeWidth = (1.1 - u * 0.5).toFixed(2)
+    }
+    raf.current = rings.current.length ? requestAnimationFrame(pump) : 0
+  }, [])
+
   const ripple = (cx: number, cy: number) => {
     const svg = echoRef.current
     if (!svg || matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    const seed = (cx * 0.017 + cy * 0.031) % 7
-    const paths = Array.from({ length: LAYERS }, (_, i) => {
-      const p = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-      svg.appendChild(p)
-      return { el: p, delay: i * 74 + (i % 2) * 38, life: 720 + i * 128, seed: seed + i * 2.7 }
-    })
-    const t0 = performance.now()
-    cancelAnimationFrame(raf.current)
-    const step = () => {
-      const now = performance.now() - t0
-      let alive = false
-      for (const p of paths) {
-        const u = (now - p.delay) / p.life
-        if (u < 0) {
-          alive = true
-          continue
-        }
-        if (u >= 1) {
-          p.el.style.opacity = '0'
-          continue
-        }
-        alive = true
-        const r = 16 + u * 104
-        p.el.setAttribute('d', echoRing(cx, cy, r, p.seed, 0.05 + u * 0.07))
-        p.el.style.opacity = (Math.pow(Math.sin(u * Math.PI), 1.3) * 0.5).toFixed(3)
-        p.el.style.strokeWidth = (1.2 - u * 0.55).toFixed(2)
-      }
-      if (alive && now < RIPPLE_MS) raf.current = requestAnimationFrame(step)
-      else for (const p of paths) p.el.remove()
+    // an impatient tap replaces the last echo rather than piling onto it
+    if (rings.current.length > LAYERS) {
+      for (const g of rings.current.splice(0, rings.current.length - LAYERS)) g.el.remove()
     }
-    raf.current = requestAnimationFrame(step)
+    const now = performance.now()
+    const seed = (cx * 0.017 + cy * 0.031) % 7
+    for (let i = 0; i < LAYERS; i++) {
+      const el = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+      svg.appendChild(el)
+      rings.current.push({
+        el,
+        cx,
+        cy,
+        seed: seed + i * 2.7,
+        born: now + i * 74 + (i % 2) * 38,
+        life: 700 + i * 120,
+      })
+    }
+    if (!raf.current) raf.current = requestAnimationFrame(pump)
   }
 
   const press = (e: React.MouseEvent<HTMLAnchorElement>) => {
