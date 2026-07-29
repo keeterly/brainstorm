@@ -1,9 +1,8 @@
 import { NavLink, useLocation } from 'react-router-dom'
 
-// Vision v2 navigation: Collect · Think · Current · Memory.
+// The sky is home — capture and thinking live inside it, not behind a form.
 const TABS = [
-  { to: '/', label: 'Collect', icon: '✎' },
-  { to: '/think', label: 'Think', icon: '◉' },
+  { to: '/', label: 'Sky', icon: '◉' },
   { to: '/current', label: 'Current', icon: '▸' },
   { to: '/memory', label: 'Memory', icon: '◍' },
 ]

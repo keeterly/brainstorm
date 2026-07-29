@@ -1,0 +1,378 @@
+/* The Sky — the interface IS the water world. Ported from the prototype:
+   glass drops, pools, threads, the ocean, the high clouds, the light page. */
+
+.sky-stage {
+  position: fixed;
+  inset: 0;
+  bottom: calc(var(--tabbar-h) + var(--sab));
+  overflow: hidden;
+  touch-action: none;
+  z-index: 1;
+  background-image:
+    linear-gradient(rgba(160, 200, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(160, 200, 255, 0.035) 1px, transparent 1px);
+  background-size: 96px 96px;
+  background-position: center top;
+}
+.sky-stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 40%, transparent 55%, rgba(2, 3, 6, 0.5) 100%);
+}
+
+.sky-links { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.sky-links line.kin { stroke: rgba(122, 215, 255, 0.13); stroke-width: 1; }
+.sky-links line.bond { stroke: rgba(122, 215, 255, 0.34); stroke-width: 1.2; stroke-dasharray: 1 4; }
+.sky-links line.orbitline { stroke: rgba(255, 255, 255, 0.1); stroke-width: 1; }
+.sky-links line.off { stroke: none; }
+
+.sky-water { position: absolute; left: 0; right: 0; bottom: 0; pointer-events: none; }
+
+.skyb {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  will-change: transform;
+  transition: width 480ms cubic-bezier(0.3, 0, 0.2, 1), height 480ms cubic-bezier(0.3, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+  cursor: pointer;
+  background:
+    radial-gradient(circle 10% at 32% 20%, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.05) 60%, transparent 75%),
+    radial-gradient(ellipse 62% 32% at 50% 14%, transparent 58%, rgba(215, 238, 255, 0.09) 66%, transparent 74%),
+    radial-gradient(ellipse 56% 30% at 50% 90%, transparent 56%, rgba(150, 210, 255, 0.08) 64%, transparent 72%),
+    radial-gradient(circle at 50% 120%, rgba(122, 215, 255, 0.12), transparent 55%),
+    radial-gradient(circle at 50% 30%, rgba(30, 36, 48, 0.9), rgba(14, 17, 24, 0.92) 70%);
+  border: 0.5px solid rgba(205, 228, 255, 0.32);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.1),
+    inset 0 -14px 28px rgba(80, 150, 210, 0.07),
+    -1.5px 0.5px 2px rgba(122, 215, 255, 0.12),
+    1.5px -0.5px 2px rgba(255, 190, 130, 0.08),
+    0 14px 44px rgba(0, 0, 0, 0.55);
+}
+.skyb.saturated {
+  border-color: rgba(122, 215, 255, 0.5);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.1),
+    inset 0 -18px 34px rgba(80, 150, 210, 0.12),
+    0 0 30px rgba(122, 215, 255, 0.16),
+    0 14px 44px rgba(0, 0, 0, 0.55);
+}
+.skyb.saturated .ring {
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  border: 1px solid rgba(122, 215, 255, 0.4);
+  pointer-events: none;
+  animation: sky-breathe 3.2s ease-in-out infinite;
+}
+@keyframes sky-breathe { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.9; } }
+.skyb.pool { border-color: rgba(205, 228, 255, 0.45); }
+.skyb.dragging { z-index: 5; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7), 0 0 30px rgba(122, 215, 255, 0.1); }
+.skyb.holding {
+  z-index: 6;
+  border-color: rgba(122, 215, 255, 0.7);
+  box-shadow:
+    0 0 0 2px rgba(122, 215, 255, 0.22),
+    0 0 46px rgba(122, 215, 255, 0.28),
+    0 14px 44px rgba(0, 0, 0, 0.55);
+}
+.skyb.pop { animation: sky-pop 620ms cubic-bezier(0.2, 1.35, 0.4, 1); }
+@keyframes sky-pop { from { scale: 0.25; opacity: 0; } to { scale: 1; opacity: 1; } }
+
+.skyb .q { width: 78%; font-size: 14.5px; line-height: 1.45; font-weight: 300; color: var(--ink-soft); text-wrap: balance; pointer-events: none; }
+.skyb .t {
+  width: 80%;
+  font-size: 13px;
+  line-height: 1.38;
+  font-weight: 450;
+  color: var(--ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  pointer-events: none;
+}
+.skyb.small .t { font-size: 10.5px; -webkit-line-clamp: 3; }
+.skyb.member .t { font-size: 10.5px; -webkit-line-clamp: 3; }
+.skyb .state { font-size: 9px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-faint); pointer-events: none; }
+.skyb .state.blue { color: var(--water); }
+.skyb .peek { width: 76%; font-size: 10px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.skyb .dots { display: flex; gap: 4px; pointer-events: none; }
+.skyb .dots i { width: 5px; height: 5px; border-radius: 50%; background: rgba(160, 205, 240, 0.5); }
+.skyb .photo {
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center;
+  opacity: 0.82;
+  pointer-events: none;
+}
+.skyb .photo + .t { position: relative; z-index: 1; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.95); }
+
+.sky-moon {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  background:
+    radial-gradient(circle 16% at 32% 24%, rgba(255, 255, 255, 0.32), transparent 70%),
+    radial-gradient(circle at 50% 35%, rgba(30, 40, 54, 0.95), rgba(14, 18, 26, 0.95));
+  border: 0.5px solid rgba(122, 215, 255, 0.4);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  color: var(--water);
+  cursor: pointer;
+  animation: sky-pop 380ms cubic-bezier(0.2, 1.35, 0.4, 1) backwards;
+  z-index: 6;
+}
+.sky-moon .ic { font-size: 15px; line-height: 1; pointer-events: none; }
+.sky-moon .lb { font-size: 7.5px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; pointer-events: none; }
+.sky-moon.dim { opacity: 0.35; color: var(--ink-faint); border-color: rgba(255, 255, 255, 0.15); }
+
+.sky-drop-in {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle 18% at 32% 24%, rgba(255, 255, 255, 0.5), transparent 70%),
+    radial-gradient(circle at 50% 40%, rgba(40, 48, 62, 0.95), rgba(16, 20, 28, 0.95));
+  border: 0.5px solid rgba(205, 228, 255, 0.4);
+  pointer-events: none;
+  transition: transform 750ms cubic-bezier(0.5, 0, 0.4, 1), opacity 750ms;
+  will-change: transform;
+}
+.sky-rain-drop {
+  position: absolute;
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: linear-gradient(rgba(122, 215, 255, 0), rgba(122, 215, 255, 0.65));
+  pointer-events: none;
+  will-change: transform, opacity;
+  transition: transform 620ms cubic-bezier(0.5, 0, 0.9, 0.6), opacity 620ms;
+}
+.sky-ripple {
+  position: absolute;
+  border: 1px solid rgba(122, 215, 255, 0.4);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: sky-rip 900ms ease-out forwards;
+}
+@keyframes sky-rip { from { opacity: 0.9; scale: 0.2; } to { opacity: 0; scale: 1; } }
+
+.sky-meter {
+  position: fixed;
+  z-index: 8;
+  transform: translate(-50%, -50%);
+  font-size: 54px;
+  font-weight: 200;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  text-shadow: 0 0 24px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 160ms;
+}
+.sky-meter.on { opacity: 1; }
+.sky-meter.zero { color: var(--water); }
+
+.sky-head { position: fixed; z-index: 6; top: calc(var(--sat) + 16px); left: 0; right: 0; text-align: center; pointer-events: none; }
+.sky-head .mark { font-size: 12px; font-weight: 600; letter-spacing: 0.34em; text-indent: 0.34em; opacity: 0.9; color: var(--ink); }
+.sky-head .hint { margin-top: 7px; font-size: 11.5px; color: var(--ink-faint); transition: opacity 600ms; }
+
+.sky-rest {
+  position: fixed;
+  z-index: 6;
+  top: calc(var(--sat) + 14px);
+  right: 14px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  background: rgba(15, 22, 32, 0.55);
+  border: 0.5px solid rgba(205, 228, 255, 0.18);
+  color: var(--ink-faint);
+  font-size: 11px;
+  display: none;
+  cursor: pointer;
+}
+.sky-rest.show { display: block; }
+
+.sky-undo {
+  position: fixed;
+  z-index: 110;
+  left: 50%;
+  bottom: calc(var(--tabbar-h) + var(--sab) + 16px);
+  transform: translateX(-50%) translateY(90px);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 86vw;
+  padding: 11px 18px;
+  border-radius: 999px;
+  background: rgba(15, 22, 32, 0.88);
+  border: 0.5px solid rgba(205, 228, 255, 0.24);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: var(--ink-soft);
+  font-size: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 460ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 320ms;
+}
+.sky-undo.show { transform: translateX(-50%) translateY(0); opacity: 1; pointer-events: auto; }
+.sky-undo .lb { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sky-undo b { color: var(--water); font-weight: 600; cursor: pointer; flex-shrink: 0; }
+
+/* ---------- inside the drop: the full-screen light page ---------- */
+.sky-page {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: none;
+  flex-direction: column;
+  background-color: #edf3f9;
+  background-image:
+    radial-gradient(circle 300px at 30% 12%, rgba(255, 255, 255, 0.85), transparent 70%),
+    radial-gradient(ellipse 90% 40% at 50% 108%, rgba(122, 190, 235, 0.22), transparent 60%),
+    radial-gradient(circle 900px at 50% 30%, #f7fafd, #e9f1f8 62%, #dfeaf4);
+  color: #131a24;
+  clip-path: circle(0px at 50% 50%);
+  transition: clip-path 560ms cubic-bezier(0.32, 0, 0.15, 1);
+}
+.sky-page.show { display: flex; }
+.sky-page .top, .sky-page textarea, .sky-page .pans, .sky-page .bot {
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 420ms ease 140ms, transform 520ms cubic-bezier(0.2, 0.8, 0.2, 1) 140ms;
+}
+.sky-page.on .top, .sky-page.on textarea, .sky-page.on .pans, .sky-page.on .bot { opacity: 1; transform: none; }
+.sky-page .top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: calc(var(--sat) + 18px) 20px 6px;
+}
+.sky-page .pq { flex: 1; font-size: 15px; font-weight: 400; line-height: 1.45; color: #5b6b7e; text-wrap: balance; padding-top: 6px; }
+.sky-page .x {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(19, 26, 36, 0.06);
+  border: 0.5px solid rgba(19, 26, 36, 0.12);
+  color: #465362;
+  font-size: 17px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.sky-page textarea {
+  flex: 1;
+  width: 100%;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  padding: 10px 22px 16px;
+  font-family: inherit;
+  font-size: 17px;
+  line-height: 1.65;
+  color: #131a24;
+  caret-color: #2a7fb8;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.sky-page textarea::placeholder { color: #9db0c2; font-weight: 300; }
+.sky-page .pans { max-height: 26dvh; overflow-y: auto; padding: 0 22px 8px; }
+.sky-page .pans .lab { font-size: 9.5px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: #8fa3b6; margin-bottom: 6px; }
+.sky-page .pans .a { font-size: 13.5px; line-height: 1.5; color: #3d4b5c; padding: 7px 0; border-top: 0.5px solid rgba(19, 26, 36, 0.08); }
+.sky-page .pans img { max-width: 120px; border-radius: 12px; display: block; margin-bottom: 8px; }
+.sky-page .bot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 20px calc(var(--sab) + 16px);
+}
+.sky-page .tools { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.sky-page .tool {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(19, 26, 36, 0.06);
+  border: 0.5px solid rgba(19, 26, 36, 0.14);
+  font-size: 16px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.sky-page .tool.show { display: flex; }
+.sky-page .tool.live { background: rgba(42, 127, 184, 0.16); border-color: rgba(42, 127, 184, 0.5); }
+.sky-page .note { font-size: 11px; color: #8fa3b6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sky-page .done {
+  min-height: 46px;
+  padding: 0 28px;
+  border-radius: 999px;
+  background: #131a24;
+  color: #f2f7fb;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+}
+.sky-page .done:active { transform: scale(0.96); }
+.sky-page .done:disabled { opacity: 0.35; }
+
+/* the path — rain resolves into a quiet page */
+.sky-page.path .pans { max-height: none; flex: 1; padding-top: 6px; }
+.sky-page .step {
+  display: grid;
+  grid-template-columns: 74px 1fr;
+  gap: 4px 14px;
+  padding: 15px 0;
+  border-top: 0.5px solid rgba(19, 26, 36, 0.08);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 460ms ease, transform 560ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.sky-page.on .step { opacity: 1; transform: none; }
+.sky-page .step .k {
+  grid-row: span 2;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #8fa3b6;
+  padding-top: 3px;
+}
+.sky-page .step.first .k { color: #2a7fb8; }
+.sky-page .step .v { font-size: 16px; font-weight: 550; line-height: 1.4; color: #131a24; }
+.sky-page .step .d { font-size: 13px; line-height: 1.55; color: #5b6b7e; }
+
+@media (prefers-reduced-motion: reduce) {
+  .skyb.pop, .sky-ripple, .skyb.saturated .ring, .sky-moon { animation: none; }
+  .sky-drop-in, .sky-rain-drop, .sky-page, .sky-page .top, .sky-page textarea,
+  .sky-page .pans, .sky-page .bot, .sky-page .step, .skyb { transition: none; }
+}
