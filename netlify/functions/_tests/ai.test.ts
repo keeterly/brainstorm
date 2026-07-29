@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import handler from './ai'
+import handler from '../ai'
 
 // End-to-end function tests with the network fully mocked: Supabase auth,
 // agent_runs REST, and the Anthropic API.
