@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { useGraph } from '@/store/graph'
-import { addTo, bin, groupInto, membersOf, rename, takeOut, ungroup } from './groupFlow'
+import { addTo, bin, complete, groupInto, membersOf, rename, takeOut, ungroup } from './groupFlow'
 
 const S = () => useGraph.getState()
 const openIds = () => S().thoughts.filter((t) => t.status === 'open').map((t) => t.id)
@@ -225,5 +225,38 @@ describe('gathering some of a group into one of their own', () => {
     const { g, a, b } = seed()
     const res = groupInto(g.id, [a.id, b.id], '   ')!
     expect(S().thoughts.find((t) => t.id === res.groupId)?.title).toBeTruthy()
+  })
+})
+
+describe('ticking something off', () => {
+  it('was the verb this page did not have, on the page most obviously wanting it', () => {
+    const { a } = seed()
+    const u = complete(a.id)!
+    expect(S().thoughts.find((t) => t.id === a.id)?.status).toBe('done')
+    u.undo()
+    expect(S().thoughts.find((t) => t.id === a.id)?.status).toBe('open')
+  })
+
+  it('is done, not archived — the ocean is built on the difference', () => {
+    // archived is "I do not want to look at this"; done is "this happened"
+    const { a } = seed()
+    complete(a.id)
+    expect(S().thoughts.find((t) => t.id === a.id)?.status).not.toBe('archived')
+    expect(S().thoughts.find((t) => t.id === a.id)?.completed_at).toBeTruthy()
+  })
+
+  it('un-ticks, because a mis-tap is not a decision', () => {
+    const { a } = seed()
+    complete(a.id)
+    expect(complete(a.id)!.note).toContain('open again')
+    expect(S().thoughts.find((t) => t.id === a.id)?.status).toBe('open')
+  })
+
+  it('leaves the sky, so the list is the only place it lingers', () => {
+    const { g, a } = seed()
+    complete(a.id)
+    expect(membersOf(g.id).map((m) => m.id)).not.toContain(a.id)
+    // …and the list keeps it, struck through, so it does not vanish under a finger
+    expect(membersOf(g.id, true).map((m) => m.id)).toContain(a.id)
   })
 })

@@ -401,7 +401,12 @@ body.sky-held {
   display: flex;
   align-items: center;
   gap: 14px;
-  max-width: 86vw;
+  /* As wide as what it has to say, capped at the glass. Shrink-to-fit on a
+     fixed element was landing well short of both, so the bar came out narrower
+     than its own sentence and ellipsised the verb off the end of it — and the
+     verb is the whole message: done, taken out and put away all end there. */
+  width: max-content;
+  max-width: 92vw;
   padding: 11px 18px;
   border-radius: 999px;
   background: rgba(15, 22, 32, 0.88);
@@ -415,7 +420,15 @@ body.sky-held {
   transition: transform 460ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 320ms;
 }
 .sky-undo.show { transform: translateX(-50%) translateY(0); opacity: 1; pointer-events: auto; }
-.sky-undo .lb { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The verb is the point — done, taken out, put away all end the sentence, and
+   clipping from the right is exactly where it lands. Room first, and a shorter
+   name in the note, so what happened survives. */
+/* min-width, not flex: 1. `flex: 1` is `flex: 1 1 0%`, and a zero basis makes
+   this contribute nothing to the shrink-to-fit width of a bar that has no width
+   of its own — so the bar came out narrower than its own text and clipped
+   harder than before. Default basis, free to shrink only when it genuinely
+   must. */
+.sky-undo .lb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sky-undo b { color: var(--water); font-weight: 600; cursor: pointer; flex-shrink: 0; }
 
 /* ---------- inside the drop: the full-screen light page ---------- */
@@ -568,10 +581,30 @@ body.sky-held {
 }
 .sky-page .pans .row .out:active { color: var(--paper-ink, #3d4b5c); }
 
-/* Picking several at once — the one organising move a list can make and a drag
-   cannot. An empty ring until it is chosen, because a page of ticked boxes
-   reads as a form and this is meant to read as a list. */
-.sky-page .pans .row .pick {
+/* Ticking off, and choosing — two things a round control on the left of a row
+   can mean, which are not the same thing. Ticking off is what you do
+   constantly, so it keeps the circle everybody already reads. Choosing several
+   is occasional, so it lives behind a word, and while it is on the circles turn
+   square: a mode you cannot see is a trap. */
+.sky-page .pans .lab.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.sky-page .pans .lab.head .sel {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--paper-soft, #8fa3b6);
+  background: none;
+  border: 0;
+  padding: 6px 0 6px 12px;
+  margin: -6px 0;
+}
+.sky-page .pans.picking .lab.head .sel { color: var(--paper-ink, #3d4b5c); }
+
+.sky-page .pans .row .tick {
   flex-shrink: 0;
   width: 38px;
   height: 38px;
@@ -581,19 +614,53 @@ body.sky-held {
   border: 0;
   position: relative;
 }
-.sky-page .pans .row .pick::before {
+.sky-page .pans .row .tick::before {
   content: '';
   position: absolute;
   inset: 12px;
   border-radius: 50%;
   border: 1.5px solid rgba(19, 26, 36, 0.22);
-  transition: background 160ms ease, border-color 160ms ease;
+  transition: background 160ms ease, border-color 160ms ease, border-radius 160ms ease;
 }
-.sky-page .pans .row.on .pick::before {
+/* the tick itself: two strokes, drawn only once it is done */
+.sky-page .pans .row .tick::after {
+  content: '';
+  position: absolute;
+  left: 16px;
+  top: 18px;
+  width: 8px;
+  height: 4px;
+  border-left: 1.5px solid #fff;
+  border-bottom: 1.5px solid #fff;
+  transform: rotate(-45deg) scale(0.4);
+  opacity: 0;
+  transition: opacity 140ms ease, transform 180ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.sky-page .pans .row.ticked .tick::before {
   background: var(--paper-ink, #3d4b5c);
   border-color: var(--paper-ink, #3d4b5c);
 }
-.sky-page .pans .row.on .t { color: var(--paper-ink, #3d4b5c); }
+.sky-page .pans .row.ticked .tick::after { opacity: 1; transform: rotate(-45deg) scale(1); }
+/* struck through and stepped back, but still legible and still yours to un-tick */
+.sky-page .pans .row.ticked .t {
+  color: var(--paper-soft, #8fa3b6);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-color: rgba(19, 26, 36, 0.3);
+}
+
+/* choosing: square, hollow until chosen, and no tick inside it */
+.sky-page .pans.picking .row .tick::before { border-radius: 6px; }
+.sky-page .pans.picking .row .tick::after { display: none; }
+.sky-page .pans.picking .row.ticked .tick::before {
+  background: none;
+  border-color: rgba(19, 26, 36, 0.22);
+}
+.sky-page .pans.picking .row.on .tick::before {
+  background: var(--paper-ink, #3d4b5c);
+  border-color: var(--paper-ink, #3d4b5c);
+}
+.sky-page .pans.picking .row.on .t { color: var(--paper-ink, #3d4b5c); }
 
 /* The last row is always the empty one, so adding is typing rather than
    finding a button. */
@@ -621,6 +688,9 @@ body.sky-held {
 .sky-page .pans .picked .d.bad { color: #b4534b; }
 .sky-page .pans .picked .d:active { opacity: 0.5; }
 .sky-page .pans .picked .d[hidden] { display: none; }
+/* `display: flex` above beats the browser's own rule for [hidden], so without
+   this the bar stood there permanently offering to take out zero things. */
+.sky-page .pans .picked[hidden] { display: none; }
 
 .sky-page .pans .danger {
   display: flex;
@@ -678,7 +748,9 @@ body.sky-held {
 .sky-page .tool.show { display: flex; }
 .sky-page .tool.live { background: rgba(42, 127, 184, 0.16); border-color: rgba(42, 127, 184, 0.5); }
 .sky-page .note { font-size: 11px; color: #9db0c2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
-.sky-page .done {
+/* Scoped to the bar it lives in. Unscoped, `.sky-page .done` also matched a row
+   marked done in the list above and painted it as a large dark button. */
+.sky-page .bot .done {
   min-height: 46px;
   padding: 0 28px;
   border-radius: 999px;
@@ -690,8 +762,8 @@ body.sky-held {
   border: none;
   cursor: pointer;
 }
-.sky-page .done:active { transform: scale(0.96); }
-.sky-page .done:disabled { opacity: 0.35; }
+.sky-page .bot .done:active { transform: scale(0.96); }
+.sky-page .bot .done:disabled { opacity: 0.35; }
 
 /* the path — rain resolves into a quiet page */
 .sky-page.path .pans { max-height: none; flex: 1; padding-top: 6px; }

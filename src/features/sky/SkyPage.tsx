@@ -17,7 +17,7 @@ import { applyDeepen, deepenThought } from './deepenFlow'
 import { applyAnswer, answerThought } from './answerFlow'
 import { fullDepth, sizeUp, waitingWord, type Sizing } from './gaugeFlow'
 import { isQuestion } from '@/domain/question'
-import { addTo, bin, groupInto, membersOf, rename, takeOut, ungroup, type Undone } from './groupFlow'
+import { addTo, bin, complete, groupInto, membersOf, rename, takeOut, ungroup, type Undone } from './groupFlow'
 import { awaitRun, markApplied, pendingRuns, subjectOf } from '@/ai/pending'
 import { reshapeTally, reshapeThought } from './reshapeFlow'
 import { haptics } from '@/lib/haptics'
@@ -1809,9 +1809,9 @@ function mountSky(root: HTMLDivElement) {
       }
     } else if (mode === 'group' && tl) {
       // Everything you can do to a group, in the one place a group is a thing
-      // rather than a container: its name, what is in it, what you want to add
-      // to it, which of its contents belong together, and the two ways to be
-      // rid of it.
+      // rather than a container: its name, what is in it, what is done, what
+      // you want to add, which of its contents belong together, and the two
+      // ways to be rid of it.
       //
       // Nothing here has a Save. Every field commits when you leave it, because
       // the × sits an inch from the name box and a page that loses your typing
@@ -1820,17 +1820,29 @@ function mountSky(root: HTMLDivElement) {
       pageT.value = label(tl.t)
       pageT.placeholder = 'Name it'
       nameFor = tl.t.id
-      const inside = membersOf(tl.t.id)
-      pageN.textContent = inside.length ? `${inside.length} inside` : 'nothing inside it yet'
+      // Keeping what was just ticked, so the row strikes through under your
+      // finger instead of vanishing out from under it.
+      const inside = membersOf(tl.t.id, true)
+      const done = () => inside.filter((m) => S().thoughts.find((t) => t.id === m.id)?.status === 'done').length
+      const tally = () => {
+        const d = done()
+        pageN.textContent = !inside.length
+          ? 'nothing inside it yet'
+          : d
+            ? `${inside.length} inside · ${d} done`
+            : `${inside.length} inside`
+      }
+      tally()
       pageA.style.display = 'block'
       pageA.innerHTML =
         (inside.length
-          ? `<div class="lab">what is inside</div>` +
+          ? `<div class="lab head"><span>what is inside</span>` +
+            `<button class="sel">Select</button></div>` +
             inside
               .map(
                 (_m, i) =>
                   `<div class="row" data-i="${i}">` +
-                  `<button class="pick" role="checkbox" aria-checked="false" aria-label="Pick this one"></button>` +
+                  `<button class="tick" role="checkbox" aria-checked="false" aria-label="Done"></button>` +
                   `<input class="t" aria-label="What this is called" enterkeyhint="done" />` +
                   `<button class="out" aria-label="Take it out of this group">take out</button></div>`,
               )
@@ -1845,30 +1857,51 @@ function mountSky(root: HTMLDivElement) {
         `<button class="d bad" data-act="bin">Put the whole group away</button>` +
         `</div>`
 
+      // Two things a round control on the left of a row can mean, and they are
+      // not the same thing: "this is finished" and "I have chosen this one".
+      // Ticking off is what you do constantly, so it keeps the always-visible
+      // spot and the shape everybody already reads. Choosing several is
+      // occasional, so it lives behind a word — and while it is on, the ticks
+      // become squares, because a mode you cannot see is a trap.
+      let picking = false
       const picked = new Set<string>()
+      const selBtn = pageA.querySelector('.sel') as HTMLButtonElement | null
       const pickedBar = pageA.querySelector('.picked') as HTMLDivElement
       const groupBtn = pickedBar.querySelector('.go') as HTMLButtonElement
       const takeBtn = pickedBar.querySelector('.out') as HTMLButtonElement
       const awayBtn = pickedBar.querySelector('.away') as HTMLButtonElement
       const refreshPicked = () => {
-        pickedBar.hidden = picked.size < 1
+        pageA.classList.toggle('picking', picking)
+        pickedBar.hidden = !picking || picked.size < 1
         groupBtn.hidden = picked.size < 2
         groupBtn.textContent = `Group these ${picked.size}`
         takeBtn.textContent = picked.size === 1 ? 'Take it out' : `Take these ${picked.size} out`
         awayBtn.textContent = picked.size === 1 ? 'Put it away' : `Put these ${picked.size} away`
+        if (selBtn) selBtn.textContent = picking ? 'Done selecting' : 'Select'
       }
+      selBtn?.addEventListener('click', (e) => {
+        e.stopPropagation()
+        picking = !picking
+        if (!picking) {
+          picked.clear()
+          for (const r of [...pageA.querySelectorAll('.row.on')]) r.classList.remove('on')
+        }
+        refreshPicked()
+      })
       refreshPicked()
 
       // .value, never innerHTML: these are the user's own words and they are
       // not markup
       ;[...pageA.querySelectorAll('.row:not(.add)')].forEach((row, i) => {
+        const m = inside[i]
         const field = row.querySelector('.t') as HTMLInputElement
-        field.value = label(inside[i])
+        field.value = label(m)
+        row.classList.toggle('ticked', S().thoughts.find((t) => t.id === m.id)?.status === 'done')
         // No edit mode, no pencil, no second screen: the row is the field, so
         // fixing a name is typing over it. Committed when you leave it or press
         // return — and re-rendering the list here would steal the caret, so it
         // does not.
-        const commit = () => landUndo(rename(inside[i].id, field.value))
+        const commit = () => landUndo(rename(m.id, field.value))
         field.addEventListener('change', commit)
         field.addEventListener('keydown', (e) => {
           if ((e as KeyboardEvent).key === 'Enter') {
@@ -1876,21 +1909,31 @@ function mountSky(root: HTMLDivElement) {
             field.blur()
           }
         })
-        const pick = row.querySelector('.pick') as HTMLButtonElement
-        pick.addEventListener('click', (e) => {
+        const tick = row.querySelector('.tick') as HTMLButtonElement
+        tick.addEventListener('click', (e) => {
           e.stopPropagation()
-          const on = !picked.has(inside[i].id)
-          if (on) picked.add(inside[i].id)
-          else picked.delete(inside[i].id)
-          pick.setAttribute('aria-checked', String(on))
-          row.classList.toggle('on', on)
-          refreshPicked()
+          if (picking) {
+            const on = !picked.has(m.id)
+            if (on) picked.add(m.id)
+            else picked.delete(m.id)
+            tick.setAttribute('aria-checked', String(on))
+            row.classList.toggle('on', on)
+            refreshPicked()
+            return
+          }
+          // ticked off: struck through here, gone from the sky, and one tap
+          // away from being open again
+          landUndo(complete(m.id))
+          const nowDone = S().thoughts.find((t) => t.id === m.id)?.status === 'done'
+          tick.setAttribute('aria-checked', String(nowDone))
+          row.classList.toggle('ticked', nowDone)
+          tally()
         })
         row.querySelector('.out')?.addEventListener('click', (e) => {
           e.stopPropagation()
           // whatever they typed and did not commit goes in before the row does
           commit()
-          landUndo(takeOut(inside[i].id))
+          landUndo(takeOut(m.id))
           // the page is showing a list that just changed
           openPage('group', tl, ox, oy)
         })
@@ -1918,8 +1961,8 @@ function mountSky(root: HTMLDivElement) {
 
       groupBtn.addEventListener('click', (e) => {
         e.stopPropagation()
-        const ids = inside.filter((m) => picked.has(m.id)).map((m) => m.id)
-        const res = groupInto(tl.t.id, ids, conceptName(inside.filter((m) => picked.has(m.id)).map(label)))
+        const chosen = inside.filter((m) => picked.has(m.id))
+        const res = groupInto(tl.t.id, chosen.map((m) => m.id), conceptName(chosen.map(label)))
         if (!res) return
         landUndo(res.undone)
         // the local guess lands instantly; a real name replaces it a moment later

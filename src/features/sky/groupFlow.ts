@@ -37,7 +37,7 @@ const S = () => useGraph.getState()
 /** Short enough for the one line at the foot of the sky that has to hold it. */
 const label = (t: Thought) => {
   const s = (t.title || t.raw_content).trim()
-  return s.length > 34 ? s.slice(0, 33).trimEnd() + '…' : s
+  return s.length > 26 ? s.slice(0, 25).trimEnd() + '…' : s
 }
 
 /**
@@ -149,6 +149,31 @@ export function bin(rootId: string): Undone | null {
 }
 
 /**
+ * Tick it off.
+ *
+ * The verb the group page was missing, on the one screen where it is most
+ * obviously wanted: twenty-five actions in a list and no way to say you had
+ * done any of them. Everywhere else in the app completion exists — a button on
+ * the Current, dragging a drop into the sea — and neither is reachable from
+ * here without leaving.
+ *
+ * `done` rather than `archived`, because these are different claims. Archived
+ * is "I do not want to look at this"; done is "this happened", and the ocean,
+ * the light it throws, and every count of what you have finished are built on
+ * the difference.
+ */
+export function complete(id: string): Undone | null {
+  const t = S().thoughts.find((x) => x.id === id)
+  if (!t) return null
+  const wasDone = t.status === 'done'
+  S().toggleDone(id)
+  return {
+    note: wasDone ? `“${label(t)}” is open again` : `“${label(t)}” is done`,
+    undo: () => S().toggleDone(id),
+  }
+}
+
+/**
  * Put something new straight into the group.
  *
  * The group page is where you are when you notice the thing that is missing
@@ -217,11 +242,18 @@ export function groupInto(
   }
 }
 
-/** What is inside a group right now, in the order the sky shows them. */
-export function membersOf(groupId: string): Thought[] {
+/**
+ * What is inside a group right now, in the order the sky shows them.
+ *
+ * Optionally including what has just been finished. Ticking something off and
+ * watching the row disappear from under your finger is unnerving and gives you
+ * nowhere to un-tick — so the list you are looking at keeps them, struck
+ * through, and the sky does not.
+ */
+export function membersOf(groupId: string, withDone = false): Thought[] {
   const s = S()
   return s.relationships
     .filter((r) => r.type === 'part_of' && r.to_id === groupId)
     .map((r) => s.thoughts.find((t) => t.id === r.from_id))
-    .filter((t): t is Thought => !!t && t.status === 'open')
+    .filter((t): t is Thought => !!t && (t.status === 'open' || (withDone && t.status === 'done')))
 }
