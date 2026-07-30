@@ -20,8 +20,58 @@ body,
   touch-action: manipulation;
 }
 
+/*
+ * The hem of the world — the last 59pt of screen that nothing fixed can reach.
+ *
+ * On an installed iPhone the layout viewport is shorter than the screen, so
+ * `position: fixed; inset: 0` — which is every layer that paints this world —
+ * stops short of the bottom. Painting the document canvas does not help
+ * either: iOS fills that strip from the root's background *colour* and ignores
+ * its images, which is why the bar stayed one flat colour through three goes at
+ * it. Document content is the only thing that has ever reached down there, and
+ * that is the entire reason Memory — the one page long enough to scroll — never
+ * showed a bar.
+ *
+ * So this is document content, rendered last in App so it is last in the flow:
+ * it adds exactly --bleed to the height of the document and sits at the very
+ * end of it. On a page the height of the glass that is the strip; on a page
+ * that scrolls it is below the fold, where the strip is already covered by the
+ * page itself. See Atmosphere.tsx, which sizes and paints the inner div.
+ */
+.world-hem {
+  position: relative;
+  /* pushed to the bottom of the column: on a page shorter than the glass the
+     free space goes above it, so it lands at the very bottom of the screen
+     rather than wherever that page's content happened to stop */
+  margin-top: auto;
+  flex: 0 0 var(--bleed, 0px);
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+/* the full height of the world's box, bottom-aligned, so its gradients land
+   where the fixed layers put theirs and the strip is the last of one picture */
+.world-hem > div {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* The column the hem hangs from — see .world-hem.
+   The extra --bleed goes on the body and nowhere else: put it on all three of
+   html/body/#root and each one adds it to the last, and the document comes out
+   two bleeds too tall. The body is the one that has to hold it, because the
+   body is what the sky clips with `overflow: hidden`. */
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
 body {
   margin: 0;
+  min-height: calc(100% + var(--bleed, 0px));
   background:
     radial-gradient(ellipse 120% 60% at 50% -10%, var(--ground-high) 0%, transparent 60%),
     var(--ground);

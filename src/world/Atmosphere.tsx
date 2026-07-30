@@ -141,7 +141,16 @@ function paintBeyondTheGlass() {
   const floor = seaFloor(s.ground)
   const root = document.documentElement
   const bleed = parseFloat(getComputedStyle(root).getPropertyValue('--bleed')) || 0
-  root.style.backgroundImage = [WORLD_VIGNETTE, seaTint(), WORLD_BG].filter(Boolean).join(',')
+  const stack = [WORLD_VIGNETTE, seaTint(), WORLD_BG].filter(Boolean).join(',')
+  // The hem carries the world into the strip; see the element itself. Sized to
+  // the world's box and bottom-aligned, so its gradients sit where the fixed
+  // layers' gradients sit.
+  const hem = document.querySelector('.world-hem > div') as HTMLDivElement | null
+  if (hem) {
+    hem.style.height = `${Math.round(window.innerHeight + bleed)}px`
+    hem.style.background = stack
+  }
+  root.style.backgroundImage = stack
   root.style.backgroundSize = `100% ${Math.round(window.innerHeight + bleed)}px`
   root.style.backgroundRepeat = 'no-repeat'
   root.style.backgroundPosition = '0 0'
@@ -324,6 +333,15 @@ export function Atmosphere() {
   )
 }
 
+const HEM_GRAIN: React.CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  opacity: 0.07,
+  backgroundSize: '160px 160px',
+  backgroundImage:
+    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E\")",
+}
+
 const GRAIN: React.CSSProperties = {
   position: 'fixed',
   inset: '0 0 calc(-1 * var(--bleed)) 0',
@@ -361,4 +379,41 @@ export function evaporateAt(x?: number) {
   v.style.top = `${window.innerHeight - 160}px`
   document.body.appendChild(v)
   setTimeout(() => v.remove(), 2700)
+}
+
+/**
+ * The hem of the world — the last of the screen that nothing fixed can reach.
+ *
+ * Everything that paints this world is `position: fixed`, and on an installed
+ * iPhone fixed means "the layout viewport", which comes back 59pt shorter than
+ * the screen. Giving the document canvas the world's gradients did not reach it
+ * either: iOS fills that strip from the root's background *colour* and ignores
+ * its images, which is why the bar stayed exactly one flat colour through three
+ * goes at it — measured off the phone each time, and flat edge to edge each
+ * time.
+ *
+ * The one thing that has always reached down there is document content. That is
+ * the entire reason Memory, the only page long enough to scroll, never showed a
+ * bar. So this is document content, and it is rendered last in App so it is the
+ * last thing in the flow: it adds exactly --bleed to the height of the document
+ * and sits at the very end of it, wherever that falls. On a page the height of
+ * the glass that is the strip; on a page that scrolls it is below the fold,
+ * where the strip is already covered by the page itself.
+ *
+ * What it holds is the world's own bottom edge — the inner div is the full
+ * height of the world's box and bottom-aligned, so its gradients land exactly
+ * where the fixed layers put theirs and the strip is the last of one picture
+ * rather than the first of another. Clipped to the hem, so none of the rest of
+ * it is ever drawn twice.
+ */
+export function WorldHem() {
+  return (
+    <div className="world-hem" aria-hidden>
+      <div />
+      {/* the grain is fixed too, so the hem needs its own copy — without it the
+          join is a few levels lighter above the line than below, which is
+          exactly the seven per cent of noise that stops at the glass */}
+      <div style={HEM_GRAIN} />
+    </div>
+  )
 }

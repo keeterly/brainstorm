@@ -4,7 +4,7 @@ import { AuthGate } from '@/features/auth/AuthGate'
 import { installWaterTouch } from '@/lib/touch-water'
 import { TabBar } from '@/components/TabBar'
 import { OfflineBanner } from '@/components/OfflineBanner'
-import { Atmosphere } from '@/world/Atmosphere'
+import { Atmosphere, WorldHem } from '@/world/Atmosphere'
 import SkyPage from '@/features/sky/SkyPage'
 import CollectPage from '@/features/collect/CollectPage'
 import CurrentPage from '@/features/current/CurrentPage'
@@ -44,6 +44,8 @@ export default function App() {
         </Routes>
         <TabBar />
       </AuthGate>
+      {/* last in the flow on purpose — see WorldHem */}
+      <WorldHem />
     </>
   )
 }
