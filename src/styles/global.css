@@ -88,7 +88,7 @@ a {
   border: 0.5px solid rgba(var(--accent-rgb), 0.22);
   border-radius: var(--r-full);
   background:
-    radial-gradient(circle 16% at 26% 24%, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.05) 60%, transparent 78%),
+    radial-gradient(ellipse 16% 16% at 26% 24%, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.05) 60%, transparent 78%),
     radial-gradient(ellipse 62% 40% at 50% 106%, var(--drop-glow, rgba(122, 215, 255, 0.2)), transparent 62%),
     radial-gradient(circle at 42% 26%, var(--drop-body-hi, rgba(48, 59, 79, 0.9)), var(--drop-body-lo, rgba(21, 27, 38, 0.92)) 74%);
   box-shadow:
@@ -123,7 +123,7 @@ a {
 .btn--primary {
   border-color: rgba(var(--accent-rgb), 0.62);
   background:
-    radial-gradient(circle 16% at 26% 24%, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.08) 60%, transparent 78%),
+    radial-gradient(ellipse 16% 16% at 26% 24%, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.08) 60%, transparent 78%),
     radial-gradient(ellipse 70% 48% at 50% 104%, rgba(var(--accent-rgb), 0.5), transparent 66%),
     radial-gradient(circle at 42% 26%, rgba(var(--accent-rgb), 0.34), rgba(var(--accent-rgb), 0.15) 74%);
   color: var(--ink);

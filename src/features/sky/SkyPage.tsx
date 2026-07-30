@@ -2059,10 +2059,17 @@ function mountSky(root: HTMLDivElement) {
     moonEls.forEach((m) => m.remove())
     moonEls.length = 0
     moonsFor = null
+    // the recommendation comes back out when the actions go away
+    paintNext()
   }
   function showMoons(tl: TL) {
     closeMoons()
     moonsFor = tl.t.id
+    // The recommendation steps out of the way of the actions. It knew to — it
+    // is hidden whenever a menu is up — but nothing repainted when a menu was
+    // opened by tapping a bubble, so the two sat on top of each other and
+    // neither could be read.
+    paintNext()
     const p = posOf(tl.t.id)
     // an opened pool has already been framed by the camera; leave it where it is
     if (openPool !== tl.t.id) p.y = Math.max(p.y, radiusOf(tl) + 170)
@@ -2181,7 +2188,7 @@ function mountSky(root: HTMLDivElement) {
       const cx = lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, p.x))
       const x = cx + (slot - (n - 1) / 2) * gap - 27
       // and never under the tab bar, however low the thing itself is
-      const floor = toWorldY(waterlineY() - 92) - 27
+      const floor = toWorldY(waterlineY() - 118) - 27
       const y = Math.min(p.y + below, floor)
       // the moons live in the world but are things you tap: they keep their
       // real size however far out the camera has pulled
@@ -3317,6 +3324,35 @@ function mountSky(root: HTMLDivElement) {
             const push = (need - dist) * 0.08
             op.x += (dx / dist) * push
             op.y += (dy / dist) * push
+          }
+        }
+      }
+    }
+    /*
+     * A thing's actions clear their own row.
+     *
+     * They are opaque and lit from the front, so they are legible over
+     * anything — but being legible over a bubble still means covering the
+     * bubble's name, and you opened the menu *on* that thing. So while the row
+     * is up, whatever it lands on drifts out from under it: the same idea as
+     * an open pool pushing the sky out of its orbit, applied to a band rather
+     * than a circle. Vertically only — sliding sideways would scatter the sky
+     * every time you tapped something.
+     */
+    if (moonsFor && openPool !== moonsFor && !reduced) {
+      const host = view.byId.get(moonsFor)
+      const hp = host ? posOf(host.t.id) : null
+      if (host && hp) {
+        const rowY = Math.min(hp.y + radiusOf(host) + 52, toWorldY(waterlineY() - 118) - 27)
+        const halfRow = 34 / cam.k
+        for (const other of view.tls) {
+          if (other.t.id === host.t.id) continue
+          const op = posOf(other.t.id)
+          const need = radiusOf(other) + halfRow + 10
+          const gap = op.y - rowY
+          if (Math.abs(gap) < need) {
+            const push = (need - Math.abs(gap)) * 0.09
+            op.y += gap >= 0 ? push : -push
           }
         }
       }

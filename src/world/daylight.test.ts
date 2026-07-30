@@ -176,6 +176,28 @@ describe('publishing the hour', () => {
       expect(neck, `neck at ${h}:00`).toBeGreaterThan(lum(nums('--drop-body-lo')))
     }
   })
+  it('keeps a drop lighter than the sky it hangs in, at every hour', () => {
+    // Measured at 1.00 against the night sky before this: the body ran from a
+    // lit top to a near-black bottom, and the bottom two thirds is most of a
+    // drop, so most of every drop was darker than the air around it. Nothing
+    // but the rim was holding them on the screen.
+    for (let h = 0; h < 24; h++) {
+      tickDaylight(new Date(2026, 6, 29, h, 0, 0))
+      const sky = nums('--sky-ground')
+      for (const end of ['--drop-body-hi', '--drop-body-lo']) {
+        expect(lum(nums(end)), `${end} vs the sky at ${h}:00`).toBeGreaterThan(lum(sky))
+        expect(ratio(nums(end), sky), `${end} vs the sky at ${h}:00`).toBeGreaterThan(1.3)
+      }
+      // and it is still a body with form, not a flat disc
+      expect(lum(nums('--drop-body-hi'))).toBeGreaterThan(lum(nums('--drop-body-lo')))
+    }
+  })
+  it('gives a drop an edge you can actually see', () => {
+    for (let h = 0; h < 24; h++) {
+      tickDaylight(new Date(2026, 6, 29, h, 0, 0))
+      expect(ratio(nums('--drop-edge'), nums('--sky-ground')), `edge at ${h}:00`).toBeGreaterThan(3.5)
+    }
+  })
   it('lets the glass drops lift with the room instead of staying at midnight', () => {
     tickDaylight(new Date(2026, 6, 29, 2, 0, 0))
     const night = lum(nums('--drop-body-hi'))

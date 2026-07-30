@@ -181,19 +181,31 @@ export function tickDaylight(now = new Date()) {
   r.setProperty('--paper-ink', rgb(mix3([24, 32, 44], a, 0.06)))
   r.setProperty('--paper-soft', rgb(mix3([70, 84, 100], a, 0.1)))
 
-  // the glass drops in the sky, lit by the same accent. Their bodies lift with
-  // the room: held at midnight they would read as holes cut in a bright sky
-  // rather than as water hanging in it.
-  r.setProperty('--drop-body-hi', rgb(mix3(s.surface, [255, 255, 255], 0.14), 0.96))
-  r.setProperty('--drop-body-lo', rgb(mix3(s.surface, [0, 0, 0], 0.42), 0.97))
+  // The glass drops in the sky, lit by the same accent.
+  //
+  // Both ends of a drop's body are *above* the sky behind it, and that is the
+  // whole point. They used to run from a lit top to a near-black bottom, and
+  // since the bottom two thirds is most of a drop, most of every drop was
+  // darker than the air it hung in — measured at a contrast of 1.00 against
+  // the sky at night, which is another way of saying invisible. The only thing
+  // keeping a drop on the screen was its rim, so the sky read as a page of
+  // outlines rather than a place with water in it.
+  //
+  // Water catches light. The form comes from the specular on its shoulder, the
+  // rim, and the glow bouncing up underneath — none of which needs the body to
+  // go dark to work.
+  r.setProperty('--drop-body-hi', rgb(mix3(s.surface, [255, 255, 255], 0.2), 0.97))
+  r.setProperty('--drop-body-lo', rgb(mix3(s.surface, [255, 255, 255], 0.05), 0.97))
   r.setProperty('--drop-fill', rgb(mix3(s.surface, [255, 255, 255], 0.06), 0.94))
   // where two drops have run into each other. It has to read as the same water
   // as the bodies it joins, so it sits between the two ends of their gradient —
   // the drop's own fill is lighter than its flanks and made the join look like
   // a separate darker thing laid between them.
-  r.setProperty('--drop-neck', rgb(mix3(mix3(s.surface, [0, 0, 0], 0.2), a, 0.06), 0.96))
+  r.setProperty('--drop-neck', rgb(mix3(mix3(s.surface, [255, 255, 255], 0.12), a, 0.06), 0.97))
   r.setProperty('--drop-glow', rgb(a, 0.2))
-  r.setProperty('--drop-rim', rgb(a, 0.17))
+  // and the rim is the edge of a real thing, not a hairline hint of one
+  r.setProperty('--drop-rim', rgb(a, 0.24))
+  r.setProperty('--drop-edge', rgb(mix3(a, [255, 255, 255], 0.55), 0.46))
   // the echo a live drop sends out carries the same hour, but has to survive
   // being drawn as a hairline — its own alpha does the fading
   r.setProperty('--drop-echo', rgb(a, 0.7))

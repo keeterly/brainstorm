@@ -60,16 +60,25 @@ body.sky-held {
   gap: 6px;
   text-align: center;
   cursor: pointer;
-  /* a body of water, not a wireframe: specular, rim light, underglow, mass */
+  /*
+   * A body of water, not a wireframe: specular, rim light, underglow, mass.
+   *
+   * `ellipse 11% 11%`, never `circle 11%` — a circle's radius in a radial
+   * gradient may only be a length, so a percentage makes that one layer
+   * invalid, which drops the whole `background` shorthand, which left every
+   * drop in this sky with no body at all. Measured at a contrast of 1.00
+   * against the night sky: the only thing holding a drop on the screen was
+   * its border.
+   */
   background:
-    radial-gradient(circle 11% at 31% 19%, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.08) 58%, transparent 74%),
+    radial-gradient(ellipse 11% 11% at 31% 19%, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.08) 58%, transparent 74%),
     radial-gradient(ellipse 66% 34% at 50% 11%, transparent 54%, rgba(222, 241, 255, 0.16) 64%, transparent 74%),
     radial-gradient(ellipse 58% 31% at 50% 91%, transparent 53%, var(--drop-rim, rgba(150, 210, 255, 0.17)) 63%, transparent 73%),
     radial-gradient(circle at 50% 118%, var(--drop-glow, rgba(var(--accent-rgb), 0.2)), transparent 58%),
     radial-gradient(circle at 44% 28%, var(--drop-body-hi, rgba(48, 59, 79, 0.96)), var(--drop-body-lo, rgba(21, 27, 38, 0.97)) 72%);
-  border: 0.5px solid rgba(205, 228, 255, 0.34);
+  border: 0.5px solid var(--drop-edge, rgba(205, 228, 255, 0.46));
   box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.14),
+    inset 0 1px 1px rgba(255, 255, 255, 0.18),
     inset 0 -20px 40px rgba(74, 142, 200, 0.12),
     -1.5px 0.5px 2px rgba(var(--accent-rgb), 0.14),
     1.5px -0.5px 2px rgba(255, 190, 130, 0.09),
@@ -163,18 +172,28 @@ body.sky-held {
   align-items: center;
   justify-content: center;
   gap: 1px;
+  /* Opaque, and lit from the front.
+     These are laid over a sky that already has things in it, and a translucent
+     button on top of a bubble is two pieces of text in the same place. It is a
+     control, not a piece of weather: it may sit *on* the world without joining
+     it. */
   background:
-    radial-gradient(circle 16% at 32% 24%, rgba(255, 255, 255, 0.32), transparent 70%),
-    radial-gradient(circle at 50% 35%, rgba(30, 40, 54, 0.95), rgba(14, 18, 26, 0.95));
-  border: 0.5px solid rgba(var(--accent-rgb), 0.4);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+    radial-gradient(ellipse 16% 16% at 32% 24%, rgba(255, 255, 255, 0.34), transparent 70%),
+    radial-gradient(circle at 50% 30%, rgba(38, 48, 65, 0.99), rgba(15, 19, 28, 1));
+  border: 0.5px solid rgba(var(--accent-rgb), 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    /* the world darkens under the row, so the row is plainly in front of it */
+    0 0 0 6px rgba(6, 9, 14, 0.42),
+    0 10px 28px rgba(0, 0, 0, 0.66);
   color: var(--water);
   cursor: pointer;
   animation: sky-pop 380ms cubic-bezier(0.2, 1.35, 0.4, 1) backwards;
   z-index: 6;
 }
 .sky-moon .ic { font-size: 15px; line-height: 1; pointer-events: none; }
-.sky-moon .lb { font-size: 9px; font-weight: 500; letter-spacing: 0.01em; pointer-events: none; }
+/* nine pixels was a label you had to already know the meaning of */
+.sky-moon .lb { font-size: 10.5px; font-weight: 500; letter-spacing: 0.005em; pointer-events: none; color: var(--ink); }
 .sky-moon.dim { opacity: 0.35; color: var(--ink-faint); border-color: rgba(255, 255, 255, 0.15); }
 
 .sky-drop-in {
@@ -185,7 +204,7 @@ body.sky-held {
   height: 26px;
   border-radius: 50%;
   background:
-    radial-gradient(circle 18% at 32% 24%, rgba(255, 255, 255, 0.5), transparent 70%),
+    radial-gradient(ellipse 18% 18% at 32% 24%, rgba(255, 255, 255, 0.5), transparent 70%),
     radial-gradient(circle at 50% 40%, rgba(40, 48, 62, 0.95), rgba(16, 20, 28, 0.95));
   border: 0.5px solid rgba(205, 228, 255, 0.4);
   pointer-events: none;
@@ -567,7 +586,7 @@ body.sky-resting .sky-tidy { right: calc(14px + var(--rest-w, 96px) + 8px); }
   border-radius: 48% 52% 51% 49% / 50% 48% 52% 50%;
   pointer-events: none;
   background:
-    radial-gradient(circle 11% at 31% 19%, rgba(255, 255, 255, 0.5), transparent 68%),
+    radial-gradient(ellipse 11% 11% at 31% 19%, rgba(255, 255, 255, 0.5), transparent 68%),
     radial-gradient(circle at 44% 28%, var(--drop-body-hi, rgba(48, 59, 79, 0.9)), var(--drop-body-lo, rgba(21, 27, 38, 0.92)) 72%);
   border: 0.5px solid rgba(205, 228, 255, 0.3);
   transition: transform 560ms cubic-bezier(0.5, 0, 0.25, 1), opacity 560ms ease-in;
