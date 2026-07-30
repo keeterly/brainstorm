@@ -19,6 +19,7 @@ import { TypeBadge } from '@/components/TypeBadge'
 import { humanDate } from '@/domain/human-date'
 import { todayISO } from '@/domain/prioritize-prepass'
 import { learn, type Learned } from '@/ai/memoryFlow'
+import { Screen } from './Screen'
 import type { Memory, MemoryEvent } from '@/domain/types'
 
 // Account — set a password (this is where a reset finishes), and choose
@@ -367,6 +368,7 @@ export default function MemoryPage() {
             {spend != null && <span className="mono faint">(${spend.toFixed(2)} this month)</span>}
           </Link>
         </div>
+        <Screen />
       </section>
 
       <AccountSection />

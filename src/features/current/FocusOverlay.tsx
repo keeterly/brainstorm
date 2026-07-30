@@ -19,7 +19,16 @@ export function FocusOverlay({
       if (e.key === 'Escape') onClose()
     }
     document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
+    // Belt and braces on the bottom strip. This overlay now runs past the
+    // bottom of the glass like every other full-screen surface; the hem is the
+    // fallback for whatever an installed phone turns out to let a fixed layer
+    // paint down there, and it should be wearing this screen's colour while
+    // this screen is the only thing on.
+    document.body.classList.add('on-cover')
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.classList.remove('on-cover')
+    }
   }, [onClose])
 
   return (
@@ -28,7 +37,12 @@ export function FocusOverlay({
       aria-label="Focus on one action"
       style={{
         position: 'fixed',
-        inset: 0,
+        // To the bottom of the screen, not of the viewport — an installed
+        // iPhone puts 59pt between those, and this is an opaque sheet that
+        // covers everything. Centred on the screen too, which is what the
+        // extra height buys: the one sentence on it belongs in the middle of
+        // the glass, not the middle of the part of it the page was given.
+        inset: '0 0 calc(-1 * var(--bleed, 0px)) 0',
         zIndex: 200,
         display: 'flex',
         flexDirection: 'column',

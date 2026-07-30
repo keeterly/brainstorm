@@ -1862,7 +1862,15 @@ function mountSky(root: HTMLDivElement) {
   function measureKeyboard() {
     if (!vv) return
     const covered = Math.max(0, innerHeight - vv.height - vv.offsetTop)
-    document.documentElement.style.setProperty('--kb', `${Math.round(covered)}px`)
+    // Published as a distance from the bottom of the *screen*, not of the
+    // layout viewport, because that is where the page's bottom edge now is:
+    // it runs --bleed past the glass so it covers the whole screen. Measured
+    // against the viewport, everything padded by --kb would sit exactly one
+    // bleed too low and go back under the keyboard it exists to clear.
+    const bleed = covered
+      ? parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--bleed')) || 0
+      : 0
+    document.documentElement.style.setProperty('--kb', `${Math.round(covered + bleed)}px`)
   }
   vv?.addEventListener('resize', measureKeyboard)
   vv?.addEventListener('scroll', measureKeyboard)
@@ -2336,11 +2344,16 @@ function mountSky(root: HTMLDivElement) {
     // diagonal is only enough when the origin is on screen — and a drop's
     // position is in world space, so after a pan it may be nowhere near it.
     // Getting that wrong leaves the page frozen as a giant arc across a corner.
+    // …and the page's own height, not the viewport's. The page runs --bleed
+    // past the bottom of the glass so it covers the whole screen on an
+    // installed phone; sizing the circle to innerHeight would leave that last
+    // strip clipped — an arc of night sky across the bottom of the paper.
+    const pageH = page.offsetHeight || innerHeight
     const reach = Math.max(
       Math.hypot(ox, oy),
       Math.hypot(W - ox, oy),
-      Math.hypot(ox, innerHeight - oy),
-      Math.hypot(W - ox, innerHeight - oy),
+      Math.hypot(ox, pageH - oy),
+      Math.hypot(W - ox, pageH - oy),
     )
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
@@ -2378,12 +2391,17 @@ function mountSky(root: HTMLDivElement) {
     lightboxImg.src = src
     lightboxImg.alt = alt
     lightbox.classList.add('show')
+    // …and the hem goes black with it, the same way it goes to paper under a
+    // page. Whatever the strip below the viewport turns out to be able to
+    // paint, it is never the night sky while a photograph is full screen.
+    document.body.classList.add('on-photo')
     // one frame, so the transition has a state to come from
     requestAnimationFrame(() => lightbox.classList.add('on'))
   }
   function closePhoto() {
     if (!lightbox.classList.contains('show')) return
     lightbox.classList.remove('on')
+    document.body.classList.remove('on-photo')
     setTimeout(() => {
       lightbox.classList.remove('show')
       // a megabyte of data URL is not worth holding on to once it is off screen
@@ -4747,8 +4765,10 @@ function mountSky(root: HTMLDivElement) {
     if (deafT) clearTimeout(deafT)
     document.documentElement.style.removeProperty('--kb')
     document.body.classList.remove('sky-held')
-    // leaving the sky with a page open would strand the hem on paper
+    // leaving the sky with a page or a photo open would strand the hem on the
+    // wrong colour, on a tab that is not even the sky any more
     document.body.classList.remove('on-paper')
+    document.body.classList.remove('on-photo')
     document.body.classList.remove('sky-resting')
     stopMic()
     if (layoutT) clearTimeout(layoutT)

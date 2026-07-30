@@ -37,6 +37,14 @@ body,
  * end of it. On a page the height of the glass that is the strip; on a page
  * that scrolls it is below the fold, where the strip is already covered by the
  * page itself. See Atmosphere.tsx, which sizes and paints the inner div.
+ *
+ * It is the floor, not the whole answer. Every opaque full-screen surface in
+ * the app now runs --bleed past the bottom of the glass in its own right — the
+ * paper page, the photo viewer, Focus, the bottom sheet — because for a long
+ * while none of them did, and the hem was left carrying a strip that four
+ * different overlays each wanted a different colour. The rules below are what
+ * it wears while one of them is up, so the two agree whichever of them the
+ * phone ends up drawing.
  */
 .world-hem {
   position: relative;
@@ -74,6 +82,20 @@ body.on-paper .world-hem > div {
     radial-gradient(circle 320px at 30% 10%, var(--paper-lit, rgba(255, 255, 255, 0.5)), transparent 72%),
     radial-gradient(ellipse 92% 42% at 50% 108%, rgba(var(--accent-rgb), 0.16), transparent 62%),
     var(--paper, #dbe3ec);
+}
+/* …and the near-black of the photo viewer, which had no rule at all: a picture
+   shown edge to edge with a band of night sky under it is the same bug wearing
+   a third colour. */
+body.on-photo .world-hem > div {
+  background: rgba(2, 3, 6, 0.96);
+}
+/* …and Focus, which is the same ground the body is painted with. Not the
+   world's own hem: the world has a vignette and a wash of ocean in it, and
+   under a screen that has deliberately put all of that away, the join shows. */
+body.on-cover .world-hem > div {
+  background:
+    radial-gradient(ellipse 120% 60% at 50% -10%, var(--ground-high) 0%, transparent 60%),
+    var(--ground);
 }
 
 /* The column the hem hangs from — see .world-hem.
