@@ -259,8 +259,10 @@ export default function MemoryPage() {
                   <div key={t.id} style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
                     <button
                       aria-label={`Bring back ${t.title || 'this'}`}
+                      className="hit"
                       onClick={() => toggleDone(t.id)}
                       style={{
+                        flex: '0 0 auto',
                         width: 13,
                         height: 13,
                         borderRadius: '50%',
@@ -392,13 +394,16 @@ function MemoryRow({
   }
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-      <button onClick={() => setEditing(true)} style={{ flex: 1, textAlign: 'left', fontSize: 'var(--fs-label)' }}>
+      <button
+        onClick={() => setEditing(true)}
+        style={{ flex: 1, textAlign: 'left', fontSize: 'var(--fs-label)', minHeight: 44, lineHeight: 1.4 }}
+      >
         {content}
       </button>
       <span className="mono faint" style={{ fontSize: 'var(--fs-caption)' }}>
         {source}
       </span>
-      <button aria-label="Delete memory" className="faint" onClick={onDelete}>
+      <button aria-label="Delete memory" className="faint hit" onClick={onDelete} style={{ flex: '0 0 auto' }}>
         ×
       </button>
     </div>

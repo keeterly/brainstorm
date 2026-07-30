@@ -135,7 +135,7 @@ body.sky-held {
 .skyb.small .t { -webkit-line-clamp: 3; }
 .skyb.member .t { -webkit-line-clamp: 3; }
 /* status whispers — lowercase, never a shout */
-.skyb .state { font-size: 10.5px; font-weight: 400; color: var(--ink-faint); pointer-events: none; }
+.skyb .state { font-size: 11px; font-weight: 400; color: var(--ink-faint); pointer-events: none; }
 .skyb .state.blue { color: rgba(var(--accent-rgb), 0.72); }
 .skyb .peek { width: 74%; font-size: 11px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 .skyb .dots { display: flex; gap: 4px; pointer-events: none; }
@@ -241,9 +241,25 @@ body.sky-held {
   opacity: 0;
   transition: opacity 700ms ease;
   text-wrap: balance;
-  padding: 0 40px;
+  /* Room on the right for the two notes that live in that corner. Centred
+     across the whole width, a long line ran straight underneath them —
+     two pieces of text at the same size on the same baseline, overlapping,
+     which reads as a mistake because it is one. */
+  padding: 0 18px;
+  margin-right: var(--head-clear, 0px);
+  transition-property: opacity, margin-right;
 }
 
+/*
+ * The two notes about the sky as a whole — what is resting, and an offer to
+ * tidy it — stand together, in a row, at the top right.
+ *
+ * They used to sit in opposite corners, which put three unrelated floating
+ * pills in three corners of one screen with nothing tying any of them to
+ * anything. Two things that speak about the same subject belong beside each
+ * other; then there is one quiet group to notice instead of three separate
+ * things to keep noticing.
+ */
 .sky-rest {
   position: fixed;
   z-index: 6;
@@ -298,7 +314,9 @@ body.sky-held {
 }
 /* the reason is the point — it is what makes the suggestion arguable */
 .sky-next .why {
-  font-size: 10px;
+  /* eleven, not ten: below that it stops being quiet and starts being hard to
+     read, and the reason is the part that makes the suggestion arguable */
+  font-size: 11px;
   letter-spacing: 0.04em;
   color: rgba(var(--accent-rgb), 0.86);
 }
@@ -524,7 +542,9 @@ body.sky-held {
   position: fixed;
   z-index: 6;
   top: calc(var(--sat) + 14px);
-  left: 14px;
+  /* beside the resting pill, not across the screen from it. The gap is its
+     own width plus air; when nothing is resting it simply has the corner. */
+  right: 14px;
   padding: 6px 12px;
   border-radius: 999px;
   background: rgba(15, 22, 32, 0.55);
@@ -535,6 +555,8 @@ body.sky-held {
   cursor: pointer;
 }
 .sky-tidy.show { display: block; }
+/* when both are up, tidy steps left to make room for the count beside it */
+body.sky-resting .sky-tidy { right: calc(14px + var(--rest-w, 96px) + 8px); }
 
 
 /* ---------- coalescence: two drops becoming one ---------- */

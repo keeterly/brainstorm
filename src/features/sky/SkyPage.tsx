@@ -478,12 +478,27 @@ function mountSky(root: HTMLDivElement) {
     }
     return { x0, y0, x1, y1 }
   }
-  /** Is there anywhere to pan to? If the sky already fits, dragging the water
-   *  should do nothing — otherwise every near-miss on a drop slides the world. */
+  /**
+   * Is there anywhere to pan to?
+   *
+   * Two ways there can be. The sky may be bigger than the glass — that was the
+   * only one this asked about, and it was wrong the moment anything moved the
+   * camera off centre. Following a recommendation deliberately decentres the
+   * view, so a sky that *fits* can still be half off the edge, and answering
+   * "no" then left you looking at something you could not drag back. The other
+   * way is simply that some of it is off the glass right now.
+   */
   function canPan() {
     const b = contentBox()
     if (!b) return false
-    return (b.x1 - b.x0) * cam.k > W + 12 || (b.y1 - b.y0) * cam.k > waterlineY() - 94
+    const top = 76
+    const floor = waterlineY() - 94
+    const l = toScreenX(b.x0)
+    const r = toScreenX(b.x1)
+    const t = toScreenY(b.y0)
+    const bot = toScreenY(b.y1)
+    if (r - l > W + 12 || bot - t > floor - top) return true
+    return l < -12 || r > W + 12 || t < top - 12 || bot > floor + 12
   }
   /** Bring one thing to the middle of the glass, without changing how close
    *  you are standing — a recommendation should not re-frame your whole sky. */
@@ -1071,6 +1086,15 @@ function mountSky(root: HTMLDivElement) {
     return [...view.tls, o]
   }
 
+  /** How much of the top-right corner the sky's own two notes are using, so
+   *  the header's text can stop short of them instead of running underneath. */
+  function measureCorner() {
+    const w =
+      (restEl.classList.contains('show') ? restEl.offsetWidth + 8 : 0) +
+      (tidyEl.classList.contains('show') ? tidyEl.offsetWidth + 8 : 0)
+    document.documentElement.style.setProperty('--head-clear', `${Math.round(w)}px`)
+  }
+
   function paintAll() {
     const alive = new Set<string>()
     for (const tl of onStage()) {
@@ -1168,6 +1192,11 @@ function mountSky(root: HTMLDivElement) {
     const resting = S().thoughts.filter((t) => t.status === 'snoozed').length
     restEl.textContent = `☁ ${resting} resting`
     restEl.classList.toggle('show', resting > 0)
+    // the tidy pill stands beside it rather than across the screen from it,
+    // and needs to know how much room the count is taking
+    document.body.classList.toggle('sky-resting', resting > 0)
+    if (resting > 0) document.documentElement.style.setProperty('--rest-w', `${Math.round(restEl.offsetWidth)}px`)
+    measureCorner()
     // first-run invite
     inviteEl.style.display = view.tls.length === 0 ? '' : 'none'
     measureShapes()
@@ -1558,7 +1587,9 @@ function mountSky(root: HTMLDivElement) {
       const g = view.byId.get(parent) as TL
       const mp = pos.get(nextFor)
       const gp = posOf(parent)
-      if (mp) peekAt = { a: Math.atan2(mp.y - gp.y, mp.x - gp.x) - ringSpin(), r: Math.hypot(mp.x - gp.x, mp.y - gp.y) }
+      // A member of a closed pool has never been placed, so there is no angle
+      // to hold. Null rather than the last card's — the ring will give it one.
+      peekAt = mp ? { a: Math.atan2(mp.y - gp.y, mp.x - gp.x) - ringSpin(), r: Math.hypot(mp.x - gp.x, mp.y - gp.y) } : null
       peekSettle = 96
       frameOpen(g)
       paintAll()
@@ -1566,9 +1597,13 @@ function mountSky(root: HTMLDivElement) {
       return
     }
     if (!tl) return
-    const p = posOf(nextFor)
-    focusOn(p)
+    // Moons first: opening them pushes the drop down to make room for them,
+    // and framing where it *was* left the thing you asked for below the tab
+    // bar with its actions off the bottom of the screen entirely.
     showMoons(tl)
+    focusOn(posOf(nextFor))
+    paintAll()
+    haptics.grab()
   })
 
   // ---------- the light page ----------
@@ -2097,6 +2132,19 @@ function mountSky(root: HTMLDivElement) {
       ;(m as HTMLDivElement & { _slot?: number; _of?: number })._of = acts.length
     })
   }
+  /**
+   * Where a thing's actions wait.
+   *
+   * In one row, directly beneath it, always. They used to fan out on an arc
+   * swung toward open space, which sounded considerate and was chaos: five of
+   * them at five angles, overlapping each other and whatever else was nearby,
+   * each a different distance from the thing it acts on, and never twice in
+   * the same place. Nothing about that helps you — you cannot learn where a
+   * button is if it moves, and you read a row far faster than an arc.
+   *
+   * One rule for a drop and for an open pool. The only difference is how far
+   * down they sit, because a pool has rings to clear first.
+   */
   function layoutMoons() {
     if (!moonsFor) return
     const tl = view.byId.get(moonsFor)
@@ -2105,44 +2153,34 @@ function mountSky(root: HTMLDivElement) {
       return
     }
     const p = posOf(tl.t.id)
-    const r = radiusOf(tl) + 44
-    // the orbit swings toward open space — the moons face the middle of the
-    // screen, so they never collide with each other or fall off an edge
     const open = openPool === tl.t.id
-    const toCenter = Math.atan2(worldH() * 0.46 - p.y, worldW() / 2 - p.x)
-    const spread = 0.66
+    // below whatever the thing actually occupies: its own body, or the whole
+    // orbit if it has opened out into one
+    const below = open
+      ? Math.max(orbitR(tl), ringR) + memberR(tl.members.length) + 46
+      : radiusOf(tl) + 52
+    const gap = 78 / cam.k
     moonEls.forEach((m) => {
       const el = m as HTMLDivElement & { _slot?: number; _of?: number }
       const n = el._of ?? 1
       const slot = el._slot ?? 0
-      let x: number
-      let y: number
-      if (open) {
-        // an opened pool is showing its contents; its own actions step clear of
-        // the whole ring and wait together below it
-        const gap = 78 / cam.k
-        // Centred on the pool, but never off the glass: an open pool is framed
-        // by its outermost ring, so it is often not in the middle of the
-        // screen, and five moons hung off it ran the last one over the edge.
-        // half the row, plus half a moon, plus a little air — all in world
-        // units, because that is what the positions are in
-        const reach = ((n - 1) / 2) * gap + 27 + 14 / cam.k
-        const lo = toWorldX(0) + reach
-        const hi = toWorldX(W) - reach
-        // wider than the glass: centre it and lose a little at both ends
-        const cx = lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, p.x))
-        x = cx + (slot - (n - 1) / 2) * gap - 27
-        y = p.y + Math.max(orbitR(tl), ringR) + memberR(tl.members.length) + 46
-      } else {
-        const ang = toCenter + (slot - (n - 1) / 2) * spread
-        x = p.x + Math.cos(ang) * r - 27
-        y = p.y + Math.sin(ang) * r - 27
-      }
+      // Centred on the subject, but never off the glass — a thing near an edge
+      // is exactly when you most need its actions to still be reachable.
+      const reach = ((n - 1) / 2) * gap + 27 + 14 / cam.k
+      const lo = toWorldX(0) + reach
+      const hi = toWorldX(W) - reach
+      // wider than the glass: centre it and lose a little at both ends
+      const cx = lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, p.x))
+      const x = cx + (slot - (n - 1) / 2) * gap - 27
+      // and never under the tab bar, however low the thing itself is
+      const floor = toWorldY(waterlineY() - 92) - 27
+      const y = Math.min(p.y + below, floor)
       // the moons live in the world but are things you tap: they keep their
       // real size however far out the camera has pulled
       m.style.transform = `translate(${x}px, ${y}px) scale(${(1 / cam.k).toFixed(3)})`
     })
   }
+
 
   function rain(tl: TL) {
     closeMoons()
@@ -2559,6 +2597,10 @@ function mountSky(root: HTMLDivElement) {
     if (!bubEl) {
       if (!(e.target as HTMLElement).closest?.('.sky-moon')) {
         bgDown = { x: e.clientX, y: e.clientY }
+        // A hand on the glass outranks a camera that is still travelling.
+        // Otherwise the pan is snapshotted against a moving cam and the two
+        // fight each other for the length of the animation.
+        camTarget = null
         // only offer to pan when there is something off-screen to pan to
         panFrom = canPan() ? { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y } : null
         // the water keeps the finger too: without this, a drag that wanders
@@ -3428,6 +3470,7 @@ function mountSky(root: HTMLDivElement) {
     if (view.tls.length - lastCount >= 3) fitWhenSettled()
     lastCount = view.tls.length
     tidyEl.classList.toggle('show', view.tls.filter((tl) => tl.kind === 'drop').length >= 6 && !S().offline)
+    measureCorner()
   })
   raf = requestAnimationFrame(step)
   const n = view.tls.length
@@ -3483,6 +3526,7 @@ function mountSky(root: HTMLDivElement) {
     if (deafT) clearTimeout(deafT)
     document.documentElement.style.removeProperty('--kb')
     document.body.classList.remove('sky-held')
+    document.body.classList.remove('sky-resting')
     stopMic()
     if (layoutT) clearTimeout(layoutT)
     if (undoT) clearTimeout(undoT)

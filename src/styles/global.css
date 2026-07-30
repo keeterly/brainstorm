@@ -138,11 +138,45 @@ a {
   border-color: rgba(255, 255, 255, 0.14);
   font-weight: 500;
 }
+/*
+ * Everything you can touch is at least a thumb across.
+ *
+ * Apple's 44 points is not a style rule, it is the size of the part of you
+ * doing the touching. A 13-pixel dot is a 13-pixel *mark*; the target has to
+ * be bigger than the mark, or the thing is drawn for a mouse nobody has.
+ *
+ * So the two are kept apart. The drawn thing stays exactly as small and as
+ * deliberate as it should be, and an invisible expander behind it takes the
+ * press. Nothing moves, nothing grows, and the miss rate goes away.
+ */
+.hit { position: relative; }
+.hit::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
+  /* it is a target, not a surface: never paints, never intercepts a scroll */
+  border-radius: inherit;
+}
+
 .btn--sm {
   min-height: 34px;
   padding: 0 var(--sp-3);
   font-size: var(--fs-label);
   border-radius: var(--r-full);
+  position: relative;
+}
+.btn--sm::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 100%;
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
 }
 .btn--danger {
   border-color: rgba(255, 105, 97, 0.4);
@@ -151,10 +185,11 @@ a {
 }
 
 .chip {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 28px;
+  min-height: 32px;
   padding: 0 11px;
   border-radius: var(--r-full);
   border: 0.5px solid var(--glass-line);
@@ -165,6 +200,15 @@ a {
   font-weight: 550;
   color: var(--ink-soft);
   white-space: nowrap;
+}
+.chip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 100%;
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
 }
 .chip--on {
   border-color: rgba(255, 255, 255, 0.5);
