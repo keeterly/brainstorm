@@ -1145,8 +1145,30 @@ function mountSky(root: HTMLDivElement) {
   }
 
   function paintAll() {
+    // Two things have to still be true before anything is drawn, and when they
+    // stop being true the sky does not merely look wrong — it becomes unusable.
+    //
+    // `recede` is "something else is holding the stage": six per cent opacity
+    // and no pointer events. It is applied to everything that is not the open
+    // pool. So if `openPool` names something that is no longer there — a group
+    // archived by the empty-group sweep a second after you took its last
+    // member out, a group you put away from its own page — then *nothing* is
+    // the open pool, everything recedes, and you are left looking at a sky at
+    // six per cent that will not answer a tap. The same for `peek`: a card that
+    // was being read and has since been put away leaves the whole group dimmed
+    // behind a thing that is not on screen.
+    if (openPool && view.byId.get(openPool)?.kind !== 'pool') openPool = null
+    if (peek && !view.byId.has(peek)) {
+      peek = null
+      peekAt = null
+    }
+    const stage = onStage()
+    // and the same again from the other end: whatever the reason, if the thing
+    // holding the stage is not on it, nothing is holding the stage
+    if (openPool && !stage.some((tl) => tl.t.id === openPool)) openPool = null
+
     const alive = new Set<string>()
-    for (const tl of onStage()) {
+    for (const tl of stage) {
       alive.add(tl.t.id)
       const el = els.get(tl.t.id) ?? mountEl(tl.t.id, tl.kind === 'pool' ? 'skyb pool' : 'skyb')
       el.classList.toggle('pool', tl.kind === 'pool')
@@ -1238,6 +1260,14 @@ function mountSky(root: HTMLDivElement) {
       }
     }
     for (const [id] of els) if (!alive.has(id)) unmountEl(id)
+    // Last resort, and the reason it exists: a sky where every single thing is
+    // behind glass has no way back out of itself, because the things you would
+    // tap to escape are the things that stopped taking taps. If that ever
+    // happens, whatever we believed was open was wrong.
+    if (openPool && ![...els.values()].some((e) => !e.classList.contains('recede'))) {
+      openPool = null
+      for (const e of els.values()) e.classList.remove('recede')
+    }
     // What is out of the sky but not gone. Resting and put-away are the same
     // category as far as anyone reading is concerned — things you moved aside
     // and might want back — and one pill for both keeps the corner from growing
