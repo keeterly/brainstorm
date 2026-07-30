@@ -79,8 +79,19 @@ const canvasW = () => Math.round(window.innerWidth * (1 + OVERDRAW_X * 2))
  */
 function measureBleed() {
   const gap = Math.round(screen.height - window.innerHeight)
-  const bleed = window.innerHeight > window.innerWidth && gap > 0 && gap < 160 ? gap : 0
-  document.documentElement.style.setProperty('--bleed', `${bleed}px`)
+  const portrait = matchMedia('(orientation: portrait)').matches
+  const good = portrait && gap > 0 && gap < 160
+  const root = document.documentElement
+  // Only ever upward. This wrote `0px` on the device — the first call lands
+  // before the standalone layout has settled, sees no gap, and latched zero
+  // over a CSS default that was already correct. Everything downstream is
+  // `calc(-1 * var(--bleed))`, so a stray zero silently turns five different
+  // fixes into no-ops and leaves nothing to find. If there is no gap to
+  // measure, say nothing and let the stylesheet's env() answer stand.
+  if (!good) return
+  root.style.setProperty('--bleed', `${gap}px`)
+  // The hem is document height, so it is the measurement or it is nothing.
+  root.style.setProperty('--hem', `${gap}px`)
 }
 
 /**
@@ -140,7 +151,8 @@ function paintBeyondTheGlass() {
   const s = tickDaylight()
   const floor = seaFloor(s.ground)
   const root = document.documentElement
-  const bleed = parseFloat(getComputedStyle(root).getPropertyValue('--bleed')) || 0
+  // the measured one, not the CSS estimate: this sizes a real element
+  const bleed = parseFloat(getComputedStyle(root).getPropertyValue('--hem')) || 0
   const stack = [WORLD_VIGNETTE, seaTint(), WORLD_BG].filter(Boolean).join(',')
   // The hem carries the world into the strip; see the element itself. Sized to
   // the world's box and bottom-aligned, so its gradients sit where the fixed
@@ -193,9 +205,18 @@ export function Atmosphere() {
       canvas.style.height = `${WATER_DRAW_H}px`
       ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0)
       invalidateWaterline()
-      // how far the water's surface sits above the bottom edge, so anything
-      // that wants to float on it can be placed in CSS without guessing
-      document.documentElement.style.setProperty('--water-line-up', `${WATER_H - SURFACE}px`)
+      // How far the water's surface sits above the bottom edge, so anything
+      // that wants to float on it can be placed in CSS without guessing.
+      //
+      // Published relative to the bottom of the *viewport*, because that is
+      // what a CSS `bottom` is measured from — while the ocean is anchored to
+      // the bottom of the screen, which on an installed phone is --bleed lower.
+      // Doing the subtraction once here keeps every consumer of this (the tab
+      // bar resting in the surface, the two notices above it) a plain
+      // `bottom: calc(var(--water-line-up) ± n)` with nothing to know.
+      const root = document.documentElement
+      const bleed = parseFloat(getComputedStyle(root).getPropertyValue('--bleed')) || 0
+      root.style.setProperty('--water-line-up', `${WATER_H - SURFACE - bleed}px`)
     }
     size()
     // the canvas behind the glass is sized from the viewport, so it is repainted
@@ -205,6 +226,12 @@ export function Atmosphere() {
       paintBeyondTheGlass()
     }
     window.addEventListener('resize', onResize)
+    window.addEventListener('orientationchange', onResize)
+    // iOS settles the standalone layout after the first paint and does not
+    // always announce it as a resize, which is how the measurement came out
+    // zero and stayed zero. A couple of late looks cost nothing.
+    const settle = [120, 600, 1800].map((ms) => setTimeout(onResize, ms))
+    window.visualViewport?.addEventListener('resize', onResize)
 
     // the sky follows the clock — recomputed on a slow timer and whenever the
     // app comes back to the front, so an evening that arrives while it is in
@@ -254,6 +281,9 @@ export function Atmosphere() {
     return () => {
       cancelAnimationFrame(raf)
       window.removeEventListener('resize', onResize)
+      window.removeEventListener('orientationchange', onResize)
+      window.visualViewport?.removeEventListener('resize', onResize)
+      settle.forEach(clearTimeout)
       clearInterval(clock)
       document.removeEventListener('visibilitychange', wake)
     }
@@ -261,14 +291,22 @@ export function Atmosphere() {
 
   return (
     <>
-    <div aria-hidden style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
+    {/* The world's box is the whole screen, not the part of it the page was
+        given. Everything inside is positioned against this, so the one change
+        puts the ocean — and with it the waterline, and with that the tab bar
+        resting in the surface — on the bottom edge of the glass instead of
+        59pt up it. The layers used to carry the bleed one by one, which moved
+        the gradients down and left the water where it was. */}
+    <div
+      aria-hidden
+      style={{ position: 'fixed', inset: '0 0 calc(-1 * var(--bleed, 0px)) 0', zIndex: 0, pointerEvents: 'none' }}
+    >
       {/* depth, not graph paper — night above, the water's glow below */}
       <div
         style={{
           position: 'absolute',
-          // past the bottom edge of the glass, into the strip behind the home
-          // indicator that a fixed inset:0 can never reach — see --bleed
-          inset: '0 0 calc(-1 * var(--bleed)) 0',
+          // the parent is already the whole screen — see the wrapper above
+          inset: 0,
           background: WORLD_BG,
           transition: 'background 4s linear',
         }}
@@ -277,9 +315,8 @@ export function Atmosphere() {
         ref={fogRef}
         style={{
           position: 'absolute',
-          // past the bottom edge of the glass, into the strip behind the home
-          // indicator that a fixed inset:0 can never reach — see --bleed
-          inset: '0 0 calc(-1 * var(--bleed)) 0',
+          // the parent is already the whole screen — see the wrapper above
+          inset: 0,
           opacity: 0.4,
           // haze is lit by whatever light there is, so it carries the hour
           background:
@@ -292,9 +329,8 @@ export function Atmosphere() {
         ref={shaftRef}
         style={{
           position: 'absolute',
-          // past the bottom edge of the glass, into the strip behind the home
-          // indicator that a fixed inset:0 can never reach — see --bleed
-          inset: '0 0 calc(-1 * var(--bleed)) 0',
+          // the parent is already the whole screen — see the wrapper above
+          inset: 0,
           opacity: 0.1,
           // the shaft is the hour's own light: cool and white overhead at
           // midday, low and orange at sunset
@@ -319,9 +355,8 @@ export function Atmosphere() {
       <div
         style={{
           position: 'absolute',
-          // past the bottom edge of the glass, into the strip behind the home
-          // indicator that a fixed inset:0 can never reach — see --bleed
-          inset: '0 0 calc(-1 * var(--bleed)) 0',
+          // the parent is already the whole screen — see the wrapper above
+          inset: 0,
           background: WORLD_VIGNETTE,
           transition: 'background 4s linear',
         }}

@@ -96,20 +96,40 @@
    * On an installed iPhone the layout viewport is shorter than the screen and
    * anchored at the top, so everything laid out `position: fixed; inset: 0` —
    * which is every layer that paints this world — stops short of the bottom
-   * and the last of the screen falls through to the document canvas as a flat
-   * bar. Rather than work out what colour that bar should be, which is a
-   * different colour on every screen (water under a vignette under a page glow
-   * under film grain), every layer that touches the bottom edge carries on for
-   * another --bleed and they compose down there exactly as they do up here.
-   * No seam to match, because no seam.
+   * and the last of the screen falls through as a flat bar. Rather than work
+   * out what colour that bar should be, which is a different colour on every
+   * screen (water under a vignette under a page glow under film grain), every
+   * layer that touches the bottom edge carries on for another --bleed and they
+   * compose down there exactly as they do up here. No seam to match, because
+   * no seam.
    *
-   * The real value is measured off the device by measureBleed() in
-   * Atmosphere.tsx and set inline on the root, because it cannot be derived:
-   * it came out at 59pt on a 393×852 phone, which is the inset at the *top*
-   * and 25pt more than the home indicator below. This is only what stands in
-   * for the frame or two before that runs.
+   * The top inset, and it is not a guess. In `display: standalone` iOS lays
+   * the page out *below* the status bar, so the viewport is the screen less
+   * the inset at the top and the whole of that shortfall lands at the bottom.
+   * Measured on the phone: screen 852, viewport 793, safe area top 59. Those
+   * are the same 59.
+   *
+   * It used to be the inset at the *bottom* — 34pt, the home indicator — which
+   * was never the right number, and then JS was supposed to correct it. The JS
+   * ran early, measured no gap, and wrote 0px over the top; every
+   * `calc(-1 * var(--bleed))` in the app quietly became zero and five rounds of
+   * fixes multiplied by nothing. So the honest default is the one that is right
+   * without help, and measureBleed() may now only raise it — never zero it.
+   *
+   * Safe to over-estimate: this is over-draw on fixed layers, and anything
+   * past the bottom of the screen is simply not seen. The number that must be
+   * exact is --hem below, because that one adds real document height.
    */
-  --bleed: env(safe-area-inset-bottom, 0px);
+  --bleed: env(safe-area-inset-top, 0px);
+
+  /*
+   * …and how much of that is real, measured, document height.
+   *
+   * The hem is an element in the flow, so getting this wrong does not
+   * over-draw harmlessly — it makes every page in the app scroll by the amount
+   * it is wrong by. Measured only, zero until then. See measureBleed().
+   */
+  --hem: 0px;
 
   --maxw-page: 44rem;
   --tabbar-h: 96px;

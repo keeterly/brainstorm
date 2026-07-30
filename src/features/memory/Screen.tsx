@@ -21,6 +21,7 @@ interface Reading {
   viewport: string
   short: string
   bleed: string
+  hem: string
   insets: string
   mode: string
   dpr: string
@@ -48,6 +49,7 @@ function read(): Reading {
     viewport: `${window.innerWidth} × ${window.innerHeight}`,
     short: `${gapX} wide · ${gapY} tall`,
     bleed: px(cs.getPropertyValue('--bleed')),
+    hem: px(cs.getPropertyValue('--hem')),
     insets: `top ${px(cs.getPropertyValue('--sat'))} · bottom ${px(cs.getPropertyValue('--sab'))}`,
     mode,
     dpr: String(devicePixelRatio),
@@ -58,7 +60,8 @@ const LABELS: [keyof Reading, string][] = [
   ['screen', 'Screen'],
   ['viewport', 'Viewport'],
   ['short', 'Falls short by'],
-  ['bleed', 'Bleed in use'],
+  ['bleed', 'Over-draw (--bleed)'],
+  ['hem', 'Extra height (--hem)'],
   ['insets', 'Safe area'],
   ['mode', 'Launched as'],
   ['dpr', 'Pixel ratio'],

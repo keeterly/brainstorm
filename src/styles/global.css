@@ -40,11 +40,21 @@ body,
  *
  * It is the floor, not the whole answer. Every opaque full-screen surface in
  * the app now runs --bleed past the bottom of the glass in its own right — the
- * paper page, the photo viewer, Focus, the bottom sheet — because for a long
- * while none of them did, and the hem was left carrying a strip that four
- * different overlays each wanted a different colour. The rules below are what
- * it wears while one of them is up, so the two agree whichever of them the
- * phone ends up drawing.
+ * world's own box, the paper page, the photo viewer, Focus, the bottom sheet —
+ * because for a long while none of them did, and the hem was left carrying a
+ * strip that four different overlays each wanted a different colour. The rules
+ * below are what it wears while one of them is up, so the two agree whichever
+ * of them the phone ends up drawing.
+ *
+ * One correction, because it was written here as fact and it was not one. The
+ * paragraph above says extending a fixed layer past the viewport does nothing
+ * and only document content reaches the strip. That was inferred from a device
+ * where --bleed was zero — measureBleed() ran before the standalone layout had
+ * settled, saw no gap, and wrote 0px over a working CSS default — so every
+ * `calc(-1 * var(--bleed))` in the app was `calc(-1 * 0px)` and the experiment
+ * was never actually run. The strip stayed for five rounds of fixes because
+ * nothing had yet been made one pixel taller. The value is a floor now, not a
+ * measurement, and the JS may only raise it.
  */
 .world-hem {
   position: relative;
@@ -52,7 +62,10 @@ body,
      free space goes above it, so it lands at the very bottom of the screen
      rather than wherever that page's content happened to stop */
   margin-top: auto;
-  flex: 0 0 var(--bleed, 0px);
+  /* the measured number, never the estimate. This is document height: an
+     over-estimate here does not over-draw harmlessly, it makes every page in
+     the app scroll by however much it is wrong by. */
+  flex: 0 0 var(--hem, 0px);
   overflow: hidden;
   pointer-events: none;
   z-index: 0;
@@ -99,10 +112,10 @@ body.on-cover .world-hem > div {
 }
 
 /* The column the hem hangs from — see .world-hem.
-   The extra --bleed goes on the body and nowhere else: put it on all three of
+   The extra height goes on the body and nowhere else: put it on all three of
    html/body/#root and each one adds it to the last, and the document comes out
-   two bleeds too tall. The body is the one that has to hold it, because the
-   body is what the sky clips with `overflow: hidden`. */
+   two hems too tall. The body is the one that has to hold it, because the body
+   is what the sky clips with `overflow: hidden`. */
 #root {
   display: flex;
   flex-direction: column;
@@ -111,7 +124,7 @@ body.on-cover .world-hem > div {
 
 body {
   margin: 0;
-  min-height: calc(100% + var(--bleed, 0px));
+  min-height: calc(100% + var(--hem, 0px));
   background:
     radial-gradient(ellipse 120% 60% at 50% -10%, var(--ground-high) 0%, transparent 60%),
     var(--ground);
