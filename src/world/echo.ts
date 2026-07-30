@@ -76,12 +76,14 @@ export function wabiPill(seed: string, r: number, spread = 5): string {
  * Same noise as everything else here, so the same thought opens the same shape
  * every time.
  */
-export function wabiBlob(seed: string, spread = 13): string {
+export function wabiBlob(seed: string, spread = 12): string {
   const v = noise(seed)
-  // across: how far in from each end its corner reaches — most of the way
-  const h = (n: number) => (41 - spread / 2 + v(n) * spread).toFixed(1)
+  // Across: a good way in from each end, but not so far that the two corners
+  // meet in the middle — at 40%+ the shape has no sides left at all and comes
+  // out a plain ellipse, which is as generic as the rectangle it replaced.
+  const h = (n: number) => (31 - spread / 2 + v(n) * spread).toFixed(1)
   // down: near enough the whole half-height that no end is ever flat
-  const y = (n: number) => (50 - v(n) * 5).toFixed(1)
+  const y = (n: number) => (50 - v(n) * 6).toFixed(1)
   return `${h(1)}% ${h(2)}% ${h(3)}% ${h(4)}% / ${y(5)}% ${y(6)}% ${y(7)}% ${y(8)}%`
 }
 

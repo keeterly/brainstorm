@@ -55,16 +55,6 @@ export default function SkyPage() {
         ✦ tidy
       </button>
       {/* speaking is one tap: no page to open first, no button to find inside it */}
-      <button className="sky-say" data-sky="say" aria-label="Say something">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
-          <path
-            d="M12 3.6a2.7 2.7 0 0 1 2.7 2.7v5.4a2.7 2.7 0 0 1-5.4 0V6.3A2.7 2.7 0 0 1 12 3.6ZM5.6 11a6.4 6.4 0 0 0 12.8 0M12 17.4v3"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-          />
-        </svg>
-      </button>
       <div className="sky-undo" data-sky="undo">
         <span className="lb" data-sky="undoLb" />
         <b data-sky="undoGo">bring it back</b>
@@ -399,7 +389,6 @@ function mountSky(root: HTMLDivElement) {
   const pageD = $('pageD')
   const pageX = $('pageX')
   const pageMic = $('pageMic')
-  const sayBtn = $('say')
   const pagePic = $('pagePic')
   const pageAbsorb = $('pageAbsorb')
   const pageLater = $('pageLater')
@@ -806,7 +795,42 @@ function mountSky(root: HTMLDivElement) {
   // does not run away with the whole sky. The cost is that at twenty members
   // they are too small to read — which is what tapping one is for.
   function memberR(n = 1) {
-    return Math.max(34, Math.min(50, 54 - n * 1.6))
+    // Sized for the ring it will actually stand in, not for the whole pool.
+    // Twenty in one ring meant twenty tiny discs; twenty across two rings is
+    // ten each, and ten can be read.
+    return Math.max(38, Math.min(50, 54 - perRing(n) * 1.6))
+  }
+  /**
+   * How a pool's contents are laid out: one ring while one will do, and more
+   * than one as soon as a single ring stops being a ring.
+   *
+   * At twenty members a lone ring is a bad shape twice over — every drop
+   * shrinks to fit the circumference, and the circumference gets so long that
+   * the far side of it is off the screen. Neither is what "open the group" is
+   * supposed to look like. Rings inside rings keep each one loose enough to
+   * read and the whole thing small enough to see at once.
+   */
+  const RING_MAX = 11
+  function ringCounts(n: number): number[] {
+    if (n <= RING_MAX) return n ? [n] : []
+    // as few rings as will hold it, then shared out so no ring is nearly empty
+    const rings = Math.ceil(n / RING_MAX)
+    const out: number[] = []
+    let left = n
+    for (let i = 0; i < rings; i++) {
+      // outer rings are longer and can carry more, which also keeps the gaps
+      // between neighbours about equal from the inside out
+      const share = Math.round((n * (i + 1.4)) / ((rings * (rings + 1)) / 2 + rings * 0.4))
+      const take = i === rings - 1 ? left : Math.max(1, Math.min(left - (rings - 1 - i), share))
+      out.push(take)
+      left -= take
+    }
+    return out
+  }
+  /** How many will be standing beside each other, for sizing. */
+  function perRing(n: number): number {
+    const counts = ringCounts(n)
+    return counts.length ? Math.max(...counts) : n
   }
   /** The one member you have tapped open, so it can be read. */
   let peek: string | null = null
@@ -840,11 +864,20 @@ function mountSky(root: HTMLDivElement) {
     if (el?.clientWidth) return Math.hypot(el.clientWidth, el.clientHeight) / 2
     return Math.max(base * 2.4, 96)
   }
-  /** The opened card, sized in screen terms so it reads the same at any zoom. */
+  /**
+   * The opened card, sized in screen terms so it reads the same at any zoom.
+   *
+   * Narrow on purpose. Run it to the full width of the glass and three lines
+   * of text come out four times as wide as they are tall — and a shape that
+   * flat can only be an oblong, however its corners are drawn. Held closer to
+   * the width of a column of prose, the same words take more lines, the body
+   * comes out nearer square, and what opens reads as a drop that swelled
+   * rather than a bar laid across the sky.
+   */
   function peekBox() {
     const k = camTarget?.k ?? cam.k
     const per = 1 / Math.max(0.2, k)
-    return { w: Math.min(300, W - 56) * per, font: 15 * per, pad: 17 * per }
+    return { w: Math.min(224, W - 112) * per, font: 15 * per, pad: 16 * per }
   }
   /**
    * What shape each thing on stage actually is, measured off the real element.
@@ -981,11 +1014,25 @@ function mountSky(root: HTMLDivElement) {
   // The ring an opened pool lays its members out on. Big enough to clear the
   // pool's own body and its name, and big enough that no two members touch —
   // whichever of those is the larger demand.
-  function orbitR(g: TL) {
+  /** Every ring an open pool stands on, innermost first. */
+  function ringRadii(g: TL): number[] {
     const n = Math.max(1, g.members.length)
     const mr = memberR(n)
-    const apart = n > 1 ? (mr + 9) / Math.sin(Math.PI / n) : 0
-    return Math.max(radiusOf(g) + mr + 18, apart)
+    const counts = ringCounts(n)
+    const inner = radiusOf(g) + mr + 18
+    let r = inner
+    return counts.map((c, i) => {
+      if (i > 0) r += mr * 2 + 14
+      // and never so tight that neighbours on this ring would touch
+      const apart = c > 1 ? (mr + 9) / Math.sin(Math.PI / c) : 0
+      r = Math.max(r, apart)
+      return r
+    })
+  }
+  /** The outermost of them, which is what everything outside has to clear. */
+  function orbitR(g: TL) {
+    const rs = ringRadii(g)
+    return rs.length ? rs[rs.length - 1] : radiusOf(g) + memberR(1) + 18
   }
   function paintDropEl(t: Thought, el: HTMLDivElement, r: number, asMember: boolean) {
     el.style.width = el.style.height = r * 2 + 'px'
@@ -1093,10 +1140,11 @@ function mountSky(root: HTMLDivElement) {
             me.classList.add('member')
             me.style.width = box.w + 'px'
             me.style.height = 'auto'
-            // wider at the ends than at the top and bottom: the body narrows
-            // toward each end, and a first line that came out longer than the
-            // rest would otherwise run at the curve
-            me.style.padding = `${(box.pad * 0.85).toFixed(1)}px ${(box.pad * 1.7).toFixed(1)}px`
+            // Generous all round, and generous above and below on purpose: air
+            // there is what stops two lines of text coming out in a body four
+            // times as wide as it is tall. The corners still take room off the
+            // ends, so the sides keep a little more than the top and bottom.
+            me.style.padding = `${(box.pad * 1.5).toFixed(1)}px ${(box.pad * 1.62).toFixed(1)}px`
             // its corners are set from the box, not in pixels, so they eat
             // almost the whole of the sides: what opens is a blob that happens
             // to hold a sentence, not a rectangle with the edges taken off
@@ -1808,9 +1856,6 @@ function mountSky(root: HTMLDivElement) {
     (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionLike }).webkitSpeechRecognition ||
     (window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike }).SpeechRecognition
   const speechOK = !!SRCls
-  sayBtn.classList.toggle('show', speechOK)
-  // the tab capsule steps aside for the voice drop, but only when there is one
-  document.body.classList.toggle('sky-voice', speechOK)
   let rec: SpeechRecognitionLike | null = null
   let micUsed = false
   // the stored thumbnail is far too small to read text from, so a capture also
@@ -1827,10 +1872,10 @@ function mountSky(root: HTMLDivElement) {
       }
     }
     pageMic.classList.remove('live')
-    sayBtn.classList.remove('live')
   }
-  /** Begin listening. Shared, because speaking can start from the sky itself
-   *  as well as from inside the page — and both must behave identically. */
+  /** Begin listening, from the mic inside the page. Holding the sky opens
+   *  that page, so speaking a thought is still one gesture away — which is
+   *  why the second microphone that used to sit beside the tabs is gone. */
   function startMic(): boolean {
     if (rec || !SRCls) return false
     rec = new SRCls()
@@ -1849,13 +1894,11 @@ function mountSky(root: HTMLDivElement) {
     rec.onend = () => {
       rec = null
       pageMic.classList.remove('live')
-      sayBtn.classList.remove('live')
     }
     rec.onerror = () => stopMic()
     try {
       rec.start()
       pageMic.classList.add('live')
-      sayBtn.classList.add('live')
       pageN.textContent = 'listening…'
       return true
     } catch {
@@ -1866,24 +1909,6 @@ function mountSky(root: HTMLDivElement) {
   pageMic.addEventListener('click', () => {
     if (rec) stopMic()
     else startMic()
-  })
-  // One tap from the sky: the page opens already listening, so speaking a
-  // thought is the same gesture as having it — no page to find first.
-  sayBtn.addEventListener('click', () => {
-    if (rec) {
-      stopMic()
-      return
-    }
-    if (!speechOK) {
-      say('this browser will not listen')
-      return
-    }
-    clearAll()
-    openPage('capture', undefined, W / 2, H * 0.38)
-    // let the page settle before the browser's own permission prompt lands
-    setTimeout(() => {
-      if (!startMic()) pageN.textContent = 'could not start listening'
-    }, 90)
   })
   pagePic.addEventListener('click', () => pageFile.click())
   pageFile.addEventListener('change', () => {
@@ -2096,7 +2121,17 @@ function mountSky(root: HTMLDivElement) {
         // an opened pool is showing its contents; its own actions step clear of
         // the whole ring and wait together below it
         const gap = 78 / cam.k
-        x = p.x + (slot - (n - 1) / 2) * gap - 27
+        // Centred on the pool, but never off the glass: an open pool is framed
+        // by its outermost ring, so it is often not in the middle of the
+        // screen, and five moons hung off it ran the last one over the edge.
+        // half the row, plus half a moon, plus a little air — all in world
+        // units, because that is what the positions are in
+        const reach = ((n - 1) / 2) * gap + 27 + 14 / cam.k
+        const lo = toWorldX(0) + reach
+        const hi = toWorldX(W) - reach
+        // wider than the glass: centre it and lose a little at both ends
+        const cx = lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, p.x))
+        x = cx + (slot - (n - 1) / 2) * gap - 27
         y = p.y + Math.max(orbitR(tl), ringR) + memberR(tl.members.length) + 46
       } else {
         const ang = toCenter + (slot - (n - 1) / 2) * spread
@@ -2401,6 +2436,14 @@ function mountSky(root: HTMLDivElement) {
       const bodies = g.members.map((m) => drawnBodyOf(m.id, fallback))
       // strongest joins first, so a crowded ring spends its paths on the
       // couplings that are actually carrying the shape
+      // In a crowd, "these two are close" stops being information — everything
+      // is close, so a neck between every touching pair is not twenty joins,
+      // it is one smear with drops in it. So the more there are, the fewer and
+      // the firmer: a handful of couplings that are genuinely pressed together
+      // reads as deliberate, where all of them read as mud.
+      const crowd = g.members.length
+      const least = crowd <= 8 ? 0.06 : 0.34
+      const most = crowd <= 8 ? OIL_MAX : Math.max(4, Math.round(48 / crowd))
       const joins: { i: number; j: number; v: number }[] = []
       for (let i = 0; i < bodies.length; i++) {
         for (let j = i + 1; j < bodies.length; j++) {
@@ -2409,11 +2452,11 @@ function mountSky(root: HTMLDivElement) {
           // same gap only ever muddied it
           if (fuse && ((fuse.a === g.members[i].id && fuse.b === g.members[j].id) || (fuse.a === g.members[j].id && fuse.b === g.members[i].id))) continue
           const v = pull(bodies[i], bodies[j])
-          if (v > 0.06) joins.push({ i, j, v })
+          if (v > least) joins.push({ i, j, v })
         }
       }
       joins.sort((a, b) => b.v - a.v)
-      for (const jn of joins.slice(0, OIL_MAX)) {
+      for (const jn of joins.slice(0, most)) {
         const d = oilPath(bodies[jn.i], bodies[jn.j], jn.v)
         if (!d) continue
         const pair = oilPair(used)
@@ -3102,86 +3145,106 @@ function mountSky(root: HTMLDivElement) {
           const s = shapes.get(reader.id)
           if (s) readBox = { hw: s.hw, hh: s.hh }
         }
-        // how much of the ring the card eats, across it and along it, at the
-        // angle it is actually sitting at
+        // how much the card eats, across its ring and along it, at the angle
+        // it is actually sitting at
         const ra = reader ? reader.a + spin : 0
         const across = readBox ? readBox.hw * Math.abs(Math.sin(ra)) + readBox.hh * Math.abs(Math.cos(ra)) : 0
         const along = readBox ? readBox.hw * Math.abs(Math.cos(ra)) + readBox.hh * Math.abs(Math.sin(ra)) : 0
 
-        // Each member takes as much of the ring as its own size needs, rather
-        // than an equal slice — so longer titles get more room than short ones.
-        // With a card on the ring the total wants more room than a circle has,
-        // so the ring itself grows until everything fits: that growth is the
-        // others being pushed away, which is the whole point of opening one.
-        const slice = (m: Thought, or: number) =>
-          m.id === reader?.id
-            ? Math.asin(Math.min(0.98, (across + 14) / or))
-            : Math.asin(Math.min(0.98, (memberRadiusOf(m.id, n) + 7) / or))
-        // …but only so far. Opening the ring all the way out to fit a card
-        // walks the far side of it off the screen; past a point the room has
-        // to come from the members near the card giving way locally, which is
-        // what settling against each other below does.
-        const base0 = orbitR(g)
-        let or = base0
-        for (let i = 0; i < 4 && reader; i++) {
-          const need = g.members.reduce((sum, m) => sum + slice(m, or), 0) * 2
-          if (need <= Math.PI * 2) break
-          or = Math.min(base0 * 1.25, or * (need / (Math.PI * 2)))
-        }
-        ringR = or
-        const widths = g.members.map((m) => slice(m, or))
-        const span = widths.reduce((sum, w) => sum + w, 0) * 2
-        const scale = (Math.PI * 2) / Math.max(Math.PI * 2, span)
+        // Contents go on rings, more than one as soon as one stops being a
+        // ring. Twenty round a single circle was a bad shape twice over: every
+        // drop shrank to fit the circumference, and the circumference grew
+        // until its far side was off the glass.
+        const radii = ringRadii(g)
+        const counts = ringCounts(n)
+        ringR = radii.length ? radii[radii.length - 1] : 0
+        let taken = 0
+        const rings = counts.map((c, i) => {
+          const items = g.members.slice(taken, taken + c)
+          taken += c
+          return { r: radii[i], items, i }
+        })
 
-        // The walk normally starts at the top of the ring. While you are
-        // reading it starts at the card, so the card keeps its angle and every
-        // shuffle happens on the far side of the ring from it.
-        const start = reader ? g.members.findIndex((m) => m.id === reader.id) : 0
-        const from = start < 0 ? 0 : start
-        const base = reader ? ra : -Math.PI / 2 + spin
-        // the walk lands each member in the middle of its own share; shifting
-        // back by the first one's puts the member we started from exactly on
-        // the angle it is meant to hold
-        const anchor = reader ? widths[from] * scale : 0
-        let walked = 0
-        for (let k = 0; k < g.members.length; k++) {
-          const i = (from + k) % g.members.length
-          const m = g.members[i]
-          // step to the middle of this one's share, then past it
-          walked += widths[i] * scale
-          const a = base + walked - anchor
-          walked += widths[i] * scale
-          const mp = posOf(m.id)
-          if (!(drag && drag.id === m.id)) {
-            const ease = peek ? 0.16 : 0.1
-            // The card stays on the radius it was opened at. The only claim on
-            // it is the group's own name at the centre of the pool: the card is
-            // opaque and sits in front, so covering the pool's body is fine,
-            // but covering what the group is called is not. So it is pushed out
-            // just far enough to leave that core clear, which is usually a few
-            // pixels and never a journey.
-            const core = Math.min(52, radiusOf(g) * 0.4)
-            const rad = reader && reader.id === m.id ? Math.max(reader.r, core + along) : or
-            mp.x += (gp.x + Math.cos(a) * rad - mp.x) * ease
-            mp.y += (gp.y + Math.sin(a) * rad - mp.y) * ease
+        for (const ring of rings) {
+          const holdsCard = !!reader && ring.items.some((m) => m.id === reader.id)
+          // Each member takes as much of its ring as its own size needs, not an
+          // equal slice, so a longer title gets more room than a short one.
+          const slice = (m: Thought, or: number) =>
+            m.id === reader?.id
+              ? Math.asin(Math.min(0.98, (across + 14) / or))
+              : Math.asin(Math.min(0.98, (memberRadiusOf(m.id, n) + 7) / or))
+          // A card wants more of its ring than a circle has. The ring opens up
+          // to find it — but only so far, because opening it all the way walks
+          // the far side off the screen; past that the room comes from the
+          // neighbours giving way locally, which settling below does.
+          let or = ring.r
+          for (let it = 0; it < 4 && holdsCard; it++) {
+            const need = ring.items.reduce((sum, m) => sum + slice(m, or), 0) * 2
+            if (need <= Math.PI * 2) break
+            or = Math.min(ring.r * 1.25, or * (need / (Math.PI * 2)))
           }
-          // Members stay in the world, not in the window — clamping them to the
-          // glass is what used to fold one side of the ring onto the other.
-          // Held to each axis separately and to the body's real extents: a card
-          // is wide and short, and the circle drawn round it is wider than half
-          // the world, which pinned the thing you had just opened to a fixed
-          // spot instead of leaving it where you tapped it.
-          const s = shapes.get(m.id)
-          const hx = s ? s.hw : memberRadiusOf(m.id, n)
-          const hy = s ? s.hh : memberRadiusOf(m.id, n)
-          if (worldW() > hx * 2) mp.x = Math.max(hx, Math.min(worldW() - hx, mp.x))
-          if (worldH() > hy * 2) mp.y = Math.max(hy, Math.min(worldH() - hy, mp.y))
+          const widths = ring.items.map((m) => slice(m, or))
+          const span = widths.reduce((sum, w) => sum + w, 0) * 2
+          const scale = (Math.PI * 2) / Math.max(Math.PI * 2, span)
+          // Whatever the ring does not need, it shares out between them. Seven
+          // drops need about two thirds of a circle, and without this the walk
+          // simply stopped when it ran out of members — leaving them huddled
+          // down one side of a ring that was two thirds empty. A ring should
+          // look like a ring at any number.
+          const slack = Math.max(0, (Math.PI * 2 - span) / ring.items.length)
+
+          // The walk starts at the top, offset half a slot on every other ring
+          // so the rings interleave instead of lining up into spokes. While you
+          // are reading, the ring holding the card starts *at* the card, so it
+          // keeps its angle and every shuffle happens on the far side from it.
+          const start = holdsCard ? ring.items.findIndex((m) => m.id === reader?.id) : 0
+          const from = start < 0 ? 0 : start
+          const stagger = ring.i % 2 ? Math.PI / Math.max(1, ring.items.length) : 0
+          const base = holdsCard ? ra : -Math.PI / 2 + spin + stagger
+          // the walk lands each member in the middle of its own share; shifting
+          // back by the first one's puts the one we started from exactly on the
+          // angle it is meant to hold
+          const anchor = holdsCard ? widths[from] * scale : 0
+          let walked = 0
+          for (let k = 0; k < ring.items.length; k++) {
+            const idx = (from + k) % ring.items.length
+            const m = ring.items[idx]
+            // step to the middle of this one's share, then past it
+            walked += widths[idx] * scale
+            const a = base + walked - anchor
+            walked += widths[idx] * scale + slack
+            const mp = posOf(m.id)
+            if (!(drag && drag.id === m.id)) {
+              const ease = peek ? 0.16 : 0.1
+              // The card stays on the radius it was opened at. The only claim
+              // on it is the group's own name at the centre: the card is opaque
+              // and sits in front, so covering the pool's body is fine, but
+              // covering what the group is called is not. So it is pushed out
+              // just far enough to leave that core clear — usually a few pixels
+              // and never a journey.
+              const core = Math.min(52, radiusOf(g) * 0.4)
+              const rad = reader && reader.id === m.id ? Math.max(reader.r, core + along) : or
+              mp.x += (gp.x + Math.cos(a) * rad - mp.x) * ease
+              mp.y += (gp.y + Math.sin(a) * rad - mp.y) * ease
+            }
+            // Members stay in the world, not in the window — clamping them to
+            // the glass is what used to fold one side of a ring onto the other.
+            // Held per axis and to the body's real extents: a card is wide and
+            // short, and the circle drawn round it is wider than half the
+            // world, which pinned the thing you had just opened to a fixed spot
+            // instead of leaving it where you tapped it.
+            const sh = shapes.get(m.id)
+            const hx = sh ? sh.hw : memberRadiusOf(m.id, n)
+            const hy = sh ? sh.hh : memberRadiusOf(m.id, n)
+            if (worldW() > hx * 2) mp.x = Math.max(hx, Math.min(worldW() - hx, mp.x))
+            if (worldH() > hy * 2) mp.y = Math.max(hy, Math.min(worldH() - hy, mp.y))
+          }
         }
-        // Now let the shapes settle against each other. The ring is only a
+        // Now let the shapes settle against each other. A ring is only a
         // suggestion; what actually decides where a member ends up is not
         // bumping into its neighbours, measured against their true outlines
         // rather than circles drawn round them. This is what lets a drop tuck
-        // into the space beside a card instead of orbiting the corner it does
+        // into the space beside a card instead of orbiting a corner it does
         // not have.
         separate(g, gp)
         // and the glass comes to the card, once, while it is opening
@@ -3190,8 +3253,9 @@ function mountSky(root: HTMLDivElement) {
           peekSettle--
           bringIntoView(reader.id, readBox)
         }
-        // clear the orbit's room: the rest of the sky drifts out of the way
-        const clear = or + mr + 34
+        // clear the whole orbit's room — the outermost ring, not the first —
+        // so the rest of the sky drifts out of the way of all of it
+        const clear = ringR + mr + 34
         for (const other of view.tls) {
           if (other.t.id === g.t.id) continue
           const op = posOf(other.t.id)
@@ -3419,7 +3483,6 @@ function mountSky(root: HTMLDivElement) {
     if (deafT) clearTimeout(deafT)
     document.documentElement.style.removeProperty('--kb')
     document.body.classList.remove('sky-held')
-    document.body.classList.remove('sky-voice')
     stopMic()
     if (layoutT) clearTimeout(layoutT)
     if (undoT) clearTimeout(undoT)
