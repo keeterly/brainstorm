@@ -232,6 +232,8 @@ const MOON_ICONS: Record<string, string> = {
   tell: 'M3.4 8.6h6.2M3.4 12h4M3.4 15.4h6.2M14 5.4l6 6.6-6 6.6M20 12h-6.4',
   // asking it something: the mark itself, because nothing else means this
   ask: 'M9.1 8.6a3 3 0 1 1 3.9 2.87c-.7.24-1.1.85-1.1 1.58v.85M12 17.6v.5',
+  // what is in this group, as a list you can work on: rows, each with a mark
+  list: 'M4.4 6.6h1.2M4.4 12h1.2M4.4 17.4h1.2M9 6.6h10.6M9 12h10.6M9 17.4h10.6',
 }
 function moonSvg(key: string) {
   return (
@@ -2533,6 +2535,20 @@ function mountSky(root: HTMLDivElement) {
         else void runDeepen(tl)
       },
     })
+    // A group's own page. It was reachable only by tapping the group a second
+    // time — a gesture with nothing on screen to suggest it, which on a phone
+    // needs two presses to land inside twenty pixels of each other and often
+    // does not. The shortcut still works; this is the way you can see.
+    if (tl.kind === 'pool') {
+      acts.push({
+        icon: 'list',
+        lb: 'the group',
+        run: () => {
+          closeMoons()
+          openPage('group', tl, toScreenX(p.x), toScreenY(p.y))
+        },
+      })
+    }
     const kin = kinOf(tl)
     acts.push({ icon: 'gather', lb: 'gather', dim: kin.length === 0, run: () => startPull(tl, true) })
     const canRain = tl.kind === 'drop' || tl.members.length >= 1
@@ -3121,7 +3137,18 @@ function mountSky(root: HTMLDivElement) {
   // How far a finger has to travel before it means something. A drop answers
   // quickly; the water needs more asking, so a near-miss on a drop does not
   // slide the whole world instead.
+  /**
+   * How far a press may travel and still be a tap.
+   *
+   * Nine pixels is a mouse number. A mouse does not move while you click; a
+   * thumb on a phone always does, and past this the press becomes a drag —
+   * which also closes the moons, so the tap that was meant to open a group
+   * instead put its actions away. Tap, nothing, tap, nothing: the double tap
+   * "does not work on mobile but does on desktop", and this is the whole of
+   * why.
+   */
   const TAP_SLOP = 9
+  const slopFor = (e: PointerEvent) => (e.pointerType === 'mouse' ? TAP_SLOP : 20)
   const PAN_SLOP = 16
   stage.addEventListener('pointerdown', (e) => {
     // iOS only hands over the tilt sensor from inside a real gesture, so the
@@ -3257,13 +3284,13 @@ function mountSky(root: HTMLDivElement) {
       }
     }
     if (!drag) {
-      if (bgDown && Math.hypot(e.clientX - bgDown.x, e.clientY - bgDown.y) > TAP_SLOP) {
+      if (bgDown && Math.hypot(e.clientX - bgDown.x, e.clientY - bgDown.y) > slopFor(e)) {
         bgDown = null
         if (holdTimer) clearTimeout(holdTimer)
       }
       return
     }
-    if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > TAP_SLOP) {
+    if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > slopFor(e)) {
       drag.moved = true
       if (holdTimer) clearTimeout(holdTimer)
       drag.el.classList.add('dragging')
@@ -3371,7 +3398,7 @@ function mountSky(root: HTMLDivElement) {
       return
     }
     if (!drag) {
-      if (bgDown && Math.hypot(e.clientX - bgDown.x, e.clientY - bgDown.y) < TAP_SLOP) {
+      if (bgDown && Math.hypot(e.clientX - bgDown.x, e.clientY - bgDown.y) < slopFor(e)) {
         const now = performance.now()
         if (now - lastTap < 320) {
           // two taps on open water: frame the whole sky
