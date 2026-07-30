@@ -17,6 +17,7 @@ import { applyDeepen, deepenThought } from './deepenFlow'
 import { applyAnswer, answerThought } from './answerFlow'
 import { fullDepth, sizeUp, waitingWord, type Sizing } from './gaugeFlow'
 import { isQuestion } from '@/domain/question'
+import { bin, membersOf, renameGroup, takeOut, ungroup, type Undone } from './groupFlow'
 import { awaitRun, markApplied, pendingRuns, subjectOf } from '@/ai/pending'
 import { reshapeTally, reshapeThought } from './reshapeFlow'
 import { haptics } from '@/lib/haptics'
@@ -629,14 +630,50 @@ function mountSky(root: HTMLDivElement) {
       .filter((r) => r.type === 'relates_to' && topIds.has(r.from_id) && topIds.has(r.to_id))
       .map((r) => ({ a: r.from_id, b: r.to_id, id: r.id }))
 
-    // a pool that has lost its contents is just a label in the way. Only ever
-    // an empty one — a group holding a single group is a real thing to keep.
-    for (const t of open) {
-      if (t.type !== 'goal' || kidsOf.has(t.id)) continue
-      if (Date.now() - new Date(t.created_at).getTime() > 8000) s.deleteThought(t.id)
-    }
     view = { tls, byId, threads, parentOf, kidsOf }
     ver++
+    sweepSoon()
+  }
+
+  /**
+   * An emptied group is a label in the way — but only once things have settled.
+   *
+   * This used to run inside rebuild(), which re-derives on every single store
+   * change, and it *deleted*. Both halves were wrong and together they lost
+   * data. Undoing an ungroup does two things in order — put the group back,
+   * then put its contents back inside it — and rebuild ran in the gap, saw a
+   * goal with nothing in it, and destroyed it before the second half of the
+   * undo arrived. Anything that moves members between groups had the same hole
+   * in it, and a hard delete takes the id with it, so nothing could be undone.
+   *
+   * So: after the dust settles, not during. And archived, not deleted, with the
+   * offer to bring it back — because "you emptied this, so I threw the name
+   * away" is a decision the app should be willing to be wrong about.
+   */
+  let sweepT: ReturnType<typeof setTimeout> | null = null
+  function sweepSoon() {
+    if (sweepT) clearTimeout(sweepT)
+    sweepT = setTimeout(sweep, 1200)
+  }
+  function sweep() {
+    const s = S()
+    const held = new Set(s.relationships.filter((r) => r.type === 'part_of').map((r) => r.to_id))
+    const empty = s.thoughts.filter(
+      (t) =>
+        t.status === 'open' &&
+        t.type === 'goal' &&
+        !held.has(t.id) &&
+        Date.now() - new Date(t.created_at).getTime() > 8000,
+    )
+    if (!empty.length) return
+    for (const t of empty) s.updateThought(t.id, { status: 'archived' })
+    const one = empty.length === 1 ? `“${trim(label(empty[0]), 30)}” is empty` : `${empty.length} empty groups`
+    offerAction(`${one} — put away`, 'bring it back', () => {
+      for (const t of empty) S().updateThought(t.id, { status: 'open' })
+      rebuild()
+      paintAll()
+      say('back the way it was')
+    }, 8000)
   }
 
   // ---------- positions (persisted to the layouts table) ----------
@@ -1199,9 +1236,21 @@ function mountSky(root: HTMLDivElement) {
       }
     }
     for (const [id] of els) if (!alive.has(id)) unmountEl(id)
+    // What is out of the sky but not gone. Resting and put-away are the same
+    // category as far as anyone reading is concerned — things you moved aside
+    // and might want back — and one pill for both keeps the corner from growing
+    // a third thing. Without this, a group you put away was recoverable only
+    // until your next action replaced the undo bar, which is not a bin, it is a
+    // grace period.
     const resting = S().thoughts.filter((t) => t.status === 'snoozed').length
-    restEl.textContent = `☁ ${resting} resting`
-    restEl.classList.toggle('show', resting > 0)
+    const aside = putAway().length
+    restEl.textContent =
+      resting && aside
+        ? `☁ ${resting + aside} aside`
+        : aside
+          ? `☁ ${aside} put away`
+          : `☁ ${resting} resting`
+    restEl.classList.toggle('show', resting + aside > 0)
     // the tidy pill stands beside it rather than across the screen from it,
     // and needs to know how much room the count is taking
     document.body.classList.toggle('sky-resting', resting > 0)
@@ -1380,11 +1429,27 @@ function mountSky(root: HTMLDivElement) {
       if (res.focus) setTimeout(() => say(`worth your attention: ${res.focus}`), 4400)
     } else say(res.kind === 'failed' ? 'could not tidy just now' : 'nothing obvious to gather')
   })
+  /**
+   * Things put away recently enough to still be looking for.
+   *
+   * A week, because that is how long a mistake stays a mistake. Older than
+   * that and it was a decision, and counting it forever turns the pill into a
+   * number nobody reads.
+   */
+  function putAway(): Thought[] {
+    const since = Date.now() - 7 * 86400000
+    return S().thoughts.filter((t) => t.status === 'archived' && new Date(t.updated_at).getTime() > since)
+  }
   restEl.addEventListener('click', () => {
+    const back = putAway()
+    for (const t of back) S().updateThought(t.id, { status: 'open' })
+    let woke = 0
     for (const t of S().thoughts) {
-      if (t.status === 'snoozed') S().updateThought(t.id, { status: 'open', snooze_until: null })
+      if (t.status !== 'snoozed') continue
+      woke++
+      S().updateThought(t.id, { status: 'open', snooze_until: null })
     }
-    say('the clouds part — they return')
+    say(back.length ? `${back.length + woke} back in the sky` : 'the clouds part — they return')
   })
   // wake anything whose rest is over
   for (const t of S().thoughts) {
@@ -1625,7 +1690,7 @@ function mountSky(root: HTMLDivElement) {
   })
 
   // ---------- the light page ----------
-  type PageMode = 'capture' | 'grow' | 'edit' | 'path' | 'brief' | 'news'
+  type PageMode = 'capture' | 'grow' | 'edit' | 'path' | 'brief' | 'news' | 'group'
   /** The brief ⚡ brought back for this thought, if it went out for one. */
   const briefOf = (id: string) => S().artifacts.find((a) => a.thought_id === id) ?? null
   let pageFor: { mode: PageMode; tl?: TL; ox: number; oy: number } | null = null
@@ -1690,6 +1755,7 @@ function mountSky(root: HTMLDivElement) {
     pageT.style.display = reading ? 'none' : ''
     page.classList.toggle('path', reading)
     page.classList.toggle('brief', mode === 'brief')
+    page.classList.toggle('group', mode === 'group')
     pageD.textContent =
       mode === 'brief'
         ? 'Done reading'
@@ -1731,6 +1797,43 @@ function mountSky(root: HTMLDivElement) {
         a.setAttribute('target', '_blank')
         a.setAttribute('rel', 'noreferrer noopener')
       }
+    } else if (mode === 'group' && tl) {
+      // Everything you can do to a group, in the one place a group is a thing
+      // rather than a container: its name, what is in it, and the two ways to
+      // be rid of it.
+      pageQ.textContent = 'This group'
+      pageT.value = label(tl.t)
+      pageT.placeholder = 'Name it'
+      const inside = membersOf(tl.t.id)
+      pageN.textContent = inside.length ? `${inside.length} inside` : 'nothing inside it yet'
+      pageA.style.display = 'block'
+      pageA.innerHTML =
+        (inside.length
+          ? `<div class="lab">what is inside</div>` +
+            inside
+              .map(
+                (_m, i) =>
+                  `<div class="row" data-i="${i}"><span class="t"></span>` +
+                  `<button class="out" aria-label="Take it out of this group">take out</button></div>`,
+              )
+              .join('')
+          : '') +
+        `<div class="danger">` +
+        `<button class="d" data-act="ungroup">Ungroup — keep what is inside</button>` +
+        `<button class="d bad" data-act="bin">Put the whole group away</button>` +
+        `</div>`
+      // textContent, never innerHTML: these are the user's own words and they
+      // are not markup
+      ;[...pageA.querySelectorAll('.row')].forEach((row, i) => {
+        ;(row.querySelector('.t') as HTMLElement).textContent = label(inside[i])
+        row.querySelector('.out')?.addEventListener('click', (e) => {
+          e.stopPropagation()
+          landUndo(takeOut(inside[i].id))
+          // the page is showing a list that just changed
+          openPage('group', tl, ox, oy)
+        })
+      })
+      wireDanger(pageA, tl)
     } else if (mode === 'news' && tl) {
       // The map can be told things. Everything else here only adds; this is the
       // one place you can say "it turned out otherwise" and have the shape of
@@ -1760,15 +1863,20 @@ function mountSky(root: HTMLDivElement) {
       pageT.placeholder = ''
       pageN.textContent = answersOf(tl.t).length ? '' : 'edits are kept'
       const answers = answersOf(tl.t)
-      if (imgOf(tl.t) || answers.length) {
-        pageA.style.display = 'block'
-        pageA.innerHTML =
-          (imgOf(tl.t) ? `<img alt="the photo in this drop" />` : '') +
-          (answers.length ? `<div class="lab">what it has absorbed</div>` + answers.map(() => `<div class="a"></div>`).join('') : '')
-        const im = pageA.querySelector('img')
-        if (im && imgOf(tl.t)) im.src = imgOf(tl.t) as string
-        ;[...pageA.querySelectorAll('.a')].forEach((el, i) => ((el as HTMLElement).textContent = answers[i]))
-      }
+      // Always shown now, because there was no way to throw a drop away from
+      // anywhere in the sky. Every gesture in this app added; the only delete
+      // in it lived on a route the sky has never linked to.
+      pageA.style.display = 'block'
+      pageA.innerHTML =
+        (imgOf(tl.t) ? `<img alt="the photo in this drop" />` : '') +
+        (answers.length
+          ? `<div class="lab">what it has absorbed</div>` + answers.map(() => `<div class="a"></div>`).join('')
+          : '') +
+        `<div class="danger"><button class="d bad" data-act="bin">Put this away</button></div>`
+      const im = pageA.querySelector('img')
+      if (im && imgOf(tl.t)) im.src = imgOf(tl.t) as string
+      ;[...pageA.querySelectorAll('.a')].forEach((el, i) => ((el as HTMLElement).textContent = answers[i]))
+      wireDanger(pageA, tl)
     }
     pageMic.classList.toggle('show', speechOK && (mode === 'capture' || mode === 'grow' || mode === 'news'))
     pageMic.classList.remove('live')
@@ -1875,11 +1983,69 @@ function mountSky(root: HTMLDivElement) {
     } else if (pf.mode === 'path' && pf.tl) {
       patchExtra(pf.tl.t, { kept: true })
       say('the path is kept — it will wait for you')
+    } else if (pf.mode === 'group' && pf.tl) {
+      landUndo(renameGroup(pf.tl.t.id, v))
     } else if (pf.tl) {
       const txt = v.trim()
       if (txt) S().updateThought(pf.tl.t.id, { raw_content: txt, title: null })
     }
   }
+
+  /**
+   * Fold a reversible change in, and offer it back.
+   *
+   * Everything on the taking-apart side of the grammar returns its own undo,
+   * and none of it is worth having unless the undo is one tap away from where
+   * you were standing when you did it.
+   */
+  function landUndo(u: Undone | null) {
+    if (!u) return
+    rebuild()
+    paintAll()
+    haptics.join()
+    record(u.note)
+    offerAction(u.note, 'put it back', () => {
+      u.undo()
+      rebuild()
+      paintAll()
+      say('back the way it was')
+    })
+  }
+
+  /**
+   * Two taps for the ones that take things away.
+   *
+   * Not a modal — a modal to confirm a reversible act is a lecture. The button
+   * changes into the question and waits; anywhere else you touch, it forgets it
+   * asked.
+   */
+  function wireDanger(host: HTMLElement, tl: TL) {
+    for (const el of [...host.querySelectorAll('.d')] as HTMLButtonElement[]) {
+      const act = el.dataset.act
+      const said = el.textContent ?? ''
+      let armed = false
+      const disarm = () => {
+        armed = false
+        el.textContent = said
+        el.classList.remove('armed')
+      }
+      el.addEventListener('click', (e) => {
+        e.stopPropagation()
+        if (!armed) {
+          for (const other of [...host.querySelectorAll('.d.armed')] as HTMLButtonElement[]) other.click()
+          armed = true
+          el.textContent = act === 'bin' ? 'Sure? It can be brought back' : 'Sure?'
+          el.classList.add('armed')
+          setTimeout(disarm, 4000)
+          return
+        }
+        closePage(false)
+        openPool = view.parentOf.get(tl.t.id) ?? null
+        landUndo(act === 'bin' ? bin(tl.t.id) : ungroup(tl.t.id))
+      })
+    }
+  }
+
   pageD.addEventListener('click', () => {
     if (pageFor?.mode === 'capture' && micUsed && pageT.value.trim().length > 80) {
       void runOrganize(true)
@@ -2190,7 +2356,13 @@ function mountSky(root: HTMLDivElement) {
     const below = open
       ? Math.max(orbitR(tl), ringR) + memberR(tl.members.length) + 46
       : radiusOf(tl) + 52
-    const gap = 78 / cam.k
+    // As wide as they can be and still all fit. Six moons at the old fixed
+    // spacing measured 444px across a 402px screen: the first and last were
+    // half off the glass and only half tappable, which is what any drop ⚡ had
+    // been run on looked like.
+    const n0 = moonEls.length || 1
+    const room = (W - 54 - 16) / Math.max(1, n0 - 1)
+    const gap = Math.min(78, room) / cam.k
     moonEls.forEach((m) => {
       const el = m as HTMLDivElement & { _slot?: number; _of?: number }
       const n = el._of ?? 1
@@ -3081,8 +3253,16 @@ function mountSky(root: HTMLDivElement) {
         paintAll()
         return
       }
-      if (openPool === tl.t.id) showMoons(tl)
-      else {
+      if (openPool === tl.t.id) {
+        // The same two-tap rule a drop has always had: once for what you can
+        // do to it, again for the thing itself. Until now the second tap on a
+        // group did nothing, which is why a group could not be renamed,
+        // emptied or thrown away from the only screen it appears on.
+        if (moonsFor === tl.t.id) {
+          closeMoons()
+          openPage('group', tl, toScreenX(p.x), toScreenY(p.y))
+        } else showMoons(tl)
+      } else {
         clearAll()
         openPool = tl.t.id
         // the camera goes to the pool rather than the pool being shoved into
