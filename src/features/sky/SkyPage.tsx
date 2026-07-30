@@ -14,6 +14,8 @@ import { humanDate } from '@/domain/human-date'
 import { nextAction } from '@/domain/next-action'
 import { armUpright, stepUpright, worldTilt } from '@/world/upright'
 import { applyDeepen, deepenThought } from './deepenFlow'
+import { applyAnswer, answerThought } from './answerFlow'
+import { isQuestion } from '@/domain/question'
 import { awaitRun, markApplied, pendingRuns, subjectOf } from '@/ai/pending'
 import { reshapeTally, reshapeThought } from './reshapeFlow'
 import { haptics } from '@/lib/haptics'
@@ -226,6 +228,8 @@ const MOON_ICONS: Record<string, string> = {
   brief: 'M6.2 3.6h8.1l3.5 3.5v13.3H6.2zM14.3 3.6v3.5h3.5M9 12.2h6M9 15.6h4.2',
   // telling it something: a line going in, and the shape rearranging around it
   tell: 'M3.4 8.6h6.2M3.4 12h4M3.4 15.4h6.2M14 5.4l6 6.6-6 6.6M20 12h-6.4',
+  // asking it something: the mark itself, because nothing else means this
+  ask: 'M9.1 8.6a3 3 0 1 1 3.9 2.87c-.7.24-1.1.85-1.1 1.58v.85M12 17.6v.5',
 }
 function moonSvg(key: string) {
   return (
@@ -1061,13 +1065,18 @@ function mountSky(root: HTMLDivElement) {
     // thing ⚡ did not leave behind: a minute of real research, and nothing in
     // the sky to say it had ever happened.
     const brief = briefOf(t.id)
-    const st = brief
-      ? `<div class="state blue">a brief${brief.sources.length ? ` · ${brief.sources.length} sources` : ''}</div>`
-      : isRipe(t)
-        ? `<div class="state blue">saturated</div>`
-        : isKept(t)
-          ? `<div class="state">has a path</div>`
-          : dots
+    // A question that has been answered says "answered", not "a brief". The
+    // difference is the whole of it: one of those means there is reading still
+    // to do, and the other means you already know.
+    const st = ex(t).answered_at
+      ? `<div class="state blue">answered</div>`
+      : brief
+        ? `<div class="state blue">a brief${brief.sources.length ? ` · ${brief.sources.length} sources` : ''}</div>`
+        : isRipe(t)
+          ? `<div class="state blue">saturated</div>`
+          : isKept(t)
+            ? `<div class="state">has a path</div>`
+            : dots
     const photo = imgOf(t) ? `<div class="photo"></div>` : ''
     el.innerHTML = (isRipe(t) ? `<div class="ring"></div>` : '') + photo + `<div class="t"></div>${r < 50 ? '' : st}`
     const ph = el.querySelector('.photo') as HTMLDivElement | null
@@ -2107,14 +2116,20 @@ function mountSky(root: HTMLDivElement) {
         },
       })
     }
-    // ⚡ — hand it to the agent and let it go and find out
+    // Hand it to the agent and let it go and find out. What "find out" means
+    // depends on what you pointed at: a question wants the number, and every
+    // other thing wants the way through. One button, because it is the same
+    // gesture either way — and the row does not need a seventh moon to say
+    // which kind of thing this is when the thing itself already says so.
+    const asking = tl.kind === 'drop' && isQuestion(label(tl.t))
     acts.push({
-      icon: 'work',
-      lb: 'work it',
+      icon: asking ? 'ask' : 'work',
+      lb: asking ? 'answer it' : 'work it',
       dim: S().offline,
       run: () => {
         closeMoons()
-        void runDeepen(tl)
+        if (asking) void runAnswer(tl)
+        else void runDeepen(tl)
       },
     })
     const kin = kinOf(tl)
@@ -2305,7 +2320,9 @@ function mountSky(root: HTMLDivElement) {
     }
     for (const run of runs) {
       if (dead) return
-      if (run.action !== 'deepen') continue
+      // the two that go away for a minute: one comes back with a way through,
+      // the other with an answer, and both have to survive a locked phone
+      if (run.action !== 'deepen' && run.action !== 'answer') continue
       const id = subjectOf(run)
       const tl = id ? view.byId.get(id) : null
       if (!id || !tl) {
@@ -2328,11 +2345,21 @@ function mountSky(root: HTMLDivElement) {
           say(res.why)
           continue
         }
-        landDeepen(tl, run.id, res.output, true)
+        landRun(run.action, tl, run.id, res.output)
       } else if (run.status === 'succeeded') {
-        landDeepen(tl, run.id, run.output, true)
+        landRun(run.action, tl, run.id, run.output)
       }
     }
+  }
+  /** Whichever of the two it was, folded in and said out loud. */
+  function landRun(action: string, tl: TL, runId: string, output: unknown) {
+    if (action === 'answer') {
+      const res = applyAnswer(tl.t.id, output as Parameters<typeof applyAnswer>[1], runId)
+      void markApplied(runId)
+      if (res.kind === 'answered') landAnswer(tl, res, true)
+      return
+    }
+    landDeepen(tl, runId, output, true)
   }
   /** Fold a finished run into the sky, and say so. */
   function landDeepen(tl: TL, runId: string, output: unknown, whileAway: boolean) {
@@ -2419,6 +2446,94 @@ function mountSky(root: HTMLDivElement) {
         const q = posOf(tl.t.id)
         openPage('brief', tl, toScreenX(q.x), toScreenY(q.y))
       })
+    }
+    fitWhenSettled()
+  }
+
+  /**
+   * Ask one thing on the map, and be told.
+   *
+   * The other half of ⚡. Half of what a map of real work holds is not work —
+   * "Pull live LAX→CDG premium economy fares for Sept 28" is a question with a
+   * number for an answer, and handing that a plan for finding the number out is
+   * the app describing the errand instead of running it.
+   *
+   * The one behavioural difference from ⚡ is what happens at the end. A brief
+   * of research is something to read later, so it is offered. An answer is the
+   * thing you asked for, so if you are still standing here when it lands, it
+   * opens. Nobody waits a minute for a number and then wants to tap twice more.
+   */
+  async function runAnswer(tl: TL) {
+    if (working || S().offline) return
+    working = tl.t.id
+    els.get(tl.t.id)?.classList.add('working')
+    const began = Date.now()
+    const tick = () => {
+      if (working !== tl.t.id) return
+      const s = Math.round((Date.now() - began) / 1000)
+      hold(s < 12 ? 'finding out — this takes a minute' : `still looking · ${s}s`)
+    }
+    tick()
+    const patience = setInterval(tick, 3000)
+    const img = ex(tl.t).img as string | undefined
+    const b64 = img?.includes(',') ? img.split(',')[1] : undefined
+    const res = await answerThought(tl.t.id, {
+      image: b64 ? { mediaType: 'image/jpeg', dataB64: b64 } : undefined,
+    })
+    clearInterval(patience)
+    working = null
+    els.get(tl.t.id)?.classList.remove('working')
+    if (dead) return
+    if (res.kind === 'failed') {
+      hold(res.why ?? 'could not get out there just now')
+      offerAction('tap to try again', 'again', () => {
+        hold(null)
+        void runAnswer(tl)
+      })
+      return
+    }
+    landAnswer(tl, res, false)
+  }
+
+  /** Put an answer where it belongs, and show it. */
+  function landAnswer(
+    tl: TL,
+    res: Extract<Awaited<ReturnType<typeof answerThought>>, { kind: 'answered' }>,
+    whileAway: boolean,
+  ) {
+    // anything the answer created arrives beside the question, not on top of it
+    const gp = posOf(tl.t.id)
+    if (res.added) {
+      const parentId = S().relationships.find((r) => r.type === 'part_of' && r.from_id === tl.t.id)?.to_id
+      const sibs = S().relationships.filter((r) => r.type === 'part_of' && r.to_id === (parentId ?? tl.t.id))
+      sibs.slice(-res.added).forEach((r, i, all) => {
+        const p = pos.get(r.from_id)
+        if (p && p.s >= 1) return
+        const q = posOf(r.from_id)
+        const a = -Math.PI / 2 + (i / Math.max(1, all.length)) * Math.PI * 2
+        q.x = q.rx = gp.x + Math.cos(a) * 150
+        q.y = q.ry = gp.y + Math.sin(a) * 120
+        q.s = 0.3
+      })
+    }
+    rebuild()
+    paintAll()
+    haptics.join()
+    record(`asked · ${res.line}`, trim(label(tl.t), 40))
+    // Reading it is the point, so when you are here it opens itself. When you
+    // are not — the phone was locked, and a notification is what told you — the
+    // sky does not rearrange itself behind your back; it offers.
+    if (whileAway || pageFor) {
+      hold(whileAway ? `while you were away — ${res.line}` : res.line)
+      offerAction(trim(res.line, 46), 'read it', () => {
+        hold(null)
+        const q = posOf(tl.t.id)
+        openPage('brief', tl, toScreenX(q.x), toScreenY(q.y))
+      })
+    } else {
+      hold(null)
+      const q = posOf(tl.t.id)
+      openPage('brief', tl, toScreenX(q.x), toScreenY(q.y))
     }
     fitWhenSettled()
   }

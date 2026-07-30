@@ -4,6 +4,7 @@
 import { supabase } from '@/lib/supabase'
 import { useGraph } from '@/store/graph'
 import { ACTION_REGISTRY } from '@shared/ai/registry'
+import { DEMO, DEMO_OUTPUT } from '@/lib/demo'
 
 /** Long enough for real research, short enough to give up eventually. */
 const BG_GIVE_UP_MS = 4 * 60 * 1000
@@ -87,6 +88,13 @@ export async function runAction<O = unknown>(
   input: unknown,
   opts: RunOptions = {},
 ): Promise<{ runId: string | null; output: O }> {
+  // The demo has no key and no server. Where there is something canned to say,
+  // it says it after a believable pause, so the demo shows the app working
+  // rather than a row of buttons that fail.
+  if (DEMO && DEMO_OUTPUT[action]) {
+    await new Promise((r) => setTimeout(r, 1400))
+    return { runId: null, output: DEMO_OUTPUT[action] as O }
+  }
   const auth = await authHeader()
   if (ACTION_REGISTRY[action]?.background) return runInBackground<O>(action, input, auth, opts)
   const res = await fetch('/api/ai', {

@@ -13,6 +13,7 @@ import { organize } from './actions/organize'
 import { namePool } from './actions/name-pool'
 import { cluster } from './actions/cluster'
 import { deepen } from './actions/deepen'
+import { answer } from './actions/answer'
 import { notice } from './actions/notice'
 import { reshape } from './actions/reshape'
 
@@ -32,6 +33,7 @@ export const ACTION_REGISTRY: Record<string, ActionDef<any, any>> = {
   [namePool.name]: namePool,
   [cluster.name]: cluster,
   [deepen.name]: deepen,
+  [answer.name]: answer,
   [notice.name]: notice,
   [reshape.name]: reshape,
 }

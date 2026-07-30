@@ -11,6 +11,10 @@ import type { PrioritizeOutput } from '@shared/ai/actions/prioritize'
 import { evaporateAt } from '@/world/Atmosphere'
 import { FocusOverlay } from './FocusOverlay'
 import { NoticedPanel } from './Noticed'
+import { Answered } from './Answered'
+import { isQuestion } from '@/domain/question'
+import { answerThought } from '@/features/sky/answerFlow'
+import type { AnswerOutput } from '@shared/ai/actions/answer'
 import type { Thought } from '@/domain/types'
 
 export default function CurrentPage() {
@@ -28,6 +32,11 @@ export default function CurrentPage() {
   const [suggestion, setSuggestion] = useState<PrioritizeOutput | null>(null)
   const [focusId, setFocusId] = useState<string | null>(null)
   const [showAll, setShowAll] = useState(false)
+  // Asking the one thing on this screen, when the one thing is a question.
+  const [asking, setAsking] = useState<string | null>(null)
+  const [askedFor, setAskedFor] = useState<{ id: string; out: AnswerOutput } | null>(null)
+  const [askFailed, setAskFailed] = useState<string | null>(null)
+  const [waited, setWaited] = useState(0)
 
   const today = todayISO()
   const prepass = useMemo(
@@ -101,6 +110,29 @@ export default function CurrentPage() {
     if (rec?.id === t.id) updateProfileSettings({ recommended_action: null })
   }
 
+  // Half of what a real map holds is not work — it is things you need to know.
+  // "Pull live LAX→CDG fares, Sept 28 out" is a question with a number for an
+  // answer, and until now the only two things this screen could offer it were
+  // Focus (sit and stare at it) and Done (pretend you did).
+  const primaryAsks = !!primary && isQuestion(primary.title || primary.raw_content)
+  const answerHere = askedFor && primary && askedFor.id === primary.id ? askedFor.out : null
+
+  async function askIt(t: Thought) {
+    if (asking || offline) return
+    setAsking(t.id)
+    setAskFailed(null)
+    setAskedFor(null)
+    setWaited(0)
+    // it really is a minute; a button that just dims for that long reads as broken
+    const began = Date.now()
+    const tick = setInterval(() => setWaited(Math.round((Date.now() - began) / 1000)), 1000)
+    const res = await answerThought(t.id)
+    clearInterval(tick)
+    setAsking(null)
+    if (res.kind === 'answered') setAskedFor({ id: t.id, out: res.output })
+    else setAskFailed(res.why ?? 'could not get out there just now')
+  }
+
   return (
     <div className="page" style={{ paddingTop: 'calc(var(--sat) + 12vh)' }}>
       {prepass.visible.length === 0 && (
@@ -148,14 +180,52 @@ export default function CurrentPage() {
           <p className="faint" style={{ fontSize: 'var(--fs-label)', marginTop: 10 }}>
             {primaryWhy}
           </p>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 18 }}>
-            <button className="btn btn--primary" onClick={() => setFocusId(primary.id)}>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 18, flexWrap: 'wrap' }}>
+            {/* When the thing to do is a question, going and finding out is the
+                first thing offered, because it is the only one of the three
+                that actually moves it. */}
+            {primaryAsks && !answerHere && (
+              <button
+                className="btn btn--primary"
+                onClick={() => void askIt(primary)}
+                disabled={!!asking || offline}
+              >
+                {asking === primary.id ? (waited > 10 ? `finding out · ${waited}s` : 'finding out…') : 'Answer it'}
+              </button>
+            )}
+            <button
+              className={primaryAsks && !answerHere ? 'btn btn--ghost' : 'btn btn--primary'}
+              onClick={() => setFocusId(primary.id)}
+            >
               Focus
             </button>
             <button className="btn btn--ghost" onClick={() => complete(primary)}>
               Done
             </button>
           </div>
+
+          {asking === primary.id && (
+            <p className="faint" style={{ fontSize: 'var(--fs-caption)', marginTop: 12 }}>
+              it keeps going if you lock the phone
+            </p>
+          )}
+          {askFailed && !asking && (
+            <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-label)', marginTop: 12 }}>
+              {askFailed}{' '}
+              <button style={{ textDecoration: 'underline', color: 'inherit' }} onClick={() => void askIt(primary)}>
+                try again
+              </button>
+            </p>
+          )}
+          {answerHere && (
+            <Answered
+              out={answerHere}
+              onDone={() => {
+                complete(primary)
+                setAskedFor(null)
+              }}
+            />
+          )}
         </div>
       )}
 

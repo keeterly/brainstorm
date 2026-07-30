@@ -41,6 +41,7 @@ function sampleInput(name: string): never {
     name_pool: { members: ['shoot on expired film', 'letters sealed with wax'] },
     cluster: { loose: [ref], pools: [{ id: 'p1', name: 'SS27 show', members: ['book the space'] }] },
     deepen: { subject: ref, context: ['book the space'] },
+    answer: { subject: ref, context: ['arrive by September 28'] },
     reshape: { subject: ref, inside: [ref], news: 'the studio fell through, Ana offered her garage' },
     notice: { thoughts: [ref], pools: [], recentlyDone: [] },
   }
@@ -330,5 +331,83 @@ describe('deepen — the ⚡ that goes and finds out', () => {
       note: '',
     })
     expect(bad.success).toBe(false)
+  })
+})
+
+describe('answer — the other half of ⚡, for the things that are questions', () => {
+  const answer = ACTION_REGISTRY.answer
+  const ctx = { nowISO: '2026-07-30T12:00:00Z', tzOffsetMin: -420, memory: ['Two-person label in LA'] }
+  const good = {
+    asked: 'What does LAX→CDG premium economy cost, Sept 28 out / Oct 9 back?',
+    answer: '$1,180–$1,420 round trip. Air France is showing $1,214 direct on AF65/AF66 for those exact dates.',
+    facts: [{ label: 'Cheapest found', value: '$1,214 round trip', note: 'AF65 out, AF66 back, booked direct' }],
+    asOf: 'Checked today; transatlantic premium economy moves daily.',
+    unknown: [{ what: 'The live ITA fare basis', toKnow: 'ITA cannot be queried programmatically — run it yourself' }],
+    next: [],
+    sources: [{ title: 'Air France', url: 'https://wwws.airfrance.us/x' }],
+    learned: ['Flies LAX→CDG for fashion week'],
+    settled: true,
+  }
+
+  it('is allowed to go and look things up', () => {
+    expect(answer.searchMaxUses).toBeGreaterThan(0)
+    expect(answer.background).toBe(true)
+  })
+
+  it('is told in as many words not to hand back the errand', () => {
+    // the entire reason this action exists rather than reusing deepen
+    const p = answer.buildPrompt(
+      { subject: { id: 'q1', title: 'Pull live LAX→CDG premium economy fares' }, context: [] },
+      ctx,
+    )
+    expect(p.system).toContain('answering one question, not planning one')
+    expect(p.system).toContain('is not an answer')
+    expect(p.user).toContain('Pull live LAX→CDG premium economy fares')
+  })
+
+  it('is told to give the range rather than invent a figure it cannot source', () => {
+    const p = answer.buildPrompt({ subject: { id: 'q1', title: 'x' }, context: [] }, ctx)
+    expect(p.system).toContain('never invent a precise number')
+  })
+
+  it('carries the neighbours, because they are most of the question', () => {
+    const p = answer.buildPrompt(
+      {
+        subject: { id: 'q1', title: 'Fares for LAX→CDG' },
+        context: ['Arrive by September 28'],
+        under: 'SS27 Lookbook & Collection Prep',
+      },
+      ctx,
+    )
+    expect(p.user).toContain('It sits under: SS27 Lookbook & Collection Prep')
+    expect(p.user).toContain('Arrive by September 28')
+  })
+
+  it('reads a picture as part of the question when one is attached', () => {
+    const p = answer.buildPrompt(
+      { subject: { id: 'q1', title: 'What fabric is this?' }, context: [], image: { mediaType: 'image/jpeg', dataB64: 'AAAA' } },
+      ctx,
+    )
+    expect(p.images).toEqual([{ mediaType: 'image/jpeg', dataB64: 'AAAA' }])
+  })
+
+  it('accepts an answer with nothing left over, which is the usual shape', () => {
+    expect(answer.outputSchema.safeParse(good).success).toBe(true)
+  })
+
+  it('will not accept an empty answer, whatever else came with it', () => {
+    expect(answer.outputSchema.safeParse({ ...good, answer: '' }).success).toBe(false)
+  })
+
+  it('caps the follow-ups, so answering cannot quietly become task-making', () => {
+    const three = [1, 2, 3].map((n) => ({ tempId: `n${n}`, title: `do ${n}`, why: '', effort: 1 }))
+    expect(answer.outputSchema.safeParse({ ...good, next: three }).success).toBe(true)
+    expect(answer.outputSchema.safeParse({ ...good, next: [...three, { tempId: 'n4', title: 'do 4', why: '', effort: 1 }] }).success).toBe(false)
+  })
+
+  it('makes it say whether the asking is finished', () => {
+    const without: Record<string, unknown> = { ...good }
+    delete without.settled
+    expect(answer.outputSchema.safeParse(without).success).toBe(false)
   })
 })
