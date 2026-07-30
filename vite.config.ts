@@ -8,6 +8,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Our own registration, in src/lib/sw.ts. The injected one is a bare
+      // register(): it never asks whether a newer worker exists and never
+      // reloads when one takes over, which with injectManifest means a running
+      // app is pinned to the version it first loaded.
+      injectRegister: null,
       // Our own worker, because the app needs to be reachable when it is not
       // open: a generated one can precache a shell but it cannot answer a push.
       strategies: 'injectManifest',

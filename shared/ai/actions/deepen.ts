@@ -116,6 +116,10 @@ export const deepen: ActionDef<DeepenInput, DeepenOutput> = {
         `give the ten that come first and let the rest wait; an eleventh is not accepted. Each one small enough ` +
         `to sit down and do, phrased as an action they take. Use dependsOn with your own tempIds where order ` +
         `genuinely matters. Effort is 1 (a few minutes) to 5 (a week of real work).\n` +
+        `**Nothing that is already inside it.** Anything listed above is on their map already, and a step that ` +
+        `restates one — even reworded, even merged with another, even more precisely — arrives as a duplicate ` +
+        `they then have to find and delete. Running this twice on one goal should add almost nothing the second ` +
+        `time. Returning two good steps beats returning ten of which eight are already there.\n` +
         `watchOuts: where this usually goes wrong, if you know. At most 4. Omit rather than pad.\n` +
         `sources: what you actually used, with real URLs from the search results. At most 10.\n` +
         `learned: anything durable you now know about *them* — how they work, what they are building, what they ` +

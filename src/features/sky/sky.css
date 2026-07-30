@@ -385,9 +385,16 @@ body.sky-held {
   color: rgba(var(--accent-rgb), 0.86);
 }
 
+/* Above the page, not under it.
+   Every action on the group page — rename, add, take out, put away — offers an
+   undo, and the page stays open so you can carry on organising. At z-index 110
+   against the page's 120 that offer was drawn behind the thing you were looking
+   at: visible in the DOM, unreachable by a finger, which is the worst of both.
+   The one control whose whole job is to be there for a moment has to be on
+   top of everything, including whatever produced it. */
 .sky-undo {
   position: fixed;
-  z-index: 110;
+  z-index: 130;
   left: 50%;
   bottom: calc(var(--tabbar-h) + var(--sab) + 16px);
   transform: translateX(-50%) translateY(90px);
@@ -611,6 +618,7 @@ body.sky-held {
   border: 0;
   color: var(--paper-ink, #3d4b5c);
 }
+.sky-page .pans .picked .d.bad { color: #b4534b; }
 .sky-page .pans .picked .d:active { opacity: 0.5; }
 .sky-page .pans .picked .d[hidden] { display: none; }
 

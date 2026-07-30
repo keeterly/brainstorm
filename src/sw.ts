@@ -11,8 +11,25 @@
 import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
 import { NavigationRoute, registerRoute } from 'workbox-routing'
 import { createHandlerBoundToURL } from 'workbox-precaching'
+import { clientsClaim } from 'workbox-core'
 
 declare const self: ServiceWorkerGlobalScope
+
+// ---------- taking over ----------
+//
+// These two lines are the difference between shipping a fix and appearing to.
+//
+// A new worker installs and then sits in `waiting` until every last tab and
+// every last installed instance of the app has been closed. Nothing here ever
+// called skipWaiting — there was a handler for a message no code sent — and
+// nothing called clientsClaim, so the old worker went on serving the old
+// precached index.html, which points at the old hashed bundle. Reloading does
+// not help: the reload is a navigation, and the navigation is answered by the
+// worker with the very shell you are trying to get away from. A fix deployed
+// at midnight was still invisible half an hour later, and the only way out was
+// to force-quit the app.
+self.skipWaiting().catch(() => undefined)
+clientsClaim()
 
 // ---------- the shell, exactly as before ----------
 cleanupOutdatedCaches()
@@ -23,6 +40,7 @@ registerRoute(
     denylist: [/^\/api\//, /^\/\.netlify\//],
   }),
 )
+// belt and braces: an older client that knows to ask can still hurry it along
 self.addEventListener('message', (e) => {
   if ((e.data as { type?: string })?.type === 'SKIP_WAITING') void self.skipWaiting()
 })

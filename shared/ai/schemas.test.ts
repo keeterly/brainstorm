@@ -458,3 +458,22 @@ describe('the search ceiling belongs to the action', () => {
     }
   })
 })
+
+describe('running ⚡ on the same goal twice', () => {
+  it('is told, in as many words, not to hand back what is already there', () => {
+    // a real goal came back with twenty-five things in it and six duplicate
+    // pairs: "Complete Forms 1919 and 413 for each 20%+ owner" alongside
+    // "Complete Forms 1919, 912 (if flagged), and 413 for each 20%+ owner"
+    const p = ACTION_REGISTRY.deepen.buildPrompt(
+      {
+        subject: { id: 'g1', title: 'VENIA funding readiness' },
+        context: ['Assemble the financial packet: 3 yrs tax returns, current P&L, balance sheet, debt schedule'],
+      },
+      { nowISO: '2026-07-30T12:00:00Z', tzOffsetMin: -420, memory: [] },
+    )
+    expect(p.user).toContain('Nothing that is already inside it')
+    expect(p.user).toContain('arrives as a duplicate')
+    // and it still gets the list to compare against
+    expect(p.user).toContain('Assemble the financial packet')
+  })
+})

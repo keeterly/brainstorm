@@ -1838,7 +1838,8 @@ function mountSky(root: HTMLDivElement) {
           : '') +
         `<div class="row add"><input class="t" placeholder="Add something to this group…" enterkeyhint="done" aria-label="Add something to this group" /></div>` +
         `<div class="picked" hidden><button class="d go">Group these</button>` +
-        `<button class="d">Take these out</button></div>` +
+        `<button class="d out">Take these out</button>` +
+        `<button class="d bad away">Put these away</button></div>` +
         `<div class="danger">` +
         `<button class="d" data-act="ungroup">Ungroup — keep what is inside</button>` +
         `<button class="d bad" data-act="bin">Put the whole group away</button>` +
@@ -1846,12 +1847,15 @@ function mountSky(root: HTMLDivElement) {
 
       const picked = new Set<string>()
       const pickedBar = pageA.querySelector('.picked') as HTMLDivElement
-      const [groupBtn, takeBtn] = [...pickedBar.querySelectorAll('.d')] as HTMLButtonElement[]
+      const groupBtn = pickedBar.querySelector('.go') as HTMLButtonElement
+      const takeBtn = pickedBar.querySelector('.out') as HTMLButtonElement
+      const awayBtn = pickedBar.querySelector('.away') as HTMLButtonElement
       const refreshPicked = () => {
         pickedBar.hidden = picked.size < 1
         groupBtn.hidden = picked.size < 2
         groupBtn.textContent = `Group these ${picked.size}`
         takeBtn.textContent = picked.size === 1 ? 'Take it out' : `Take these ${picked.size} out`
+        awayBtn.textContent = picked.size === 1 ? 'Put it away' : `Put these ${picked.size} away`
       }
       refreshPicked()
 
@@ -1924,23 +1928,29 @@ function mountSky(root: HTMLDivElement) {
         openPool = tl.t.id
         paintAll()
       })
-      takeBtn.addEventListener('click', (e) => {
+      const bulk = (act: (id: string) => Undone | null, word: string) => (e: Event) => {
         e.stopPropagation()
         const ids = inside.filter((m) => picked.has(m.id)).map((m) => m.id)
-        const undos = ids.map((id) => takeOut(id)).filter((u): u is Undone => !!u)
+        const undos = ids.map(act).filter((u): u is Undone => !!u)
         if (!undos.length) return
         rebuild()
         paintAll()
-        const note = undos.length === 1 ? undos[0].note : `${undos.length} loose again`
+        const note = undos.length === 1 ? undos[0].note : `${undos.length} ${word}`
         record(note)
         offerAction(note, 'put them back', () => {
           for (const u of [...undos].reverse()) u.undo()
           rebuild()
           paintAll()
+          redrawGroupPage()
           say('back the way it was')
         })
         openPage('group', tl, ox, oy)
-      })
+      }
+      takeBtn.addEventListener('click', bulk(takeOut, 'loose again'))
+      // Running ⚡ on a goal twice fills it with near-duplicates — six pairs in
+      // a list of twenty-five — and taking those out only moves the mess into
+      // the sky. This is the one that clears them.
+      awayBtn.addEventListener('click', bulk(bin, 'put away'))
 
       wireDanger(pageA, tl)
     } else if (mode === 'aside') {
@@ -2170,8 +2180,23 @@ function mountSky(root: HTMLDivElement) {
       u.undo()
       rebuild()
       paintAll()
+      redrawGroupPage()
       say('back the way it was')
     })
+  }
+
+  /**
+   * Put the list back in step with the map.
+   *
+   * The group page stays open while you organise, so an undo taken from the
+   * bar at the foot of the screen changes what the graph holds and leaves the
+   * list above it showing the world as it was a second ago.
+   */
+  function redrawGroupPage() {
+    const pf = pageFor
+    if (pf?.mode !== 'group' || !pf.tl) return
+    const tl = view.byId.get(pf.tl.t.id)
+    if (tl) openPage('group', tl, pf.ox, pf.oy)
   }
 
   /**
