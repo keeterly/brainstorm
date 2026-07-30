@@ -99,6 +99,13 @@ export default function SkyPage() {
         </div>
       </div>
       <input type="file" data-sky="pageFile" accept="image/*" style={{ display: 'none' }} />
+      {/* A photo you kept, at the size you kept it. See openPhoto. */}
+      <div className="sky-lightbox" data-sky="lightbox" role="dialog" aria-label="The photo" aria-modal="true">
+        <img data-sky="lightboxImg" alt="" />
+        <button className="x" data-sky="lightboxX" aria-label="Close">
+          ×
+        </button>
+      </div>
     </div>
   )
 }
@@ -234,6 +241,9 @@ const MOON_ICONS: Record<string, string> = {
   ask: 'M9.1 8.6a3 3 0 1 1 3.9 2.87c-.7.24-1.1.85-1.1 1.58v.85M12 17.6v.5',
   // what is in this group, as a list you can work on: rows, each with a mark
   list: 'M4.4 6.6h1.2M4.4 12h1.2M4.4 17.4h1.2M9 6.6h10.6M9 12h10.6M9 17.4h10.6',
+  // the picture you kept, at the size you kept it: a frame with a horizon in it
+  photo:
+    'M3.6 6.8a2 2 0 0 1 2-2h12.8a2 2 0 0 1 2 2v10.4a2 2 0 0 1-2 2H5.6a2 2 0 0 1-2-2V6.8ZM3.9 16l4.6-4.3a1.7 1.7 0 0 1 2.3 0l4 3.7M14 13.4l1.6-1.5a1.7 1.7 0 0 1 2.3 0l2.2 2M9 9.4a1.2 1.2 0 1 1-2.4 0 1.2 1.2 0 0 1 2.4 0Z',
 }
 function moonSvg(key: string) {
   return (
@@ -401,6 +411,9 @@ function mountSky(root: HTMLDivElement) {
   const pageAbsorb = $('pageAbsorb')
   const pageLater = $('pageLater')
   const pageFile = root.querySelector('[data-sky="pageFile"]') as HTMLInputElement
+  const lightbox = $('lightbox')
+  const lightboxImg = root.querySelector('[data-sky="lightboxImg"]') as HTMLImageElement
+  const lightboxX = $('lightboxX')
 
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
   document.body.classList.add('sky-held')
@@ -435,6 +448,14 @@ function mountSky(root: HTMLDivElement) {
   const isKept = (t: Thought) => ex(t).kept === true
   const isRipe = (t: Thought) => !isKept(t) && answersOf(t).length >= 1
   const imgOf = (t: Thought) => ex(t).img as string | undefined
+  /**
+   * The version worth looking at.
+   *
+   * Falls back to the face for every photo kept before there was a second
+   * version — those open blurry rather than not at all, which is the right way
+   * round.
+   */
+  const fullOf = (t: Thought) => (ex(t).full as string | undefined) ?? imgOf(t)
   const patchExtra = (t: Thought, patch: Record<string, unknown>) =>
     S().updateThought(t.id, { extra: { ...ex(t), ...patch } })
 
@@ -2154,13 +2175,23 @@ function mountSky(root: HTMLDivElement) {
       // in it lived on a route the sky has never linked to.
       pageA.style.display = 'block'
       pageA.innerHTML =
-        (imgOf(tl.t) ? `<img alt="the photo in this drop" />` : '') +
+        (imgOf(tl.t) ? `<button class="shot" aria-label="See the photo full screen"><img alt="" /></button>` : '') +
         (answers.length
           ? `<div class="lab">what it has absorbed</div>` + answers.map(() => `<div class="a"></div>`).join('')
           : '') +
         `<div class="danger"><button class="ctl d bad" data-act="bin">Put this away</button></div>`
       const im = pageA.querySelector('img')
       if (im && imgOf(tl.t)) im.src = imgOf(tl.t) as string
+      // the thumbnail is a way in, not a decoration: a picture you cannot open
+      // is the exact thing this page was missing
+      const shotBtn = pageA.querySelector('.shot')
+      const big = fullOf(tl.t)
+      if (shotBtn && big) {
+        shotBtn.addEventListener('click', (e) => {
+          e.stopPropagation()
+          openPhoto(big, label(tl.t))
+        })
+      }
       ;[...pageA.querySelectorAll('.a')].forEach((el, i) => ((el as HTMLElement).textContent = answers[i]))
       wireDanger(pageA, tl)
     }
@@ -2202,6 +2233,38 @@ function mountSky(root: HTMLDivElement) {
       )
       .catch(() => {})
   }
+  /**
+   * A photo you kept, at the size you kept it.
+   *
+   * A drop with a picture in it draws that picture ninety pixels across and
+   * then has nothing else to offer: the only other place it appeared was a
+   * 120px thumbnail on the drop's own page. You photograph a care label to be
+   * able to read the care label, and there was nowhere in the app that let you.
+   *
+   * Black, edge to edge, one way out. Not a page — a page is where you write
+   * things, and there is nothing to write here.
+   */
+  function openPhoto(src: string, alt: string) {
+    lightboxImg.src = src
+    lightboxImg.alt = alt
+    lightbox.classList.add('show')
+    // one frame, so the transition has a state to come from
+    requestAnimationFrame(() => lightbox.classList.add('on'))
+  }
+  function closePhoto() {
+    if (!lightbox.classList.contains('show')) return
+    lightbox.classList.remove('on')
+    setTimeout(() => {
+      lightbox.classList.remove('show')
+      // a megabyte of data URL is not worth holding on to once it is off screen
+      lightboxImg.removeAttribute('src')
+    }, reduced ? 0 : 240)
+  }
+  lightboxX.addEventListener('click', closePhoto)
+  // anywhere. The picture fills the glass, so "off the picture" is not a target
+  // anybody can find — the whole thing is the way out.
+  lightbox.addEventListener('click', closePhoto)
+
   function closePage(commit: boolean) {
     if (!pageFor) return
     // Whatever is in the fields goes in now, read straight from them, whether
@@ -2516,9 +2579,15 @@ function mountSky(root: HTMLDivElement) {
       }
       let img: string
       let readable: string
+      let full: string
       try {
         img = draw(320, 0.8) // the drop's face — small enough to live in a row
         readable = draw(1400, 0.85) // legible enough for the model to read
+        // and one you can actually look at. The face is 320px because it is
+        // drawn at 90 on a bubble; opened full screen it is a smear. This is
+        // the version the lightbox shows — big enough to read a care label on,
+        // small enough that a row carrying it still syncs.
+        full = draw(1200, 0.72)
       } catch {
         return
       }
@@ -2530,7 +2599,7 @@ function mountSky(root: HTMLDivElement) {
       const prev = pageA.querySelector('img')
       if (prev) prev.src = img
       const pf = pageFor
-      const t = S().addThought({ raw_content: 'Photo', title: 'Photo', extra: { img } })
+      const t = S().addThought({ raw_content: 'Photo', title: 'Photo', extra: { img, full } })
       const p = posOf(t.id)
       const a = Math.random() * Math.PI * 2
       p.x = p.rx = Math.max(60, Math.min(W - 60, (pf?.ox ?? W / 2) + Math.cos(a) * 110))
@@ -2597,6 +2666,12 @@ function mountSky(root: HTMLDivElement) {
   })
 
   // ---------- moons ----------
+  /** half the glass disc — the label hangs below it and is not part of this */
+  const MOON_R = 25
+  /** what the outermost disc must keep between itself and the edge */
+  const MOON_EDGE = 12
+  /** the most air a row is allowed; fewer moons do not spread further apart */
+  const MOON_STEP = 76
   let moonsFor: string | null = null
   const moonEls: HTMLDivElement[] = []
   function closeMoons() {
@@ -2618,6 +2693,20 @@ function mountSky(root: HTMLDivElement) {
     // an opened pool has already been framed by the camera; leave it where it is
     if (openPool !== tl.t.id) p.y = Math.max(p.y, radiusOf(tl) + 170)
     const acts: { icon: string; lb: string; dim?: boolean; run: () => void }[] = []
+    // First, because on a drop that is a photograph it is the only thing you
+    // are likely to have come for. Tapping the bubble brings the row up; this
+    // is the one on the row that gives you the picture.
+    const shot = fullOf(tl.t)
+    if (shot) {
+      acts.push({
+        icon: 'photo',
+        lb: 'the photo',
+        run: () => {
+          closeMoons()
+          openPhoto(shot, label(tl.t))
+        },
+      })
+    }
     if (tl.kind === 'drop' && !isKept(tl.t)) {
       acts.push({
         icon: 'grow',
@@ -2698,7 +2787,9 @@ function mountSky(root: HTMLDivElement) {
       m.className = 'sky-moon' + (a.dim ? ' dim' : '')
       m.innerHTML = `<div class="ic">${moonSvg(a.icon)}</div><div class="lb">${a.lb}</div>`
       if (!reduced) m.style.animationDelay = i * 45 + 'ms'
-      m.style.transformOrigin = '27px 27px'
+      // the disc's own centre, so a moon shrinks and grows around the thing you
+      // are aiming at rather than around the top-left of its label block
+      m.style.transformOrigin = `${MOON_R}px ${MOON_R}px`
       m.addEventListener('pointerdown', (e) => e.stopPropagation())
       m.addEventListener('click', (e) => {
         e.stopPropagation()
@@ -2741,27 +2832,32 @@ function mountSky(root: HTMLDivElement) {
     const below = open
       ? Math.max(orbitR(tl), ringR) + memberR(tl.members.length) + 46
       : (peek === tl.t.id && grown ? grown.hh : radiusOf(tl)) + 52
-    // As wide as they can be and still all fit. Six moons at the old fixed
-    // spacing measured 444px across a 402px screen: the first and last were
-    // half off the glass and only half tappable, which is what any drop ⚡ had
-    // been run on looked like.
+    // As wide as they can be and still all fit — worked out in screen pixels,
+    // because the glass is measured in screen pixels and a moon undoes the
+    // camera's scale to keep its real size. The old sum did the spacing in
+    // world units and then compared it against a screen-width budget, so it
+    // was only ever right at one zoom level: pull the camera in and the row it
+    // thought it had centred hung off the left edge.
     const n0 = moonEls.length || 1
-    const room = (W - 54 - 16) / Math.max(1, n0 - 1)
-    const gap = Math.min(78, room) / cam.k
+    const room = n0 > 1 ? (W - 2 * MOON_R - 2 * MOON_EDGE) / (n0 - 1) : MOON_STEP
+    const step = Math.min(MOON_STEP, room)
+    const gap = step / cam.k
     moonEls.forEach((m) => {
       const el = m as HTMLDivElement & { _slot?: number; _of?: number }
       const n = el._of ?? 1
       const slot = el._slot ?? 0
       // Centred on the subject, but never off the glass — a thing near an edge
-      // is exactly when you most need its actions to still be reachable.
-      const reach = ((n - 1) / 2) * gap + 27 + 14 / cam.k
-      const lo = toWorldX(0) + reach
-      const hi = toWorldX(W) - reach
-      // wider than the glass: centre it and lose a little at both ends
-      const cx = lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, p.x))
-      const x = cx + (slot - (n - 1) / 2) * gap - 27
-      // and never under the tab bar, however low the thing itself is
-      const floor = toWorldY(waterlineY() - 118) - 27
+      // is exactly when you most need its actions to still be reachable. `half`
+      // is how far the outermost disc sits from the row's centre, plus the
+      // margin it must keep; `step` is capped so this can never exceed W/2.
+      const half = ((n - 1) / 2) * step + MOON_R + MOON_EDGE
+      const lo = toWorldX(half)
+      const hi = toWorldX(W - half)
+      const cx = lo > hi ? (toWorldX(0) + toWorldX(W)) / 2 : Math.max(lo, Math.min(hi, p.x))
+      const x = cx + (slot - (n - 1) / 2) * gap - MOON_R
+      // and never under the tab bar, however low the thing itself is — the
+      // label hangs below the disc now, so this clears more than the disc
+      const floor = toWorldY(waterlineY() - 132) - MOON_R
       const y = Math.min(p.y + below, floor)
       // the moons live in the world but are things you tap: they keep their
       // real size however far out the camera has pulled

@@ -2,7 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- The sky zooms, the interface does not: pinching a map is the point of
+         having one, pinching the chrome slides the tab bar off the bottom of an
+         installed app with no browser UI left to undo it. See src/lib/nozoom.ts
+         for the two refusals this one cannot make on its own. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#04050a" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

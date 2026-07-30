@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter, MemoryRouter } from 'react-router-dom'
 import App from './App'
 import { DEMO } from './lib/demo'
+import { holdStill } from './lib/nozoom'
 import { keepFresh } from './lib/sw'
 import './styles/global.css'
 
@@ -13,6 +14,8 @@ const Router = DEMO ? MemoryRouter : BrowserRouter
 // Before anything renders, so a stale app spends as little time on screen as
 // it possibly can.
 keepFresh()
+// The world zooms; the interface does not.
+holdStill()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -205,41 +205,102 @@ body.sky-held {
 }
 .skyb .photo + .t { position: relative; z-index: 1; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.95); }
 
+/* A thing's actions are bubbles too.
+ *
+ * They used to be opaque discs with the word crammed inside them under the
+ * icon, and both readings were wrong. Wrong as objects: this world is made of
+ * one material and these were the only things in it made of something else —
+ * dark plastic counters laid on the glass, each with its own hard black halo.
+ * And wrong as layout: a 54px circle holding an icon *and* a word gives the
+ * word about eleven pixels and thirty-eight to fit in, so "gather" ran to the
+ * rim, the icon shrank to make room, and the whole row read as smudges.
+ *
+ * So the disc holds the icon and nothing else, and the word stands underneath
+ * it in the open where it has all the room it needs. The disc is the same
+ * glass as a drop — a little brighter, because it is a control and has to stay
+ * legible over whatever it happens to be covering.
+ */
 .sky-moon {
   position: absolute;
   left: 0;
   top: 0;
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
+  width: 50px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 1px;
-  /* Opaque, and lit from the front.
-     These are laid over a sky that already has things in it, and a translucent
-     button on top of a bubble is two pieces of text in the same place. It is a
-     control, not a piece of weather: it may sit *on* the world without joining
-     it. */
-  background:
-    radial-gradient(ellipse 16% 16% at 32% 24%, rgba(255, 255, 255, 0.34), transparent 70%),
-    radial-gradient(circle at 50% 30%, rgba(38, 48, 65, 0.99), rgba(15, 19, 28, 1));
-  border: 0.5px solid rgba(var(--accent-rgb), 0.5);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    /* the world darkens under the row, so the row is plainly in front of it */
-    0 0 0 6px rgba(6, 9, 14, 0.42),
-    0 10px 28px rgba(0, 0, 0, 0.66);
+  gap: 6px;
   color: var(--water);
   cursor: pointer;
   animation: sky-pop 380ms cubic-bezier(0.2, 1.35, 0.4, 1) backwards;
   z-index: 6;
 }
-.sky-moon .ic { font-size: 15px; line-height: 1; pointer-events: none; }
-/* nine pixels was a label you had to already know the meaning of */
-.sky-moon .lb { font-size: 10.5px; font-weight: 500; letter-spacing: 0.005em; pointer-events: none; color: var(--ink); }
-.sky-moon.dim { opacity: 0.35; color: var(--ink-faint); border-color: rgba(255, 255, 255, 0.15); }
+.sky-moon .ic {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  position: relative;
+  isolation: isolate;
+  pointer-events: none;
+  backdrop-filter: blur(16px) saturate(170%) brightness(1.42);
+  -webkit-backdrop-filter: blur(16px) saturate(170%) brightness(1.42);
+  background: linear-gradient(
+    rgba(255, 255, 255, 0.2),
+    rgba(255, 255, 255, 0.07) 48%,
+    rgba(255, 255, 255, 0.13)
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 0 0 0.5px rgba(var(--accent-rgb), 0.3),
+    /* the sky darkens under the disc, softly, so the row is plainly in front
+       of whatever it is covering — a ring of flat black was doing this job by
+       drawing a second circle around every button */
+    0 0 22px 6px rgba(6, 9, 14, 0.42),
+    0 10px 26px rgba(0, 0, 0, 0.55);
+}
+/* the same refracting rim the drops have */
+.sky-moon .ic::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.72) 0%,
+    rgba(255, 255, 255, 0.08) 34%,
+    rgba(255, 255, 255, 0) 58%,
+    rgba(var(--accent-rgb), 0.5) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+/* Outside the disc, so it can be a readable size and a real word. Nowrap and
+   a width it is allowed to exceed: the labels are short, the spacing is set so
+   they clear each other, and an ellipsised verb helps nobody. */
+.sky-moon .lb {
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.004em;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+  color: var(--ink);
+  text-shadow: 0 1px 3px rgba(2, 4, 9, 0.9), 0 0 10px rgba(2, 4, 9, 0.7);
+}
+.sky-moon:active .ic {
+  background: linear-gradient(rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.16));
+}
+.sky-moon.dim { opacity: 0.42; }
+.sky-moon.dim .ic { box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.16), 0 0 18px 5px rgba(6, 9, 14, 0.36); }
 
 .sky-drop-in {
   position: absolute;
@@ -431,6 +492,59 @@ body.sky-held {
 .sky-undo .lb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sky-undo b { color: var(--water); font-weight: 600; cursor: pointer; flex-shrink: 0; }
 
+/* ---------- the photo, at the size you kept it ----------
+   Black, edge to edge, and nothing else on it. Everywhere else in this app is
+   made of glass and weather; a photograph is the one thing you put here that
+   was already finished, and the only respectful thing an interface can do with
+   it is get out of the way. Not the light page — that is where you write, and
+   there is nothing to write here. */
+.sky-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--sat, 0px) + 12px) 12px calc(var(--sab, 0px) + 12px);
+  background: rgba(2, 3, 6, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  opacity: 0;
+  transition: opacity 240ms ease;
+  cursor: zoom-out;
+}
+.sky-lightbox.show { display: flex; }
+.sky-lightbox.on { opacity: 1; }
+.sky-lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 6px;
+  transform: scale(0.965);
+  transition: transform 300ms cubic-bezier(0.2, 0.9, 0.3, 1.05);
+  /* the one place in the app where pinching is about the *content*, so the
+     browser is allowed to have it */
+  touch-action: pinch-zoom;
+}
+.sky-lightbox.on img { transform: none; }
+.sky-lightbox .x {
+  position: absolute;
+  top: calc(var(--sat, 0px) + 10px);
+  right: 12px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.11);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #fff;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.sky-lightbox .x:active { background: rgba(255, 255, 255, 0.24); }
+
 /* ---------- inside the drop: the full-screen light page ---------- */
 .sky-page {
   position: fixed;
@@ -499,6 +613,19 @@ body.sky-held {
 .sky-page .pans .lab { font-size: 9.5px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--paper-soft, #8fa3b6); margin-bottom: 6px; }
 .sky-page .pans .a { font-size: 13.5px; line-height: 1.5; color: var(--paper-ink, #3d4b5c); padding: 7px 0; border-top: 0.5px solid rgba(19, 26, 36, 0.08); }
 .sky-page .pans img { max-width: 120px; border-radius: 12px; display: block; margin-bottom: 8px; }
+/* The thumbnail is a way in. It was a picture sitting on a page doing nothing,
+   which on a drop that *is* a photograph is the whole content of the thing. */
+.sky-page .pans .shot {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+.sky-page .pans .shot img { margin-bottom: 0; }
+.sky-page .pans .shot:active { opacity: 0.6; }
 /* A brief is longer than a plan and is the thing you waited a minute for, so
    it gets the room to be read rather than a quarter of the page. */
 .sky-page.brief .pans { max-height: 58dvh; }
@@ -588,25 +715,70 @@ body.sky-held {
   justify-content: space-between;
   gap: 12px;
 }
-/* One family of controls.
-   The tick is a circle with a hairline that fills with ink when it is on. Every
-   other thing you can press on this page was bare text, so the circles were the
-   only part of the page that looked like a control at all. They are all the
-   same object now — a hairline, a soft body, ink when engaged — and the tick is
-   simply the round one. */
+/* One family of controls, and the family is the bubbles.
+   Every button on this page was bare text, so the ticks were the only part of
+   it that looked pressable at all. The fix is not to invent a button — this app
+   already has one material, and it is the glass the whole sky is made of: a
+   body you can see through, light gathering along the rim rather than pooling
+   in a spot, and weight underneath. A drop and a button are now the same
+   substance seen against different backgrounds, so a control reads as a control
+   without ever being drawn as a box.
+   --ctl-ink is the rim and shadow colour, so a variant only has to change that
+   and its text to become a different kind of button. */
 .sky-page .pans .ctl {
+  --ctl-ink: 19, 26, 36;
+  position: relative;
+  isolation: isolate;
   font-family: inherit;
+  border: 0;
   border-radius: 999px;
-  border: 1px solid rgba(19, 26, 36, 0.18);
-  background: rgba(19, 26, 36, 0.035);
   color: var(--paper-soft, #8fa3b6);
-  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+  /* the same recipe as .skyb, inverted for a light room: on paper the glass is
+     what light collects *in* rather than what it passes through */
+  backdrop-filter: blur(12px) saturate(150%) brightness(1.04);
+  -webkit-backdrop-filter: blur(12px) saturate(150%) brightness(1.04);
+  background: linear-gradient(rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.24) 52%, rgba(255, 255, 255, 0.46));
+  box-shadow:
+    /* the hard line where the light catches the top edge */
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    /* light bouncing up off the paper into the underside */
+    inset 0 -1px 0 rgba(255, 255, 255, 0.5),
+    /* it is floating, and it has weight */
+    0 3px 10px rgba(var(--ctl-ink), 0.09);
+  transition: background 150ms ease, color 150ms ease, box-shadow 150ms ease;
 }
+/* The rim refracts rather than outlines — bright on the lit side, the button's
+   own colour on the shadow side, and only ever a hairline wide. */
+.sky-page .pans .ctl::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(255, 255, 255, 0.3) 32%,
+    rgba(var(--ctl-ink), 0.08) 56%,
+    rgba(var(--ctl-ink), 0.34) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+/* pressed: the glass fills with ink and stops being see-through */
 .sky-page .pans .ctl:active {
   background: var(--paper-ink, #3d4b5c);
-  border-color: var(--paper-ink, #3d4b5c);
   color: #fff;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.28);
 }
+.sky-page .pans .ctl:active::before { opacity: 0; }
 
 .sky-page .pans .lab.head .sel {
   font-size: 9.5px;
@@ -617,21 +789,17 @@ body.sky-held {
   min-height: 30px;
   margin: -7px 0;
 }
-/* On — outlined rather than filled. A tick fills because the fill *is* the
-   answer to "is this one done". This button only says which mode the page is
-   in, and filled black in the header makes the loudest thing on the page the
-   one part of it that is not your work. So the border and the words go to ink
-   and the body stays paper: unmistakably engaged, still second to the rows. */
+/* On — the rim thickens and the words go to ink, but the glass stays glass. A
+   tick fills because the fill *is* the answer to "is this one done". This
+   button only says which mode the page is in, and filled black in the header
+   makes the loudest thing on the page the one part of it that is not your
+   work. */
 .sky-page .pans.picking .lab.head .sel {
-  background: rgba(19, 26, 36, 0.05);
-  border-color: rgba(19, 26, 36, 0.45);
   color: var(--paper-ink, #3d4b5c);
-}
-/* pressing is still the filled state, as it is everywhere else in the family */
-.sky-page .pans.picking .lab.head .sel:active {
-  background: var(--paper-ink, #3d4b5c);
-  border-color: var(--paper-ink, #3d4b5c);
-  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 0 0 1px rgba(19, 26, 36, 0.3),
+    0 3px 10px rgba(19, 26, 36, 0.12);
 }
 
 .sky-page .pans .row .tick {
@@ -730,18 +898,24 @@ body.sky-held {
   font-weight: 560;
   color: var(--paper-ink, #3d4b5c);
 }
-/* the one that gathers is the one you came here for */
+/* The one that gathers is the one you came here for, so it is the one piece of
+   glass on the page with ink behind it rather than paper. */
 .sky-page .pans .picked .d.go {
   background: var(--paper-ink, #3d4b5c);
-  border-color: var(--paper-ink, #3d4b5c);
   color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 4px 14px rgba(19, 26, 36, 0.26);
+}
+.sky-page .pans .picked .d.go::before {
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.06) 40%, rgba(255, 255, 255, 0.16) 100%);
 }
 .sky-page .pans .picked .d.bad {
+  --ctl-ink: 180, 83, 75;
   color: #b4534b;
-  border-color: rgba(180, 83, 75, 0.32);
-  background: rgba(180, 83, 75, 0.05);
+  background: linear-gradient(rgba(255, 246, 245, 0.72), rgba(255, 240, 238, 0.3) 52%, rgba(255, 246, 245, 0.5));
 }
-.sky-page .pans .picked .d.bad:active { background: #a8332a; border-color: #a8332a; color: #fff; }
+.sky-page .pans .picked .d.bad:active { background: #a8332a; color: #fff; }
 .sky-page .pans .picked .d[hidden] { display: none; }
 /* `display: flex` above beats the browser's own rule for [hidden], so without
    this the bar stood there permanently offering to take out zero things. */
@@ -765,11 +939,11 @@ body.sky-held {
   text-align: left;
 }
 .sky-page .pans .danger .d.bad {
+  --ctl-ink: 180, 83, 75;
   color: #b4534b;
-  border-color: rgba(180, 83, 75, 0.32);
-  background: rgba(180, 83, 75, 0.05);
+  background: linear-gradient(rgba(255, 246, 245, 0.72), rgba(255, 240, 238, 0.3) 52%, rgba(255, 246, 245, 0.5));
 }
-.sky-page .pans .danger .d.bad:active { background: #a8332a; border-color: #a8332a; color: #fff; }
+.sky-page .pans .danger .d.bad:active { background: #a8332a; color: #fff; }
 /* Armed: the button has become the question, and it is the only loud thing on
    a quiet page for exactly as long as it is waiting for an answer. */
 .sky-page .pans .danger .d.armed {

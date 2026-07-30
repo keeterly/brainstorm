@@ -10,6 +10,14 @@ html,
 body,
 #root {
   height: 100%;
+  /* The document does not zoom. `manipulation` keeps panning and pinching that
+     the app itself handles, and drops only the browser's double-tap-to-zoom —
+     which is the part that has no way back in an installed app. Doing it here
+     rather than by cancelling `touchend` matters: cancelling touchend on iOS
+     also cancels the synthesised click, and this app has a double-tap gesture
+     of its own to protect. The sky sets `touch-action: none` over itself and
+     runs its own camera. */
+  touch-action: manipulation;
 }
 
 body {
