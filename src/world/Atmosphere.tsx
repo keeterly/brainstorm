@@ -8,12 +8,18 @@ import { SURFACE, WATER_DEEP, WATER_DRAW_H, WATER_H, drawWater, invalidateWaterl
 import { stepUpright, worldTilt } from './upright'
 import { tickDaylight } from './daylight'
 
-// Everything we draw stops at the edge of the layout viewport. On a tall phone
-// in standalone mode that leaves a strip behind the home indicator that is
-// ours in name only — iOS fills it from the document canvas and the theme
-// colour. Handing both the colour the ocean reaches at its deepest is what
-// makes the world run off the bottom of the glass instead of ending in a flat
-// bar of some colour nobody chose.
+// The strip behind the home indicator, twice over.
+//
+// It sits outside the layout viewport, so nothing laid out `position: fixed;
+// inset: 0` reaches it — which is every layer of this world. The fix that
+// actually removes the seam is --bleed: every layer that touches the bottom
+// edge is told to carry on for another safe-area inset, so the same stack
+// composes down there as up here. What follows is the belt to that pair of
+// braces: iOS fills anything still unpainted from the document canvas and the
+// theme colour, and both are handed the ocean's deepest colour, so the worst
+// case is a strip that is too dark rather than a bar of some colour nobody
+// chose. The theme colour is not optional either — it is what the system tints
+// the status bar with.
 // The ocean is drawn bigger than the window it shows through: wider on both
 // sides and deeper than the bottom edge, so however far it tilts to stay level
 // there is still water in every corner.
@@ -112,7 +118,9 @@ export function Atmosphere() {
       <div
         style={{
           position: 'absolute',
-          inset: 0,
+          // past the bottom edge of the glass, into the strip behind the home
+          // indicator that a fixed inset:0 can never reach — see --bleed
+          inset: '0 0 calc(-1 * var(--bleed)) 0',
           background:
             'radial-gradient(ellipse 150% 60% at 50% -10%, var(--sky-top, #0e1424) 0%, transparent 62%),' +
             // the hour's glow sits just above the waterline, where a sunset
@@ -128,7 +136,9 @@ export function Atmosphere() {
         ref={fogRef}
         style={{
           position: 'absolute',
-          inset: 0,
+          // past the bottom edge of the glass, into the strip behind the home
+          // indicator that a fixed inset:0 can never reach — see --bleed
+          inset: '0 0 calc(-1 * var(--bleed)) 0',
           opacity: 0.4,
           // haze is lit by whatever light there is, so it carries the hour
           background:
@@ -141,7 +151,9 @@ export function Atmosphere() {
         ref={shaftRef}
         style={{
           position: 'absolute',
-          inset: 0,
+          // past the bottom edge of the glass, into the strip behind the home
+          // indicator that a fixed inset:0 can never reach — see --bleed
+          inset: '0 0 calc(-1 * var(--bleed)) 0',
           opacity: 0.1,
           // the shaft is the hour's own light: cool and white overhead at
           // midday, low and orange at sunset
@@ -166,7 +178,9 @@ export function Atmosphere() {
       <div
         style={{
           position: 'absolute',
-          inset: 0,
+          // past the bottom edge of the glass, into the strip behind the home
+          // indicator that a fixed inset:0 can never reach — see --bleed
+          inset: '0 0 calc(-1 * var(--bleed)) 0',
           background:
             'radial-gradient(ellipse at 50% 42%, transparent 52%, var(--sky-vignette, rgba(2, 3, 6, 0.6)) 100%)',
           transition: 'background 4s linear',
@@ -182,7 +196,7 @@ export function Atmosphere() {
 
 const GRAIN: React.CSSProperties = {
   position: 'fixed',
-  inset: 0,
+  inset: '0 0 calc(-1 * var(--bleed)) 0',
   zIndex: 300,
   pointerEvents: 'none',
   // plain alpha rather than a blend mode: it reads stronger on the dark world

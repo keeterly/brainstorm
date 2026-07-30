@@ -27,10 +27,19 @@ body.sky-held {
   touch-action: none;
   z-index: 1;
 }
-.sky-stage::after {
-  content: '';
-  position: absolute;
-  inset: 0;
+/*
+ * The vignette used to be .sky-stage::after, which put it inside an
+ * overflow:hidden box whose height the whole world is measured from — so it
+ * could not be extended past the bottom edge without moving the waterline and
+ * every drop with it. It is decoration and nothing measures it, so it lives on
+ * its own now, and carries on for another --bleed into the strip behind the
+ * home indicator. Without that the strip came out lighter than the row above
+ * it by exactly the 42% this darkens by.
+ */
+.sky-vign {
+  position: fixed;
+  inset: 0 0 calc(-1 * var(--bleed)) 0;
+  z-index: 1;
   pointer-events: none;
   background: radial-gradient(ellipse at 50% 42%, transparent 58%, rgba(2, 3, 7, 0.42) 100%);
 }

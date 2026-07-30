@@ -471,7 +471,10 @@ a {
 .page::before {
   content: '';
   position: fixed;
-  inset: 0;
+  /* and on past the bottom edge, into the strip behind the home indicator —
+     see --bleed. The Current does not scroll, so this layer was the last thing
+     painted above that strip and the seam was between the two. */
+  inset: 0 0 calc(-1 * var(--bleed)) 0;
   z-index: -1;
   pointer-events: none;
   background:

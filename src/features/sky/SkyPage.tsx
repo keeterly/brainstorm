@@ -42,6 +42,8 @@ export default function SkyPage() {
         </svg>
         <div data-sky="field" />
       </div>
+      {/* the stage's own darkening, outside the stage — see .sky-vign */}
+      <div className="sky-vign" aria-hidden="true" />
       <header className="sky-head">
         <div className="hint" data-sky="hint" />
       </header>
