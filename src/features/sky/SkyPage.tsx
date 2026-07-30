@@ -15,8 +15,9 @@ import { nextAction } from '@/domain/next-action'
 import { armUpright, stepUpright, worldTilt } from '@/world/upright'
 import { applyDeepen, deepenThought } from './deepenFlow'
 import { applyAnswer, answerThought } from './answerFlow'
+import { applyDraft, draftThought } from './draftFlow'
 import { fullDepth, sizeUp, waitingWord, type Sizing } from './gaugeFlow'
-import { isQuestion } from '@/domain/question'
+import { isMakeable, isQuestion } from '@/domain/question'
 import { addTo, bin, complete, groupInto, membersOf, rename, takeOut, ungroup, type Undone } from './groupFlow'
 import { awaitRun, markApplied, pendingRuns, subjectOf } from '@/ai/pending'
 import { reshapeTally, reshapeThought } from './reshapeFlow'
@@ -243,6 +244,8 @@ const MOON_ICONS: Record<string, string> = {
   ask: 'M9.1 8.6a3 3 0 1 1 3.9 2.87c-.7.24-1.1.85-1.1 1.58v.85M12 17.6v.5',
   // what is in this group, as a list you can work on: rows, each with a mark
   list: 'M4.4 6.6h1.2M4.4 12h1.2M4.4 17.4h1.2M9 6.6h10.6M9 12h10.6M9 17.4h10.6',
+  // making the thing: a nib, and the line it has just drawn
+  make: 'M20.1 4.2a2.1 2.1 0 0 0-3 0l-8.5 8.5-1.2 4.2 4.2-1.2 8.5-8.5a2.1 2.1 0 0 0 0-3ZM14.6 6.7l2.7 2.7M4 20.4h11',
   // the picture you kept, at the size you kept it: a frame with a horizon in it
   photo:
     'M3.6 6.8a2 2 0 0 1 2-2h12.8a2 2 0 0 1 2 2v10.4a2 2 0 0 1-2 2H5.6a2 2 0 0 1-2-2V6.8ZM3.9 16l4.6-4.3a1.7 1.7 0 0 1 2.3 0l4 3.7M14 13.4l1.6-1.5a1.7 1.7 0 0 1 2.3 0l2.2 2M9 9.4a1.2 1.2 0 1 1-2.4 0 1.2 1.2 0 0 1 2.4 0Z',
@@ -2875,6 +2878,25 @@ function mountSky(root: HTMLDivElement) {
     const asking = tl.kind === 'drop' && isQuestion(label(tl.t))
     const ready = isKept(tl.t) || isRipe(tl.t) || !!briefOf(tl.t.id)
     const canRain = tl.kind === 'drop' || tl.members.length >= 1
+    /*
+     * A step somebody could sit down and produce, that the funnel put here.
+     *
+     * Three things at once, and it needs all three. Makeable, so the agent is
+     * not offering to write an aeroplane ticket. A leaf, because a thing with
+     * work under it is a goal and goals get planned, not drafted. And under
+     * something — a leaf at the top of the sky is a loose idea, and the answer
+     * to an idea is to grow it, not to write it up.
+     */
+    const doable =
+      tl.kind === 'drop' &&
+      !tl.members.length &&
+      isMakeable(label(tl.t)) &&
+      !!S().relationships.find((r) => r.type === 'part_of' && r.from_id === tl.t.id)
+    // …and once it has been made, the thing to do with it is read it. Keyed on
+    // the stamp the draft leaves rather than on there being a brief at all: a
+    // question you asked *about* this step also leaves one, and that is not the
+    // same as the step being written.
+    const made = doable && !!ex(tl.t).drafted_at && !!briefOf(tl.t.id)
 
     // 1. Words into it. Yours, kept, no round trip.
     acts.push({
@@ -2903,12 +2925,30 @@ function mountSky(root: HTMLDivElement) {
     //    already been worked out wants to become work, and that costs nothing
     //    and needs no connection. Anything else has to be worked out first.
     acts.push({
-      icon: asking ? 'ask' : ready && canRain ? 'rain' : 'work',
-      lb: asking ? 'answer it' : ready && canRain ? (isKept(tl.t) ? 'path' : 'rain') : 'work it',
-      dim: (asking || !ready) && S().offline,
+      icon: made ? 'brief' : asking ? 'ask' : doable ? 'make' : ready && canRain ? 'rain' : 'work',
+      lb: made
+        ? 'read it'
+        : asking
+          ? 'answer it'
+          : doable
+            ? 'do it'
+            : ready && canRain
+              ? isKept(tl.t)
+                ? 'path'
+                : 'rain'
+              : 'work it',
+      // reading what is already written needs nothing from the network
+      dim: !made && (asking || doable || !ready) && S().offline,
       run: () => {
         closeMoons()
-        if (asking) void runAnswer(tl)
+        if (made) {
+          const q = posOf(tl.t.id)
+          openPage('brief', tl, toScreenX(q.x), toScreenY(q.y))
+        } else if (asking) void runAnswer(tl)
+        // before rain, deliberately: a step that has been drafted has a brief,
+        // which would otherwise make it "ready" and offer to rain a single
+        // action into the current, which is not a thing that means anything
+        else if (doable) void runDraft(tl)
         else if (ready && canRain) rain(tl)
         else void runDeepen(tl)
       },
@@ -3105,9 +3145,10 @@ function mountSky(root: HTMLDivElement) {
     }
     for (const run of runs) {
       if (dead) return
-      // the two that go away for a minute: one comes back with a way through,
-      // the other with an answer, and both have to survive a locked phone
-      if (run.action !== 'deepen' && run.action !== 'answer') continue
+      // the three that go away for a minute: one comes back with a way through,
+      // one with an answer, one with the work itself — and all three have to
+      // survive a locked phone
+      if (run.action !== 'deepen' && run.action !== 'answer' && run.action !== 'draft') continue
       const id = subjectOf(run)
       const tl = id ? view.byId.get(id) : null
       if (!id || !tl) {
@@ -3136,12 +3177,18 @@ function mountSky(root: HTMLDivElement) {
       }
     }
   }
-  /** Whichever of the two it was, folded in and said out loud. */
+  /** Whichever of the three it was, folded in and said out loud. */
   function landRun(action: string, tl: TL, runId: string, output: unknown) {
     if (action === 'answer') {
       const res = applyAnswer(tl.t.id, output as Parameters<typeof applyAnswer>[1], runId)
       void markApplied(runId)
       if (res.kind === 'answered') landAnswer(tl, res, true)
+      return
+    }
+    if (action === 'draft') {
+      const res = applyDraft(tl.t.id, output as Parameters<typeof applyDraft>[1], runId)
+      void markApplied(runId)
+      if (res.kind === 'drafted') landDraft(tl, res, true)
       return
     }
     landDeepen(tl, runId, output, true)
@@ -3241,6 +3288,85 @@ function mountSky(root: HTMLDivElement) {
         const q = posOf(tl.t.id)
         openPage('brief', tl, toScreenX(q.x), toScreenY(q.y))
       })
+    }
+    fitWhenSettled()
+  }
+
+  /**
+   * Have the thing done.
+   *
+   * The end of the funnel. Everything else the agent does here is *about* your
+   * work — planning it, researching it, moving it around the map — and this is
+   * the one that produces some. What comes back is kept as a brief on the step
+   * itself, which is where everything the agent makes already lives, so it can
+   * be reopened weeks later from the step's own page.
+   */
+  async function runDraft(tl: TL, intent?: string) {
+    if (working || S().offline) return
+    working = tl.t.id
+    els.get(tl.t.id)?.classList.add('working')
+    const began = Date.now()
+    let sizing: Sizing = { ...fullDepth(2), why: 'reading the task' }
+    const tick = () => {
+      if (working !== tl.t.id) return
+      hold(waitingWord(sizing, Math.round((Date.now() - began) / 1000)), trim(label(tl.t), 34))
+    }
+    tick()
+    const patience = setInterval(tick, 1000)
+    sizing = await sizeUp(tl.t.id, 'draft', 2)
+    if (dead) {
+      clearInterval(patience)
+      return
+    }
+    tick()
+    const res = await draftThought(tl.t.id, { intent, sizing })
+    clearInterval(patience)
+    working = null
+    els.get(tl.t.id)?.classList.remove('working')
+    if (dead) return
+    if (res.kind === 'failed') {
+      hold(res.why ?? 'could not do that just now', trim(label(tl.t), 34))
+      offerAction('tap to try again', 'again', () => {
+        hold(null)
+        void runDraft(tl, intent)
+      })
+      return
+    }
+    landDraft(tl, res, false)
+  }
+
+  function landDraft(
+    tl: TL,
+    res: Extract<Awaited<ReturnType<typeof draftThought>>, { kind: 'drafted' }>,
+    whileAway: boolean,
+  ) {
+    rebuild()
+    paintAll()
+    haptics.join()
+    record(`made · ${res.title}`, trim(label(tl.t), 40))
+    hold(null)
+    const q = posOf(tl.t.id)
+    // Reading it is the whole point, so it opens. Unless you are somewhere
+    // else, in which case the sky does not rearrange itself behind your back.
+    if (whileAway || pageFor) {
+      hold(whileAway ? `while you were away — ${res.title}` : res.title, trim(label(tl.t), 34))
+      offerAction(trim(res.line, 46), 'read it', () => {
+        hold(null)
+        openPage('brief', tl, toScreenX(q.x), toScreenY(q.y))
+      })
+    } else {
+      openPage('brief', tl, toScreenX(q.x), toScreenY(q.y))
+      // It said the step is finished. Offered under the open draft, never
+      // taken: the agent does not get to tick your list, and it does not get to
+      // do it before you have read what it made. Only offered on the branch
+      // that opened the draft — otherwise it would replace 'read it' with a
+      // tick for something you have not seen.
+      if (res.done) {
+        offerAction('it says this is done', 'tick it off', () => {
+          hideUndo()
+          landUndo(complete(tl.t.id))
+        })
+      }
     }
     fitWhenSettled()
   }

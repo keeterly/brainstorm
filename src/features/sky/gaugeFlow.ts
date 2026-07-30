@@ -47,7 +47,7 @@ export function fullDepth(ceiling: number): Sizing {
 
 export async function sizeUp(
   subjectId: string,
-  kind: 'plan' | 'answer',
+  kind: 'plan' | 'answer' | 'draft',
   ceiling: number,
   intent?: string,
 ): Promise<Sizing> {

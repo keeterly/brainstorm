@@ -29,8 +29,8 @@ const Ref = z.object({
 const Input = z.object({
   subject: Ref,
   context: z.array(z.string().max(300)).max(40),
-  /** what is about to be asked of it: a way through, or an answer */
-  kind: z.enum(['plan', 'answer']),
+  /** what is about to be asked of it: a way through, an answer, or the thing itself */
+  kind: z.enum(['plan', 'answer', 'draft']),
   intent: z.string().max(2000).optional(),
 })
 
@@ -56,7 +56,7 @@ export const SECONDS_FOR: Record<Depth, number> = { known: 8, light: 30, deep: 7
 
 export const gauge: ActionDef<GaugeInput, GaugeOutput> = {
   name: 'gauge',
-  version: 1,
+  version: 2,
   modelTier: 'fast',
   maxTokens: 400,
   // it must not go and look things up in order to decide whether to look
@@ -76,7 +76,14 @@ export const gauge: ActionDef<GaugeInput, GaugeOutput> = {
     const job =
       input.kind === 'answer'
         ? 'They are about to ask for the answer to this.'
-        : 'They are about to ask for the real way through this.'
+        : input.kind === 'draft'
+          ? // Making leans smaller than the other two: most of what a draft
+            // needs is already in front of it, and the parts that are not are
+            // usually blanks to leave rather than facts to go and get.
+            'They are about to ask for this to be written — the draft, the list, the message itself. Most of ' +
+            'what it needs is in front of you already; only say more than "known" if the thing cannot be ' +
+            'written at all without a real external figure.'
+          : 'They are about to ask for the real way through this.'
     return {
       system:
         baseSystem(ctx) +

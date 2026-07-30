@@ -12,8 +12,10 @@ import { evaporateAt } from '@/world/Atmosphere'
 import { FocusOverlay } from './FocusOverlay'
 import { NoticedPanel } from './Noticed'
 import { Answered } from './Answered'
-import { isQuestion } from '@/domain/question'
+import { Made } from './Made'
+import { isMakeable, isQuestion } from '@/domain/question'
 import { answerThought } from '@/features/sky/answerFlow'
+import { draftMarkdown, draftThought } from '@/features/sky/draftFlow'
 import { fullDepth, sizeUp, waitingWord, type Sizing } from '@/features/sky/gaugeFlow'
 import type { AnswerOutput } from '@shared/ai/actions/answer'
 import type { Thought } from '@/domain/types'
@@ -36,6 +38,14 @@ export default function CurrentPage() {
   // Asking the one thing on this screen, when the one thing is a question.
   const [asking, setAsking] = useState<string | null>(null)
   const [askedFor, setAskedFor] = useState<{ id: string; out: AnswerOutput } | null>(null)
+  // …and the work itself, when the one thing is something the agent can make
+  const [drafted, setDrafted] = useState<{
+    id: string
+    title: string
+    md: string
+    sources: { title: string; url: string }[]
+    done: boolean
+  } | null>(null)
   const [askFailed, setAskFailed] = useState<string | null>(null)
   const [waited, setWaited] = useState(0)
   const [sizing, setSizing] = useState<Sizing | null>(null)
@@ -117,13 +127,47 @@ export default function CurrentPage() {
   // answer, and until now the only two things this screen could offer it were
   // Focus (sit and stare at it) and Done (pretend you did).
   const primaryAsks = !!primary && isQuestion(primary.title || primary.raw_content)
+  // …and the other half is work the agent can actually do. This is the end of
+  // the funnel: a thought becomes an idea, an idea is worked into a path, a
+  // path rains into actions — and the action you are standing on was the one
+  // place the agent had nothing to offer but sympathy.
+  const primaryMakes = !!primary && isMakeable(primary.title || primary.raw_content)
   const answerHere = askedFor && primary && askedFor.id === primary.id ? askedFor.out : null
+  const draftHere = drafted && primary && drafted.id === primary.id ? drafted : null
+
+  async function doIt(t: Thought) {
+    if (asking || offline) return
+    setAsking(t.id)
+    setAskFailed(null)
+    setAskedFor(null)
+    setDrafted(null)
+    setWaited(0)
+    setSizing(null)
+    const began = Date.now()
+    const tick = setInterval(() => setWaited(Math.round((Date.now() - began) / 1000)), 1000)
+    const sz = await sizeUp(t.id, 'draft', 2)
+    setSizing(sz)
+    const res = await draftThought(t.id, { sizing: sz })
+    clearInterval(tick)
+    setAsking(null)
+    setSizing(null)
+    if (res.kind === 'drafted')
+      setDrafted({
+        id: t.id,
+        title: res.title,
+        md: draftMarkdown(res.output),
+        sources: res.output.sources,
+        done: res.done,
+      })
+    else setAskFailed(res.why ?? 'could not do that just now')
+  }
 
   async function askIt(t: Thought) {
     if (asking || offline) return
     setAsking(t.id)
     setAskFailed(null)
     setAskedFor(null)
+    setDrafted(null)
     setWaited(0)
     setSizing(null)
     // How long depends entirely on the question, so a cheap read goes first and
@@ -217,11 +261,24 @@ export default function CurrentPage() {
                 {asking === primary.id ? 'Answering…' : 'Answer it'}
               </button>
             )}
+            {/* And when it is work that can be made, having it made is the
+                first thing offered, for the same reason: it is the only one of
+                the three that produces anything. */}
+            {primaryMakes && !draftHere && (
+              <button
+                className="btn btn--primary"
+                onClick={() => void doIt(primary)}
+                disabled={!!asking || offline}
+                style={{ minWidth: 116 }}
+              >
+                {asking === primary.id ? 'Working…' : 'Do it'}
+              </button>
+            )}
             {/* Focus is for sitting with the thing. While it is being answered
                 you are not sitting with it, and the row is better with room. */}
             {asking !== primary.id && (
               <button
-                className={primaryAsks && !answerHere ? 'btn btn--ghost' : 'btn btn--primary'}
+                className={(primaryAsks && !answerHere) || (primaryMakes && !draftHere) ? 'btn btn--ghost' : 'btn btn--primary'}
                 onClick={() => setFocusId(primary.id)}
               >
                 Focus
@@ -238,14 +295,19 @@ export default function CurrentPage() {
               up lands before you could lock anything. */}
           {asking === primary.id && (
             <p className="muted" style={{ fontSize: 'var(--fs-caption)', marginTop: 12 }}>
-              {waitingWord(sizing ?? { ...fullDepth(3), why: 'sizing it up' }, waited)}
+              {waitingWord(sizing ?? { ...fullDepth(primaryMakes ? 2 : 3), why: 'sizing it up' }, waited)}
               {sizing && !sizing.quick && ' · it keeps going if you lock the phone'}
             </p>
           )}
           {askFailed && !asking && (
             <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-label)', marginTop: 12 }}>
               {askFailed}{' '}
-              <button style={{ textDecoration: 'underline', color: 'inherit' }} onClick={() => void askIt(primary)}>
+              {/* Retry whichever one failed. Both land here, and sending a
+                  failed draft back through askIt would answer a task. */}
+              <button
+                style={{ textDecoration: 'underline', color: 'inherit' }}
+                onClick={() => void (primaryMakes ? doIt(primary) : askIt(primary))}
+              >
                 try again
               </button>
             </p>
@@ -256,6 +318,18 @@ export default function CurrentPage() {
               onDone={() => {
                 complete(primary)
                 setAskedFor(null)
+              }}
+            />
+          )}
+          {draftHere && (
+            <Made
+              title={draftHere.title}
+              md={draftHere.md}
+              sources={draftHere.sources}
+              done={draftHere.done}
+              onDone={() => {
+                complete(primary)
+                setDrafted(null)
               }}
             />
           )}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isQuestion, workLabel } from './question'
+import { isMakeable, isQuestion, workLabel } from './question'
 
 // The cases below are the actual drops off the user's map on the day they asked
 // for this — one screen, six items, three of them questions and three of them
@@ -68,5 +68,59 @@ describe('telling a question from a job of work', () => {
   it('names the act accordingly, so one button can serve both', () => {
     expect(workLabel(REAL_QUESTIONS[0])).toBe('answer it')
     expect(workLabel(REAL_WORK[0])).toBe('work it')
+  })
+})
+
+describe('telling what can be made from what has to be done', () => {
+  it('offers to make the things that are made at a desk', () => {
+    for (const t of [
+      'Draft the buyer note for SS27',
+      'Write the founder letter',
+      'Outline the lookbook shot list',
+      'Shortlist three 7(a) lenders',
+      'Summarise the last three years for the deck',
+      'Prepare the linesheet copy',
+      'Estimate the sample run cost',
+    ]) {
+      expect(isMakeable(t), t).toBe(true)
+    }
+  })
+
+  it('stays out of the way of the things you have to go and do', () => {
+    for (const t of [
+      'Book once fare/award is confirmed reasonable',
+      'File LLC for VENIA',
+      'Sign the studio lease',
+      'Pay the mill deposit',
+      'Meet Ana about the garage',
+      'Fabric swatches from Lyon',
+      'SS27 Lookbook & Collection Prep',
+    ]) {
+      expect(isMakeable(t), t).toBe(false)
+    }
+  })
+
+  it('never offers to make a question — those get answered instead', () => {
+    // the two acts must not both light up on the same drop
+    for (const t of [...REAL_QUESTIONS, 'Compare AF and DL on those dates', 'Work out the landed cost']) {
+      expect(isQuestion(t), t).toBe(true)
+      expect(isMakeable(t), t).toBe(false)
+    }
+  })
+
+  it('is not fooled by a bullet, or by a prefix of one of its verbs', () => {
+    for (const p of ['- ', '• ', '1. ', '2) ', '– ']) {
+      expect(isMakeable(p + 'Draft the buyer note'), p).toBe(true)
+    }
+    // "Drafting" is a state of play, not an instruction; "Listen" is not "list"
+    expect(isMakeable('Drafting is going slowly')).toBe(false)
+    expect(isMakeable('Listen to the buyer call again')).toBe(false)
+    expect(isMakeable('Naming is hard')).toBe(false)
+  })
+
+  it('treats anything it cannot read as not makeable', () => {
+    for (const t of ['', '   ', null, undefined]) {
+      expect(isMakeable(t as string), String(t)).toBe(false)
+    }
   })
 })

@@ -166,3 +166,68 @@ export function isQuestion(text: string | null | undefined): boolean {
 export function workLabel(text: string | null | undefined): 'answer it' | 'work it' {
   return isQuestion(text) ? 'answer it' : 'work it'
 }
+
+/**
+ * Is this a step somebody could sit down and produce, rather than an errand in
+ * the world?
+ *
+ * The end of the funnel needs to know. An idea funnels into a path and a path
+ * rains into actions, and some of those actions are things the agent can
+ * actually make — a draft, a shortlist, an outline, a message — while others
+ * are you, physically, doing something it cannot: signing, paying, flying,
+ * meeting somebody for coffee.
+ *
+ * The same shape as isQuestion, and for the same reasons: it runs on every
+ * drop, it must be the same answer every time, and being wrong costs a wasted
+ * minute. The default is *false*, the opposite way round from isQuestion —
+ * offering to write something you were going to go and buy is a worse mistake
+ * than not offering at all, because the second is merely a missing feature and
+ * the first is the app misunderstanding what your day is.
+ *
+ * Nothing here may also open a question. "Compare the two mills" and "work out
+ * the landed cost" read as making, but they are lookups first, and `answer`
+ * does them better — so they stay out of this list and isQuestion keeps them.
+ */
+const MAKEABLE = [
+  'draft',
+  'write',
+  'rewrite',
+  'outline',
+  'summarise',
+  'summarize',
+  'list',
+  'shortlist',
+  'compile',
+  'assemble',
+  'put together',
+  'prepare',
+  'prep',
+  'plan',
+  'design',
+  'sketch',
+  'script',
+  'name',
+  'propose',
+  'map out',
+  'structure',
+  'define',
+  'spec',
+  'brief',
+  'pitch',
+  'describe',
+  'explain',
+  'calculate',
+  'estimate',
+  'budget',
+  'schedule',
+]
+
+export function isMakeable(text: string | null | undefined): boolean {
+  const raw = (text ?? '').trim()
+  if (!raw) return false
+  // a question wants an answer, which is a different action entirely
+  if (isQuestion(raw)) return false
+  const s = opening(raw)
+  for (const v of MAKEABLE) if (opensWith(s, v)) return true
+  return false
+}

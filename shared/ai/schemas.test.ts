@@ -42,6 +42,7 @@ function sampleInput(name: string): never {
     cluster: { loose: [ref], pools: [{ id: 'p1', name: 'SS27 show', members: ['book the space'] }] },
     deepen: { subject: ref, context: ['book the space'] },
     answer: { subject: ref, context: ['arrive by September 28'] },
+    draft: { subject: ref, alongside: ['book the space'], known: [] },
     gauge: { subject: ref, context: ['book the space'], kind: 'plan' },
     reshape: { subject: ref, inside: [ref], news: 'the studio fell through, Ana offered her garage' },
     notice: { thoughts: [ref], pools: [], recentlyDone: [] },
@@ -435,6 +436,70 @@ describe('answer — the other half of ⚡, for the things that are questions', 
     const without: Record<string, unknown> = { ...good }
     delete without.settled
     expect(answer.outputSchema.safeParse(without).success).toBe(false)
+  })
+})
+
+describe('draft — the end of the funnel, where the work actually gets made', () => {
+  const draft = ACTION_REGISTRY.draft
+  const ctx = { nowISO: '2026-07-30T12:00:00Z', tzOffsetMin: -420, memory: ['Two-person label in LA'] }
+  const good = {
+    title: 'SS27 buyer note — first draft',
+    body: '## The season\n\nSS27 is thirty pieces, cut in [mill name] silk…',
+    check: [{ what: 'The mill name in the first line', why: 'left blank — I could not find it' }],
+    assumed: ['The drop is still September'],
+    blocked: [],
+    learned: ['Writes to buyers in plain sentences, never bullet lists'],
+    sources: [],
+    done: false,
+  }
+
+  it('is told to make the thing rather than describe it', () => {
+    const p = draft.buildPrompt(
+      { subject: { id: 'a1', title: 'Draft the buyer note' }, alongside: [], known: [] },
+      ctx,
+    )
+    expect(p.system).toContain('the thing itself')
+    expect(p.system).toContain('forbidden from handing the task back')
+    expect(p.user).toContain('Draft the buyer note')
+  })
+
+  it('carries the goal and the neighbouring steps, so it does not do a neighbour’s job', () => {
+    const p = draft.buildPrompt(
+      {
+        subject: { id: 'a1', title: 'Draft the buyer note' },
+        under: 'SS27 Lookbook & Collection Prep',
+        alongside: ['Book the studio', 'Send the linesheet'],
+        known: ['The drop moved to September'],
+        found: 'Buyers confirmed for the 14th.',
+        intent: 'keep it under 200 words',
+      },
+      ctx,
+    )
+    expect(p.user).toContain('It is one step of: SS27 Lookbook & Collection Prep')
+    expect(p.user).toContain('not yours to do here')
+    expect(p.user).toContain('Send the linesheet')
+    expect(p.user).toContain('The drop moved to September')
+    expect(p.user).toContain('Buyers confirmed for the 14th.')
+    expect(p.user).toContain('keep it under 200 words')
+  })
+
+  it('has room for a real deliverable, which is the whole point of it', () => {
+    expect(draft.maxTokens).toBeGreaterThanOrEqual(6000)
+    expect(draft.modelTier).toBe('smart')
+  })
+
+  it('accepts a draft with blanks left in it', () => {
+    expect(draft.outputSchema.safeParse(good).success).toBe(true)
+  })
+
+  it('will not accept an empty body, whatever else came with it', () => {
+    expect(draft.outputSchema.safeParse({ ...good, body: '' }).success).toBe(false)
+  })
+
+  it('makes it say whether the step can be ticked off', () => {
+    const without: Record<string, unknown> = { ...good }
+    delete without.done
+    expect(draft.outputSchema.safeParse(without).success).toBe(false)
   })
 })
 

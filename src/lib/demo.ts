@@ -66,6 +66,10 @@ export const DEMO_SEED = {
     // — and the demo showed none of that.
     th({ id: 'q1', raw_content: 'Pull live LAX→CDG premium economy fares, Sept 28 out / Oct 9 back', title: 'Pull live LAX→CDG premium economy fares, Sept 28 out / Oct 9 back', type: 'action', created_at: days(2) }),
     th({ id: 'm4', raw_content: 'Book once the fare is confirmed reasonable', title: 'Book once the fare is confirmed reasonable', type: 'action', created_at: days(2) }),
+    // …and the third kind, which is the end of the funnel: a step the agent can
+    // sit down and actually produce. The demo showed the app planning work and
+    // researching work and never once making any.
+    th({ id: 'm5', raw_content: 'Draft the buyer note for SS27', title: 'Draft the buyer note for SS27', type: 'action', created_at: days(3) }),
     // finished work — the ocean, and the light it brings
     th({ id: 'o1', raw_content: 'Book the photographer', title: 'Book the photographer', type: 'action', status: 'done', completed_at: days(1), created_at: days(7) }),
   ],
@@ -77,6 +81,7 @@ export const DEMO_SEED = {
     // arrive: a loose question that turned out to belong to something
     rel('q1', 'c1', 'relates_to'),
     rel('m4', 'q1', 'depends_on'),
+    rel('m5', 'c1', 'part_of'),
   ],
   roadmaps: [],
   memories: [mem('me1', 'Two-person team based in Los Angeles'), mem('me2', 'Works best in the morning')],

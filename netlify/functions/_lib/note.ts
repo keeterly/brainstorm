@@ -28,6 +28,14 @@ interface AnswerLike {
   sources?: unknown[]
 }
 
+interface DraftLike {
+  title?: string
+  body?: string
+  check?: unknown[]
+  blocked?: unknown[]
+  done?: boolean
+}
+
 interface WithSubject {
   subject?: { id?: string; title?: string }
 }
@@ -41,6 +49,7 @@ const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? o
  */
 export function runNote(action: string, input: unknown, output: unknown, runId: string): Note | null {
   if (action === 'answer') return answerNote(input, output, runId)
+  if (action === 'draft') return draftNote(input, output, runId)
   if (action !== 'deepen') return null
   const out = (output ?? {}) as DeepenLike
   const subject = ((input ?? {}) as WithSubject).subject
@@ -91,6 +100,75 @@ function answerNote(input: unknown, output: unknown, runId: string): Note {
     url: id ? `/?brief=${encodeURIComponent(id)}` : '/',
     tag: `run-${runId}`,
   }
+}
+
+/**
+ * The one that says a piece of your work now exists.
+ *
+ * Different from the other two in what it is reporting. Deepen says how much
+ * structure arrived; answer says the figure. This says the thing is written —
+ * so the title is what it made, and the body opens with the draft's own first
+ * sentence, which is as close as a lock screen gets to handing it to you.
+ *
+ * What is left to do goes on the end when there is any, because "written, two
+ * blanks to fill" and "written, done" are different news and only one of them
+ * means you can stop thinking about it.
+ */
+function draftNote(input: unknown, output: unknown, runId: string): Note {
+  const out = (output ?? {}) as DraftLike
+  const subject = ((input ?? {}) as WithSubject).subject
+  const id = typeof subject?.id === 'string' ? subject.id : null
+
+  const check = Array.isArray(out.check) ? out.check.length : 0
+  const blocked = Array.isArray(out.blocked) ? out.blocked.length : 0
+  const tail = blocked
+    ? ` — ${plural(blocked, 'thing')} it could not do`
+    : check
+      ? ` — ${plural(check, 'thing')} to check`
+      : out.done
+        ? ' — done'
+        : ''
+
+  const opening = lead(plainFirst(out.body))
+  return {
+    title: clip(out.title?.trim() || subject?.title?.trim() || 'Brainstorm', 60),
+    body: clip((opening || 'It wrote it.') + tail, 140),
+    url: id ? `/?brief=${encodeURIComponent(id)}` : '/',
+    tag: `run-${runId}`,
+  }
+}
+
+/**
+ * The first line of a markdown body that is worth reading sideways.
+ *
+ * Headings are stepped over rather than stripped. A draft opens with one as
+ * often as not, and it is almost always the title again — which is already the
+ * line above it on the lock screen. The first *sentence* is the thing that
+ * tells you what you now have. A heading is only used when there is nothing
+ * else at all, which beats sending "It wrote it."
+ *
+ * A bullet is kept: the first line of a shortlist is a bullet, and it is the
+ * content rather than a label for it.
+ */
+function plainFirst(md: unknown): string {
+  if (typeof md !== 'string') return ''
+  let heading = ''
+  for (const raw of md.split('\n')) {
+    const t = raw.trim()
+    if (!t) continue
+    const plain = t
+      .replace(/^#+\s*/, '')
+      .replace(/^[-*]\s+/, '')
+      .replace(/[*_`>]/g, '')
+      .trim()
+    if (!plain || /^[|–—]/.test(plain)) continue
+    if (t.startsWith('#')) {
+      heading ||= plain
+      continue
+    }
+    return plain
+  }
+  return heading
 }
 
 /**

@@ -17,6 +17,7 @@ import { answer } from './actions/answer'
 import { gauge } from './actions/gauge'
 import { notice } from './actions/notice'
 import { reshape } from './actions/reshape'
+import { draft } from './actions/draft'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const ACTION_REGISTRY: Record<string, ActionDef<any, any>> = {
@@ -38,6 +39,7 @@ export const ACTION_REGISTRY: Record<string, ActionDef<any, any>> = {
   [gauge.name]: gauge,
   [notice.name]: notice,
   [reshape.name]: reshape,
+  [draft.name]: draft,
 }
 
 export type ActionName = keyof typeof ACTION_REGISTRY

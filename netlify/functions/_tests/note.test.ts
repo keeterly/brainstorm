@@ -126,3 +126,59 @@ describe('when what came back is an answer', () => {
     }
   })
 })
+
+describe('when what came back is the work itself', () => {
+  const MAKE = { subject: { id: 'th-4', title: 'Draft the buyer note' } }
+  const DRAFT = {
+    title: 'SS27 buyer note — first draft',
+    body: '# SS27 buyer note\n\n## The season\n\nSS27 is thirty pieces, cut in [mill] silk. Deliveries start in March.',
+    check: [{ what: 'The mill name' }],
+    assumed: [],
+    blocked: [],
+    learned: [],
+    sources: [],
+    done: false,
+  }
+
+  it('says what it made, and opens with the draft’s own first sentence', () => {
+    const n = runNote('draft', MAKE, DRAFT, 'r1')!
+    expect(n.title).toBe('SS27 buyer note — first draft')
+    expect(n.body).toBe('SS27 is thirty pieces, cut in [mill] silk. — 1 thing to check')
+  })
+
+  it('steps over the markdown, because "## The season" is markup where a sentence goes', () => {
+    expect(runNote('draft', MAKE, DRAFT, 'r1')!.body.startsWith('#')).toBe(false)
+    expect(runNote('draft', MAKE, DRAFT, 'r1')!.body).not.toContain('The season')
+  })
+
+  it('tells you when there is nothing left to do, which is different news', () => {
+    const n = runNote('draft', MAKE, { ...DRAFT, check: [], done: true }, 'r1')!
+    expect(n.body.endsWith(' — done')).toBe(true)
+  })
+
+  it('leads with what it could not do, over what merely wants checking', () => {
+    const n = runNote('draft', MAKE, { ...DRAFT, blocked: ['needs your signature'] }, 'r1')!
+    expect(n.body.endsWith(' — 1 thing it could not do')).toBe(true)
+  })
+
+  it('lands on what it wrote, and replaces rather than stacks', () => {
+    const n = runNote('draft', MAKE, DRAFT, 'r9')!
+    expect(n.url).toBe('/?brief=th-4')
+    expect(n.tag).toBe('run-r9')
+  })
+
+  it('never comes back blank, whatever it is handed', () => {
+    for (const bad of [null, undefined, 'a string', 42, { body: 42, check: 'not an array' }]) {
+      const n = runNote('draft', MAKE, bad, 'r1')!
+      expect(n.body.length).toBeGreaterThan(0)
+      expect(n.title).toBe('Draft the buyer note')
+    }
+  })
+
+  it('stays inside a lock screen, however long the draft is', () => {
+    const long = 'x'.repeat(500)
+    const n = runNote('draft', { subject: { id: 'i', title: long } }, { ...DRAFT, title: long, body: long }, 'r1')!
+    expect(n.title.length).toBeLessThanOrEqual(60)
+    expect(n.body.length).toBeLessThanOrEqual(140)
+  })
+})

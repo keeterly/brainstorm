@@ -524,6 +524,92 @@ a {
 }
 
 /*
+ * What the agent made, read here rather than filed somewhere.
+ *
+ * The brief reader emits this markup — .lab for a heading, .a for a line, .step
+ * for a numbered row — and every rule for it lives under `.sky-page`, on paper,
+ * in ink. This screen is the dark glass, so the same markup needs its own
+ * reading. Not a variant of the brief page: the same shapes in this room's
+ * light.
+ *
+ * It is a deliverable, so it is set to be read — 15px and 1.6, not the 13.5px
+ * of a list of steps you are scanning.
+ */
+.made .a {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--ink);
+  padding: 7px 0;
+}
+.made .a + .a {
+  border-top: 0;
+  padding-top: 0;
+}
+.made b {
+  font-weight: 600;
+}
+.made .lab {
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 20px 0 6px;
+  padding-top: 14px;
+  border-top: 0.5px solid rgba(255, 255, 255, 0.09);
+}
+.made > .lab:first-child {
+  margin-top: 4px;
+  padding-top: 0;
+  border-top: 0;
+}
+.made .step {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 0;
+}
+.made .step .k {
+  flex: 0 0 auto;
+  min-width: 1.1em;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+}
+.made .step .v {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+/* A draft that cites is a draft you can check, so the sources are targets. */
+.made .src {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 9px 0;
+  border-top: 0.5px solid rgba(255, 255, 255, 0.09);
+  text-decoration: none;
+  color: var(--ink);
+}
+.made .src .t {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-label);
+  line-height: 1.45;
+}
+.made .src .h {
+  font-size: var(--fs-caption);
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+.made .src:active {
+  opacity: 0.55;
+}
+
+/*
  * Every page stands in the same world as the sky, under the same light: it
  * comes from above and the frame closes in at the edges, by exactly the amount
  * the hour says. Without this a page was simply a flat dark background that
