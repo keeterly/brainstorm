@@ -61,36 +61,81 @@ body.sky-held {
   text-align: center;
   cursor: pointer;
   /*
-   * A body of water, not a wireframe: specular, rim light, underglow, mass.
+   * A drop is glass, and glass is a lens.
    *
-   * `ellipse 11% 11%`, never `circle 11%` — a circle's radius in a radial
-   * gradient may only be a length, so a percentage makes that one layer
-   * invalid, which drops the whole `background` shorthand, which left every
-   * drop in this sky with no body at all. Measured at a contrast of 1.00
-   * against the night sky: the only thing holding a drop on the screen was
-   * its border.
+   * It was a marble: an opaque body, a hard little specular dot, a bright
+   * crescent along the bottom like a floor reflection. Every one of those says
+   * a solid, polished sphere. Glass says the opposite — you see *through* it,
+   * light gathers along its edges rather than pooling in a spot, and the
+   * highlight is a line where a thick edge catches, not a dot on a curve.
+   *
+   * So it is made the same way the tab bar is, which is the same material this
+   * app already had in one place and nowhere else: nearly all of the effect is
+   * the blur of whatever is behind, and the fill is only enough to catch the
+   * light. Fill it any harder and it is a pale slab that happens to be round.
    */
-  background:
-    radial-gradient(ellipse 11% 11% at 31% 19%, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.08) 58%, transparent 74%),
-    radial-gradient(ellipse 66% 34% at 50% 11%, transparent 54%, rgba(222, 241, 255, 0.16) 64%, transparent 74%),
-    radial-gradient(ellipse 58% 31% at 50% 91%, transparent 53%, var(--drop-rim, rgba(150, 210, 255, 0.17)) 63%, transparent 73%),
-    radial-gradient(circle at 50% 118%, var(--drop-glow, rgba(var(--accent-rgb), 0.2)), transparent 58%),
-    radial-gradient(circle at 44% 28%, var(--drop-body-hi, rgba(48, 59, 79, 0.96)), var(--drop-body-lo, rgba(21, 27, 38, 0.97)) 72%);
-  border: 0.5px solid var(--drop-edge, rgba(205, 228, 255, 0.46));
+  backdrop-filter: blur(14px) saturate(165%) brightness(1.5);
+  -webkit-backdrop-filter: blur(14px) saturate(165%) brightness(1.5);
+  background: linear-gradient(
+    rgba(255, 255, 255, 0.13),
+    rgba(255, 255, 255, 0.045) 48%,
+    rgba(255, 255, 255, 0.085)
+  );
+  border: 0;
   box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.18),
-    inset 0 -20px 40px rgba(74, 142, 200, 0.12),
-    -1.5px 0.5px 2px rgba(var(--accent-rgb), 0.14),
-    1.5px -0.5px 2px rgba(255, 190, 130, 0.09),
-    0 20px 60px rgba(0, 0, 0, 0.62);
+    /* the hard line where the light catches the top edge */
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    /* light bouncing up off the water into the underside */
+    inset 0 -1px 0 rgba(255, 255, 255, 0.14),
+    /* the thickness of the glass, seen through its own walls */
+    inset 0 0 0 0.5px rgba(var(--accent-rgb), 0.2),
+    /* it is floating, and it has weight */
+    0 14px 34px rgba(0, 0, 0, 0.44);
+  isolation: isolate;
 }
+/* The rim refracts rather than outlines: bright on the lit side, the hour's
+   own colour on the shadow side, and only ever a hairline wide. This is what
+   makes an edge read as thickness instead of as a drawn line. */
+.skyb::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.62) 0%,
+    rgba(255, 255, 255, 0.06) 32%,
+    rgba(255, 255, 255, 0) 56%,
+    rgba(var(--accent-rgb), 0.42) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
 /* While a pool holds the stage, the rest of the sky recedes — far enough back
    that its words stop competing with the ring you are actually reading. And
    far enough back to be out of reach: at six per cent they are barely there to
    look at, but they were still catching taps meant for what is in front, so
    pressing one of them opened a thought you could not even see. A tap out
    there now falls through to the sky, which is the way back out. */
-.skyb.recede { opacity: 0.06; pointer-events: none; }
+.skyb.recede {
+  opacity: 0.06;
+  pointer-events: none;
+  /* At six per cent there is nothing to see through, so there is nothing to
+     pay for: a backdrop filter on twenty of these is real work done for an
+     effect that is by definition invisible. */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.skyb.recede::before { display: none; }
 .skyb.saturated {
   border-color: rgba(var(--accent-rgb), 0.5);
   box-shadow:
@@ -713,12 +758,17 @@ body.sky-resting .sky-tidy { right: calc(14px + var(--rest-w, 96px) + 8px); }
   align-items: stretch;
   justify-content: flex-start;
   overflow: visible;
-  /* The body is built for a disc — a circular gradient over a wide box leaves
-     the corners empty, and the group's spokes and name showed straight through
-     the thing you were trying to read. A card needs a card's body. */
-  background:
-    radial-gradient(90% 160% at 20% 6%, rgba(255, 255, 255, 0.1), transparent 62%),
-    linear-gradient(var(--drop-body-hi, rgba(48, 59, 79, 0.96)), var(--drop-body-lo, rgba(21, 27, 38, 0.97)));
+  /* Denser glass, not a solid panel. It is the one thing on screen you are
+     reading a sentence off, so it takes more of the light than a drop does —
+     but it is made of the same material, or it lands in the sky as a foreign
+     object. */
+  backdrop-filter: blur(26px) saturate(150%) brightness(1.35);
+  -webkit-backdrop-filter: blur(26px) saturate(150%) brightness(1.35);
+  background: linear-gradient(
+    rgba(255, 255, 255, 0.17),
+    rgba(255, 255, 255, 0.07) 46%,
+    rgba(255, 255, 255, 0.11)
+  );
 }
 .skyb.peek .t {
   -webkit-line-clamp: unset;
