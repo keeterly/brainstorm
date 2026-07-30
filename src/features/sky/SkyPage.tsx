@@ -3368,8 +3368,44 @@ function mountSky(root: HTMLDivElement) {
   raf = requestAnimationFrame(step)
   const n = view.tls.length
   if (n > 0) say(view.tls.some((tl) => tl.kind === 'drop' && isRipe(tl.t)) ? 'something is saturated' : n >= 8 ? 'a storm is brewing — hold a drop to gather it' : 'welcome back')
+  /**
+   * A notification was tapped, and it was about one particular thing.
+   *
+   * Landing on the front door after being told "5 steps · 3 found" is a small
+   * betrayal: you were told about something specific, so that is what should
+   * open.
+   *
+   * Tried immediately — the brief is almost always already here, and making
+   * the tap wait on a network round trip it does not need would be the slowest
+   * possible way to show something we are already holding — and again after
+   * collecting, for the case where the run being announced is the very one
+   * that has not landed yet.
+   */
+  function openArrivedBrief(): boolean {
+    if (dead || pageFor) return false
+    const want = new URLSearchParams(location.search).get('brief')
+    if (!want) return false
+    const tl = view.byId.get(want)
+    if (!tl || !briefOf(want)) return false
+    history.replaceState(null, '', location.pathname)
+    focusOn(posOf(want))
+    openPage('brief', tl, W / 2, innerHeight / 2)
+    return true
+  }
+  const wanted = openArrivedBrief()
   // and anything the agent finished while this page did not exist
-  void collectOwed()
+  void collectOwed().then(() => {
+    if (!wanted) openArrivedBrief()
+  })
+  // and stop it reopening on every refresh, whether or not it was ever found.
+  // On its own timer rather than after collecting: collecting talks to the
+  // network, and a link that sticks in the address bar because the network is
+  // down would reopen on every launch from then on.
+  if (!wanted && new URLSearchParams(location.search).has('brief')) {
+    setTimeout(() => {
+      if (!dead && new URLSearchParams(location.search).has('brief')) history.replaceState(null, '', location.pathname)
+    }, 12000)
+  }
 
   return () => {
     dead = true

@@ -10,6 +10,7 @@ import type { DistillOutput } from '@shared/ai/actions/distill-memory'
 import { exportMarkdown } from '@/domain/export-markdown'
 import { clearSnapshot } from '@/lib/idb'
 import { clearTrail, readTrail, trailWhen } from '@/lib/trail'
+import { disable as pushOff, enable as pushOn, explain as pushWhy, readiness, subscribed } from '@/lib/push'
 import {
   available as passkeyAvailable,
   enroll as enrollPasskey,
@@ -160,6 +161,8 @@ export default function MemoryPage() {
         Memory
       </div>
       <h1 className="page-title">What the water keeps</h1>
+
+      <TellMe />
 
       <WhatItDid />
 
@@ -457,6 +460,63 @@ function WhatItDid() {
           </div>
         ))}
       </div>
+    </section>
+  )
+}
+
+/**
+ * Being told when the agent finishes.
+ *
+ * The work already runs somewhere your phone is not; this is only about
+ * whether it can reach you. Off by default and never asked for in passing —
+ * a permission prompt you did not go looking for is one you say no to.
+ */
+function TellMe() {
+  const [on, setOn] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [why, setWhy] = useState('')
+  const ready = readiness()
+
+  useEffect(() => {
+    void subscribed().then(setOn)
+  }, [])
+
+  async function toggle() {
+    setBusy(true)
+    setWhy('')
+    if (on) {
+      await pushOff()
+      setOn(false)
+    } else {
+      const res = await pushOn()
+      if (res.ok) setOn(true)
+      else setWhy(res.why)
+    }
+    setBusy(false)
+  }
+
+  return (
+    <section className="card" style={{ marginBottom: 16 }}>
+      <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>Tell me when it lands</h2>
+      <p className="muted" style={{ fontSize: 'var(--fs-label)', marginBottom: 10 }}>
+        ⚡ already runs on the server, so it keeps going with your phone locked. Turn this on and it
+        will say so when it comes back, instead of waiting for you to look.
+      </p>
+      {ready.can ? (
+        <button className="btn" onClick={toggle} disabled={busy}>
+          {busy ? '…' : on ? 'Stop telling me' : 'Tell me on this device'}
+        </button>
+      ) : (
+        <p className="muted" style={{ fontSize: 'var(--fs-label)' }}>{pushWhy(ready)}</p>
+      )}
+      {on && !busy ? (
+        <p className="muted" style={{ fontSize: 'var(--fs-label)', marginTop: 8 }}>
+          On for this device. Each device you want telling you has to be turned on where it is.
+        </p>
+      ) : null}
+      {why ? (
+        <p style={{ fontSize: 'var(--fs-label)', marginTop: 8, color: 'var(--warn, #e0a05a)' }}>{why}</p>
+      ) : null}
     </section>
   )
 }

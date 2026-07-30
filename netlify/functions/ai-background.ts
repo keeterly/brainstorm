@@ -12,6 +12,8 @@ import { verifyUser } from './_lib/auth'
 import { actionFor, recordFailure, recordOutcome, runToValidated, type RunRequest } from './_lib/engine'
 import { insertRun, runsToday } from './_lib/runs'
 import { MODEL_FOR_TIER } from '../../shared/ai/pricing'
+import { notifyUser } from './_lib/notify'
+import { runNote } from './_lib/note'
 
 const DAILY_RUN_CAP = 400
 
@@ -87,7 +89,16 @@ export default async (req: Request): Promise<Response> => {
   }
 
   try {
-    await recordOutcome(request, await runToValidated(request))
+    const outcome = await runToValidated(request)
+    await recordOutcome(request, outcome)
+    // The whole reason this is a background function is that you are not
+    // expected to sit and watch it. So when it lands, say so — the work has
+    // already been written down either way, and a notification that fails must
+    // never turn a finished run into a failed one.
+    if (runId && outcome.parsed.success) {
+      const note = runNote(def.name, parsedInput.data, outcome.parsed.data, runId)
+      if (note) await notifyUser(user.token, note, { runId })
+    }
   } catch (e) {
     await recordFailure(request, e)
   }

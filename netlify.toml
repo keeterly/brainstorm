@@ -8,7 +8,10 @@
   # client bundle and RLS is the security boundary. Without this exemption
   # Netlify's secrets scanner finds them in dist/ and fails every build.
   # ANTHROPIC_API_KEY stays scanned: it is server-only and never in output.
-  SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL,SUPABASE_ANON_KEY,VITE_SUPABASE_URL,VITE_SUPABASE_ANON_KEY"
+  # VITE_VAPID_PUBLIC_KEY is the same kind of thing: it is *meant* to ship in
+  # the bundle — a push subscription cannot be made without it, and it is
+  # useless without the private key, which is server-only and stays scanned.
+  SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL,SUPABASE_ANON_KEY,VITE_SUPABASE_URL,VITE_SUPABASE_ANON_KEY,VITE_VAPID_PUBLIC_KEY"
 
 [functions]
   directory = "netlify/functions"
