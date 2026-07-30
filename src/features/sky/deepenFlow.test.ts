@@ -70,14 +70,17 @@ describe('⚡ turns what it found into work you can actually pick up', () => {
     expect(to).toBe('Pull two years of business tax returns')
   })
 
-  it('learns you — once, and never something it already knew', async () => {
+  it('offers what it learned to memory rather than writing it there itself', async () => {
+    // Whether this is new, a correction of something already believed, or —
+    // most often — already known is the reconciler's call. ⚡'s job is to hand
+    // it over and say where it came from.
     const subject = seed()
     await deepenThought(subject.id)
-    expect(useGraph.getState().memories.map((m) => m.content)).toEqual([
-      'Runs a two-person label and does the finance herself',
-    ])
-    await deepenThought(subject.id)
-    expect(useGraph.getState().memories).toHaveLength(1)
+    const offer = run.mock.calls.find((c) => c[0] === 'remember')
+    expect(offer).toBeTruthy()
+    const input = offer![1] as { text: string; from?: string }
+    expect(input.text).toContain('Runs a two-person label and does the finance herself')
+    expect(input.from).toContain('working out')
   })
 
   it('keeps the research as something you can read again', async () => {

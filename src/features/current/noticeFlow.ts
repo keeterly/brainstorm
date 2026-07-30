@@ -7,6 +7,7 @@
 import { useGraph } from '@/store/graph'
 import { runAction } from '@/ai/client'
 import type { NoticeOutput } from '@shared/ai/actions/notice'
+import { learnFacts } from '@/ai/memoryFlow'
 
 export interface Noticed extends NoticeOutput {
   /** when it looked, and at how much — so it can tell it has gone stale */
@@ -80,13 +81,7 @@ export async function lookAgain(): Promise<Noticed | null> {
       sawCount: open.length,
     }
     // what it learned about you outlives this particular read
-    const known = new Set(s.memories.map((m) => m.content.trim().toLowerCase()))
-    for (const fact of output.learned) {
-      const key = fact.trim().toLowerCase()
-      if (!key || known.has(key)) continue
-      known.add(key)
-      s.addMemory(fact, 'distilled')
-    }
+    void learnFacts(output.learned, 'looking over what is open')
     s.updateProfileSettings({ [KEY]: noticed })
     return noticed
   } catch {

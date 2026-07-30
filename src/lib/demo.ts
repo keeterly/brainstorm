@@ -43,8 +43,18 @@ function rel(from: string, to: string, type: Relationship['type']): Relationship
     created_at: days(2),
   }
 }
-function mem(id: string, content: string): Memory {
-  return { id, user_id: 'demo', content, source: 'manual', created_at: days(10) }
+function mem(id: string, content: string, kind: string, strength = 1): Memory {
+  return {
+    id,
+    user_id: 'demo',
+    content,
+    source: 'manual',
+    created_at: days(10),
+    kind,
+    strength,
+    last_used_at: null,
+    archived_at: null,
+  }
 }
 
 export const DEMO_SEED = {
@@ -84,7 +94,15 @@ export const DEMO_SEED = {
     rel('m5', 'c1', 'part_of'),
   ],
   roadmaps: [],
-  memories: [mem('me1', 'Two-person team based in Los Angeles'), mem('me2', 'Works best in the morning')],
+  // Three kinds, because the kinds are the point: a constraint and a pattern
+  // ride along on everything, and a fact about the storefront only comes when
+  // the storefront comes up.
+  memories: [
+    mem('me1', 'Two-person label based in Los Angeles', 'fact', 5),
+    mem('me2', 'Works best in the morning', 'pattern', 9),
+    mem('me3', 'Writes to buyers in plain sentences, never bullet lists', 'preference', 3),
+    mem('me4', 'Will not travel during production weeks', 'constraint', 2),
+  ],
   // What ⚡ brings back. The demo used to show every part of the app except the
   // one that does the most work.
   artifacts: [
@@ -139,6 +157,8 @@ export const DEMO_SEED = {
  * the shape of a real reply can be seen and read, not that it is true.
  */
 export const DEMO_OUTPUT: Record<string, unknown> = {
+  // The commonest real answer, and the one the old code could not give.
+  remember: { ops: [] },
   gauge: {
     depth: 'deep',
     needs: ['live LAX→CDG premium economy fares for those dates', 'Flying Blue award availability'],

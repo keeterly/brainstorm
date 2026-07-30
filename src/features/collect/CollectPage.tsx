@@ -7,12 +7,12 @@ import { parseCapture } from '@/domain/parse-blocks'
 import { runAction } from '@/ai/client'
 import type { ClassifyOutput } from '@shared/ai/actions/classify-thought'
 import { absorbIsEmpty, type AbsorbOutput } from '@shared/ai/actions/absorb'
-import type { DistillOutput } from '@shared/ai/actions/distill-memory'
 import { useVoice } from '@/features/capture/useVoice'
 import { splashAt } from '@/world/Atmosphere'
 import { nextBest } from '@/world/interaction'
 import { looseDroplets, isCloudType } from '@/world/engine'
 import type { Thought } from '@/domain/types'
+import { learn } from '@/ai/memoryFlow'
 
 export default function CollectPage() {
   const navigate = useNavigate()
@@ -21,8 +21,6 @@ export default function CollectPage() {
   const addThought = useGraph((s) => s.addThought)
   const addRelationship = useGraph((s) => s.addRelationship)
   const updateThought = useGraph((s) => s.updateThought)
-  const addMemory = useGraph((s) => s.addMemory)
-  const memories = useGraph((s) => s.memories)
   const profile = useGraph((s) => s.profile)
   const offline = useGraph((s) => s.offline)
 
@@ -88,19 +86,13 @@ export default function CollectPage() {
     }
   }, [text, addThought, addRelationship, classify, offline, voice.listening])
 
-  // memory learns passively from what the user pours in — never blocking, never loud
-  const learnQuietly = useCallback(
-    (t: string) => {
-      if (t.length < 120) return
-      void runAction<DistillOutput>('distill_memory', {
-        text: t,
-        existing: memories.map((m) => m.content).slice(0, 100),
-      })
-        .then(({ output }) => output.facts.forEach((f) => addMemory(f, 'distilled')))
-        .catch(() => {})
-    },
-    [memories, addMemory],
-  )
+  // Memory learns passively from what the user pours in — never blocking,
+  // never loud. One shared door, so a fact learned here reconciles against
+  // what is already believed instead of piling on top of it.
+  const learnQuietly = useCallback((t: string) => {
+    if (t.length < 120) return
+    void learn(t, { from: 'something you wrote down' })
+  }, [])
 
   // Absorb — the sky rearranges instead of duplicating. If the AI sees nothing
   // to adjust (or fails), the text falls through to plain capture: never lost.

@@ -126,7 +126,32 @@ export interface Memory {
   id: string
   user_id: string
   content: string
-  source: 'manual' | 'distilled' | 'import'
+  source: 'manual' | 'distilled' | 'import' | 'learned'
+  created_at: string
+  /** preference · constraint · pattern · fact · person · tool · goal */
+  kind?: string | null
+  /** how often it has proved worth having; never below 1 */
+  strength?: number | null
+  /** when it was last actually leaned on, which beats when it was written */
+  last_used_at?: string | null
+  updated_at?: string | null
+  /** archived, not deleted: the agent corrects, it does not erase */
+  archived_at?: string | null
+  superseded_by?: string | null
+  /** what it came out of, for the trail */
+  origin?: Record<string, unknown> | null
+}
+
+/** One decision about the memory: what changed, and the reason given for it. */
+export interface MemoryEvent {
+  id: string
+  user_id: string
+  memory_id: string | null
+  op: 'add' | 'update' | 'archive' | 'reinforce' | 'edit' | 'delete'
+  before: string | null
+  after: string | null
+  why: string | null
+  agent_run_id: string | null
   created_at: string
 }
 

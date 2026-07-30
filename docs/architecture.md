@@ -48,8 +48,40 @@ No CRDT, no realtime channels — one user on a few devices does not need them y
 - The provider is isolated behind `LLMProvider` (`netlify/functions/_lib/provider.ts`);
   swapping vendors means one new class.
 
-M1 actions: `classify_thought`, `summarize`, `clarify_question`, `find_related`, `to_goal`,
-`make_mind_map`, `generate_roadmap` (streamed), `prioritize`, `distill_memory`.
+Actions: `classify_thought`, `summarize`, `clarify_question`, `find_related`, `to_goal`,
+`make_mind_map`, `generate_roadmap` (streamed), `prioritize`, `absorb`, `organize`,
+`name_pool`, `cluster`, `gauge`, `deepen`, `answer`, `draft`, `reshape`, `notice`,
+`remember`.
+
+## Memory
+
+mem0's shape, built on our own Postgres rather than rented — no embedding vendor, no third
+API key, nothing about how the user thinks leaving the stack.
+
+**Extract → reconcile.** One door: `learn()` in `src/ai/memoryFlow.ts`. Everything that
+might teach the app something — a capture, a pasted bio, the `learned` list off a `deepen`,
+`answer`, `draft` or `notice` run — goes through it. It recalls what is already believed
+nearby and hands both to the `remember` action, which returns one op per decision:
+`add` · `update` (same belief, better stated — in place, keeping the id, the strength and
+the trail) · `archive` (directly contradicted; archived, never deleted) · `noop` (already
+known, and by far the commonest). Before this, seven call sites each pushed facts and deduped
+on exact lowercased strings, so memory could only grow.
+
+**Retrieve by relevance.** `src/domain/recall.ts`, pure and unit-tested. Every prompt used to
+carry the first sixty memories in creation order. Now `buildCtx` ranks on four signals — word
+overlap with the ask, *standing* (a constraint or a preference holds regardless of what is
+being asked; a fact about one supplier does not), reinforcement, and when it was last
+actually leaned on — and sends at most twelve. Ranking runs on the client over the set it
+already holds, so recall works offline.
+
+**Reinforce.** Whatever gets carried gets a point and a `last_used_at`. Local state moves
+every time; the write is throttled to once an hour per memory.
+
+**Show the trail.** `memory_events` records every decision with before/after and the model's
+own reason. The Memory tab groups live memories by kind, shows how load-bearing each one is,
+and has a *What it changed its mind about* section — because something that can quietly
+revise what it knows about you, with no way to see that it did, is not something you would
+let near what it knows about you.
 
 ## Visual Brain
 

@@ -8,6 +8,7 @@ import { saveSnapshot, loadSnapshot } from '@/lib/idb'
 import type {
   Bucket,
   Memory,
+  MemoryEvent,
   Profile,
   Relationship,
   RelType,
@@ -40,7 +41,9 @@ interface GraphState {
   thoughts: Thought[]
   relationships: Relationship[]
   roadmaps: Roadmap[]
+  /** Everything, believed and archived. Readers that feed a prompt use live(). */
   memories: Memory[]
+  memoryEvents: MemoryEvent[]
   artifacts: ResearchArtifact[]
   profile: Profile | null
   layouts: Record<string, Record<string, { x: number; y: number }>>
@@ -57,9 +60,17 @@ interface GraphState {
   updateRelationship(id: string, type: RelType): void
   deleteRelationship(id: string): void
 
-  addMemory(content: string, source?: Memory['source']): Memory
+  addMemory(content: string, source?: Memory['source'], extra?: Partial<Memory>): Memory
   updateMemory(id: string, content: string): void
   deleteMemory(id: string): void
+  /** Correct one in place, keeping its id, its strength and its history. */
+  reviseMemory(id: string, patch: Partial<Memory>): void
+  /** Stop believing it. Archived rather than erased — the trail is the point. */
+  archiveMemory(id: string, supersededBy?: string | null): void
+  /** These were used and nothing contradicted them. Persisted at most hourly. */
+  reinforceMemories(ids: string[]): void
+  /** One line in the record of how it came to believe something. */
+  noteMemory(e: Omit<MemoryEvent, 'id' | 'user_id' | 'created_at'>): void
 
   addRoadmap(r: Omit<Roadmap, 'user_id' | 'created_at' | 'updated_at'>): void
   addArtifact(a: Omit<ResearchArtifact, 'user_id' | 'created_at'>): void
@@ -100,6 +111,7 @@ export const useGraph = create<GraphState>((set, get) => ({
   relationships: [],
   roadmaps: [],
   memories: [],
+  memoryEvents: [],
   artifacts: [],
   profile: null,
   layouts: {},
@@ -107,11 +119,12 @@ export const useGraph = create<GraphState>((set, get) => ({
   async hydrate(userId) {
     set({ userId })
     try {
-      const [th, re, rm, me, ar, pr, la] = await Promise.all([
+      const [th, re, rm, me, ev, ar, pr, la] = await Promise.all([
         supabase.from('thoughts').select('*').order('created_at', { ascending: false }).limit(5000),
         supabase.from('relationships').select('*').limit(20000),
         supabase.from('roadmaps').select('*'),
         supabase.from('memories').select('*').order('created_at'),
+        supabase.from('memory_events').select('*').order('created_at', { ascending: false }).limit(500),
         supabase.from('research_artifacts').select('*'),
         supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
         supabase.from('layouts').select('*'),
@@ -124,6 +137,7 @@ export const useGraph = create<GraphState>((set, get) => ({
         relationships: (re.data ?? []) as Relationship[],
         roadmaps: (rm.data ?? []) as Roadmap[],
         memories: (me.data ?? []) as Memory[],
+        memoryEvents: (ev.data ?? []) as MemoryEvent[],
         artifacts: (ar.data ?? []) as ResearchArtifact[],
         profile: (pr.data ?? null) as Profile | null,
         layouts,
@@ -161,6 +175,7 @@ export const useGraph = create<GraphState>((set, get) => ({
       relationships: [],
       roadmaps: [],
       memories: [],
+      memoryEvents: [],
       artifacts: [],
       profile: null,
       layouts: {},
@@ -267,13 +282,20 @@ export const useGraph = create<GraphState>((set, get) => ({
     scheduleSnapshot(get)
   },
 
-  addMemory(content, source = 'manual') {
+  addMemory(content, source = 'manual', extra) {
     const m: Memory = {
       id: crypto.randomUUID(),
       user_id: get().userId ?? '',
       content,
       source,
       created_at: nowISO(),
+      kind: extra?.kind ?? null,
+      strength: extra?.strength ?? 1,
+      last_used_at: null,
+      updated_at: null,
+      archived_at: null,
+      superseded_by: null,
+      origin: extra?.origin ?? null,
     }
     set((s) => ({ memories: [...s.memories, m] }))
     void write({ table: 'memories', op: 'insert', payload: m as unknown as Record<string, unknown> })
@@ -282,12 +304,90 @@ export const useGraph = create<GraphState>((set, get) => ({
   },
 
   updateMemory(id, content) {
-    set((s) => ({ memories: s.memories.map((m) => (m.id === id ? { ...m, content } : m)) }))
-    void write({ table: 'memories', op: 'update', pk: { id }, payload: { content } })
+    const updated_at = nowISO()
+    set((s) => ({ memories: s.memories.map((m) => (m.id === id ? { ...m, content, updated_at } : m)) }))
+    void write({ table: 'memories', op: 'update', pk: { id }, payload: { content, updated_at } })
     scheduleSnapshot(get)
   },
 
+  reviseMemory(id, patch) {
+    const updated_at = nowISO()
+    set((s) => ({ memories: s.memories.map((m) => (m.id === id ? { ...m, ...patch, updated_at } : m)) }))
+    void write({
+      table: 'memories',
+      op: 'update',
+      pk: { id },
+      payload: { ...patch, updated_at } as Record<string, unknown>,
+    })
+    scheduleSnapshot(get)
+  },
+
+  archiveMemory(id, supersededBy = null) {
+    const archived_at = nowISO()
+    set((s) => ({
+      memories: s.memories.map((m) =>
+        m.id === id ? { ...m, archived_at, superseded_by: supersededBy, updated_at: archived_at } : m,
+      ),
+    }))
+    void write({
+      table: 'memories',
+      op: 'update',
+      pk: { id },
+      payload: { archived_at, superseded_by: supersededBy, updated_at: archived_at },
+    })
+    scheduleSnapshot(get)
+  },
+
+  /**
+   * It came along on a prompt and nothing contradicted it.
+   *
+   * Local state moves every time, because the ranker should see the new
+   * strength on the very next call. The write does not: `last_used_at` to the
+   * minute is worth nothing, and persisting eight rows on every action would
+   * roughly double what this app writes. Once an hour per memory is plenty to
+   * tell a fact that earns its place from one that has ridden along unread
+   * since March.
+   */
+  reinforceMemories(ids) {
+    if (!ids.length) return
+    const at = nowISO()
+    const cutoff = Date.now() - 3600_000
+    const persist: string[] = []
+    set((s) => ({
+      memories: s.memories.map((m) => {
+        if (!ids.includes(m.id) || m.archived_at) return m
+        const last = m.last_used_at ? Date.parse(m.last_used_at) : 0
+        const strength = (m.strength ?? 1) + 1
+        if (!(last > cutoff)) persist.push(m.id)
+        return { ...m, strength, last_used_at: at }
+      }),
+    }))
+    for (const id of persist) {
+      const m = get().memories.find((x) => x.id === id)
+      if (!m) continue
+      void write({ table: 'memories', op: 'update', pk: { id }, payload: { strength: m.strength, last_used_at: at } })
+    }
+    if (persist.length) scheduleSnapshot(get)
+  },
+
+  noteMemory(e) {
+    const row: MemoryEvent = {
+      ...e,
+      id: crypto.randomUUID(),
+      user_id: get().userId ?? '',
+      created_at: nowISO(),
+    }
+    set((s) => ({ memoryEvents: [row, ...s.memoryEvents].slice(0, 500) }))
+    void write({ table: 'memory_events', op: 'insert', payload: row as unknown as Record<string, unknown> })
+  },
+
   deleteMemory(id) {
+    // Yours to erase, unlike the agent's archive. The event survives the row —
+    // memory_id falls to null and `before` keeps the words — so a memory you
+    // threw away cannot quietly come back a week later with no sign it ever
+    // went, which is the failure that makes a memory feature untrustworthy.
+    const gone = get().memories.find((m) => m.id === id)
+    if (gone) get().noteMemory({ memory_id: id, op: 'delete', before: gone.content, after: null, why: null, agent_run_id: null })
     set((s) => ({ memories: s.memories.filter((m) => m.id !== id) }))
     void write({ table: 'memories', op: 'delete', pk: { id } })
     scheduleSnapshot(get)

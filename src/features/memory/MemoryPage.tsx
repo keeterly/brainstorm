@@ -5,8 +5,6 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useGraph } from '@/store/graph'
-import { useAction } from '@/ai/useAction'
-import type { DistillOutput } from '@shared/ai/actions/distill-memory'
 import { exportMarkdown } from '@/domain/export-markdown'
 import { clearSnapshot } from '@/lib/idb'
 import { clearTrail, readTrail, trailWhen } from '@/lib/trail'
@@ -20,6 +18,8 @@ import {
 import { TypeBadge } from '@/components/TypeBadge'
 import { humanDate } from '@/domain/human-date'
 import { todayISO } from '@/domain/prioritize-prepass'
+import { learn, type Learned } from '@/ai/memoryFlow'
+import type { Memory, MemoryEvent } from '@/domain/types'
 
 // Account — set a password (this is where a reset finishes), and choose
 // whether this device opens with Face ID.
@@ -102,10 +102,19 @@ export default function MemoryPage() {
   const updateProfileSettings = useGraph((s) => s.updateProfileSettings)
   const toggleDone = useGraph((s) => s.toggleDone)
 
+  const memoryEvents = useGraph((s) => s.memoryEvents)
   const [newMem, setNewMem] = useState('')
   const [distillText, setDistillText] = useState('')
   const [spend, setSpend] = useState<number | null>(null)
-  const distill = useAction<DistillOutput>('distill_memory')
+  const [learning, setLearning] = useState(false)
+  const [learnt, setLearnt] = useState<Learned | null>(null)
+
+  // Believed and set aside. The second list is short and usually empty, and it
+  // is the whole reason the agent is allowed to change its mind at all: a thing
+  // that can quietly stop believing something, with no way to see that it did,
+  // is not something you would let near what it knows about you.
+  const live = memories.filter((m) => !m.archived_at)
+  const shelved = memories.filter((m) => m.archived_at)
 
   const autonomy = profile?.settings.autonomy ?? 'suggest'
   const finished = thoughts
@@ -137,13 +146,14 @@ export default function MemoryPage() {
   }, [])
 
   async function runDistill() {
-    const out = await distill.run({
-      text: distillText,
-      existing: memories.map((m) => m.content).slice(0, 100),
-    })
-    if (!out) return
-    for (const f of out.facts) addMemory(f, 'distilled')
-    setDistillText('')
+    setLearning(true)
+    setLearnt(null)
+    // The same door everything else goes through, so pasting a bio cannot
+    // re-add six things it already knows in slightly different words.
+    const res = await learn(distillText, { from: 'something you pasted in' })
+    setLearning(false)
+    setLearnt(res)
+    if (res.added || res.updated || res.archived) setDistillText('')
   }
 
   function download() {
@@ -170,19 +180,31 @@ export default function MemoryPage() {
       <section className="card" style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>Known about you</h2>
         <p className="muted" style={{ fontSize: 'var(--fs-label)', marginBottom: 10 }}>
-          Fully yours — edit or delete anything. It shapes every AI suggestion.
+          Fully yours — edit or delete anything. It picks from this for whatever you
+          are working on, rather than sending all of it every time.
         </p>
+        {/* Grouped, because the kinds are not equal. A constraint you gave it is
+            worth reading before a fact it happened to notice, and a flat list in
+            the order things were written buries the important half. */}
         <div style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
-          {memories.map((m) => (
-            <MemoryRow
-              key={m.id}
-              content={m.content}
-              source={m.source}
-              onSave={(v) => updateMemory(m.id, v)}
-              onDelete={() => deleteMemory(m.id)}
-            />
+          {byKind(live).map(([kind, items]) => (
+            <div key={kind} style={{ marginBottom: 6 }}>
+              <div className="eyebrow" style={{ marginBottom: 6 }}>
+                {KIND_WORDS[kind] ?? kind}
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                {items.map((m) => (
+                  <MemoryRow
+                    key={m.id}
+                    memory={m}
+                    onSave={(v) => updateMemory(m.id, v)}
+                    onDelete={() => deleteMemory(m.id)}
+                  />
+                ))}
+              </div>
+            </div>
           ))}
-          {memories.length === 0 && (
+          {live.length === 0 && (
             <p className="faint" style={{ fontSize: 'var(--fs-label)' }}>
               Nothing yet. This fills itself as you use the app — anything ⚡ or the
               daily read works out about how you work lands here, and you can edit
@@ -217,29 +239,36 @@ export default function MemoryPage() {
         </div>
         <details>
           <summary className="muted" style={{ fontSize: 'var(--fs-label)', cursor: 'pointer' }}>
-            Paste anything → distill into memory
+            Paste anything → let it take what is worth keeping
           </summary>
           <textarea
             value={distillText}
             onChange={(e) => setDistillText(e.target.value)}
             rows={4}
-            placeholder="Paste notes, an email, a bio — durable facts are extracted for your review."
+            placeholder="Paste notes, an email, a bio. It keeps what is durable about you, corrects what it already believed, and ignores the rest."
             className="field"
             style={{ marginTop: 8, resize: 'vertical', minHeight: 90 }}
           />
           <button
             className="btn btn--sm btn--accent"
             style={{ marginTop: 8 }}
-            disabled={!distillText.trim() || distill.status === 'running' || offline}
+            disabled={!distillText.trim() || learning || offline}
             onClick={runDistill}
           >
-            {distill.status === 'running' ? 'Distilling…' : '✦ Distill'}
+            {learning ? 'Reading it…' : '✦ Take it in'}
           </button>
-          {distill.status === 'error' && (
-            <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-label)', marginTop: 8 }}>{distill.error}</p>
+          {/* Says what actually happened, including — usually — nothing. A
+              memory feature that reports success after changing nothing is one
+              you stop believing. */}
+          {learnt && !learning && (
+            <p className="muted" style={{ fontSize: 'var(--fs-label)', marginTop: 8 }} role="status">
+              {tookIn(learnt)}
+            </p>
           )}
         </details>
       </section>
+
+      <ChangedItsMind shelved={shelved} events={memoryEvents} />
 
       <section className="card" style={{ marginBottom: 16 }}>
         <details>
@@ -360,19 +389,60 @@ export default function MemoryPage() {
 // .field so every page types into the same water
 const inputStyle: React.CSSProperties = { flex: 1 }
 
+/**
+ * Headings for the kinds, in the order they are worth reading.
+ *
+ * "Constraint" and "preference" are the model's words, not this person's. What
+ * belongs above a list of your own rules is a sentence, not a taxonomy label.
+ */
+const KIND_WORDS: Record<string, string> = {
+  constraint: 'What you will not do',
+  preference: 'What you always want',
+  pattern: 'How you work',
+  goal: 'What you are aiming at',
+  person: 'Who you work with',
+  tool: 'What you work in',
+  fact: 'About your situation',
+  '': 'Everything else',
+}
+
+const KIND_ORDER = ['constraint', 'preference', 'pattern', 'goal', 'person', 'tool', 'fact', '']
+
+function byKind(memories: Memory[]): [string, Memory[]][] {
+  const groups = new Map<string, Memory[]>()
+  for (const m of memories) {
+    const k = m.kind && KIND_ORDER.includes(m.kind) ? m.kind : ''
+    const list = groups.get(k)
+    if (list) list.push(m)
+    else groups.set(k, [m])
+  }
+  // strongest first inside each group: what has repeatedly proved worth having
+  for (const list of groups.values()) list.sort((a, b) => (b.strength ?? 1) - (a.strength ?? 1))
+  return KIND_ORDER.filter((k) => groups.has(k)).map((k) => [k, groups.get(k)!])
+}
+
+/** What the reconciler did, said plainly — including when it did nothing. */
+function tookIn(l: Learned): string {
+  const bits = [
+    l.added ? `${l.added} new` : '',
+    l.updated ? `${l.updated} corrected` : '',
+    l.archived ? `${l.archived} no longer true` : '',
+  ].filter(Boolean)
+  if (!bits.length) return l.knew ? 'Nothing new — it already knew all of that.' : 'Nothing in there worth keeping.'
+  return bits.join(' · ') + (l.knew ? ` · ${l.knew} it already knew` : '')
+}
+
 function MemoryRow({
-  content,
-  source,
+  memory,
   onSave,
   onDelete,
 }: {
-  content: string
-  source: string
+  memory: Memory
   onSave: (v: string) => void
   onDelete: () => void
 }) {
   const [editing, setEditing] = useState(false)
-  const [v, setV] = useState(content)
+  const [v, setV] = useState(memory.content)
   if (editing) {
     return (
       <div style={{ display: 'flex', gap: 6 }}>
@@ -389,21 +459,86 @@ function MemoryRow({
       </div>
     )
   }
+  // How often it has been leaned on. Three dots rather than a number, because
+  // "17" invites you to wonder what 17 means and the only thing worth knowing
+  // here is whether this is load-bearing or something it noticed once.
+  const strength = Math.min(3, Math.ceil((memory.strength ?? 1) / 4))
+  const why = (memory.origin as { why?: string } | null)?.why
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
       <button
         onClick={() => setEditing(true)}
         style={{ flex: 1, textAlign: 'left', fontSize: 'var(--fs-label)', minHeight: 44, lineHeight: 1.4 }}
       >
-        {content}
+        {memory.content}
+        {why && (
+          <span className="faint" style={{ display: 'block', fontSize: 'var(--fs-caption)', marginTop: 2 }}>
+            {why}
+          </span>
+        )}
       </button>
-      <span className="faint" style={{ fontSize: 'var(--fs-caption)', flex: '0 0 auto' }}>
-        {source === 'distilled' ? 'learned' : source}
+      <span
+        className="faint"
+        aria-label={`leaned on ${memory.strength ?? 1} times`}
+        title={`Leaned on ${memory.strength ?? 1} time${(memory.strength ?? 1) === 1 ? '' : 's'}`}
+        style={{ fontSize: 'var(--fs-caption)', flex: '0 0 auto', letterSpacing: '0.1em' }}
+      >
+        {'•'.repeat(strength)}
       </span>
       <button aria-label="Delete memory" className="faint hit" onClick={onDelete} style={{ flex: '0 0 auto' }}>
         ×
       </button>
     </div>
+  )
+}
+
+/**
+ * What it used to believe, and why it stopped.
+ *
+ * The agent archives rather than deletes, and this is the reason that
+ * distinction is worth the column. Something that can quietly revise what it
+ * knows about you, with no way to see that it did, is not something you would
+ * let anywhere near what it knows about you. Folded shut, and absent entirely
+ * until it has changed its mind at least once.
+ */
+function ChangedItsMind({ shelved, events }: { shelved: Memory[]; events: MemoryEvent[] }) {
+  const changes = events.filter((e) => e.op === 'update' || e.op === 'archive')
+  if (!shelved.length && !changes.length) return null
+  return (
+    <section className="card" style={{ marginBottom: 16 }}>
+      <details>
+        <summary style={{ cursor: 'pointer', listStyle: 'none' }}>
+          <h2 style={{ fontSize: 'var(--fs-md)', display: 'inline' }}>What it changed its mind about</h2>
+          <span className="faint" style={{ fontSize: 'var(--fs-label)', marginLeft: 8 }}>
+            {changes.length || shelved.length}
+          </span>
+        </summary>
+        <p className="muted" style={{ fontSize: 'var(--fs-label)', margin: '10px 0' }}>
+          It corrects what it knows rather than piling more on top. Nothing here is gone — this is what it
+          stopped believing, and what it says made it stop.
+        </p>
+        <div style={{ display: 'grid', gap: 2 }}>
+          {changes.slice(0, 30).map((e, i) => (
+            <div key={e.id} style={{ padding: '9px 0', borderTop: i ? '0.5px solid var(--line)' : 'none' }}>
+              <div
+                className="muted"
+                style={{ fontSize: 'var(--fs-label)', textDecoration: 'line-through', lineHeight: 1.4 }}
+              >
+                {e.before}
+              </div>
+              {e.after && (
+                <div style={{ fontSize: 'var(--fs-label)', lineHeight: 1.4, marginTop: 3 }}>{e.after}</div>
+              )}
+              {e.why && (
+                <div className="faint" style={{ fontSize: 'var(--fs-caption)', marginTop: 3 }}>
+                  {e.why}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </details>
+    </section>
   )
 }
 

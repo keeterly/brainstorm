@@ -14,6 +14,7 @@ import { runAction } from '@/ai/client'
 import type { DraftOutput } from '@shared/ai/actions/draft'
 import { markApplied } from '@/ai/pending'
 import type { Sizing } from './gaugeFlow'
+import { learnFacts } from '@/ai/memoryFlow'
 
 export type DraftResult =
   | { kind: 'drafted'; line: string; title: string; done: boolean; output: DraftOutput }
@@ -134,13 +135,7 @@ export function applyDraft(subjectId: string, output: DraftOutput, runId: string
     agent_run_id: runId,
   })
 
-  const seen = new Set(s.memories.map((m) => m.content.trim().toLowerCase()))
-  for (const fact of output.learned) {
-    const key = fact.trim().toLowerCase()
-    if (!key || seen.has(key)) continue
-    seen.add(key)
-    s.addMemory(fact, 'distilled')
-  }
+  void learnFacts(output.learned, `making ${subject.title || subject.raw_content.slice(0, 80)}`, runId)
 
   if (runId) void markApplied(runId)
   return { kind: 'drafted', line: firstLine(output.body), title: output.title, done: output.done, output }

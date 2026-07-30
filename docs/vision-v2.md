@@ -35,7 +35,7 @@ Nothing is filed. Everything cycles.
 
 1. **Thinking Engine** — captures, classifies, connects, reasons.
    *Exists today:* `shared/ai/` action registry + `/api/ai` (classify, find_related,
-   make_mind_map, generate_roadmap, prioritize, distill_memory) over the thought graph.
+   make_mind_map, generate_roadmap, prioritize, remember) over the thought graph.
 2. **World Engine** — generates the adaptive atmosphere from semantic tokens. *New.*
    Never hardcode themes; derive the environment:
    ```

@@ -78,13 +78,13 @@ describe('the read on you', () => {
     expect(n?.suggestions[0].from).toBeUndefined()
   })
 
-  it('keeps what it learned about you, once', async () => {
+  it('offers what it learned to memory rather than writing it there itself', async () => {
     seed()
     run.mockResolvedValue({ runId: 'r1', output: OUT({ learned: ['Does her own bookkeeping'] }) })
     await lookAgain()
-    expect(useGraph.getState().memories.map((m) => m.content)).toEqual(['Does her own bookkeeping'])
-    await lookAgain()
-    expect(useGraph.getState().memories).toHaveLength(1)
+    const offer = run.mock.calls.find((c) => c[0] === 'remember')
+    expect(offer).toBeTruthy()
+    expect((offer![1] as { text: string }).text).toContain('Does her own bookkeeping')
   })
 
   it('remembers the read, so glancing at it costs nothing', async () => {

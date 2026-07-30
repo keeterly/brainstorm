@@ -11,6 +11,7 @@ import type { AnswerOutput } from '@shared/ai/actions/answer'
 import type { PromptImage } from '@shared/ai/types'
 import { markApplied } from '@/ai/pending'
 import type { Sizing } from './gaugeFlow'
+import { learnFacts } from '@/ai/memoryFlow'
 
 export type AnswerResult =
   | { kind: 'answered'; line: string; added: number; settled: boolean; output: AnswerOutput }
@@ -120,13 +121,7 @@ export function applyAnswer(subjectId: string, output: AnswerOutput, runId: stri
     agent_run_id: runId,
   })
 
-  const known = new Set(s.memories.map((m) => m.content.trim().toLowerCase()))
-  for (const fact of output.learned) {
-    const key = fact.trim().toLowerCase()
-    if (!key || known.has(key)) continue
-    known.add(key)
-    s.addMemory(fact, 'distilled')
-  }
+  void learnFacts(output.learned, `answering ${subject.title || subject.raw_content.slice(0, 80)}`, runId)
 
   if (runId) void markApplied(runId)
   return {

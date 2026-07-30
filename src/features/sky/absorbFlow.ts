@@ -7,8 +7,8 @@ import { absorbIsEmpty, type AbsorbOutput } from '@shared/ai/actions/absorb'
 import type { OrganizeOutput } from '@shared/ai/actions/organize'
 import type { NamePoolOutput } from '@shared/ai/actions/name-pool'
 import type { ClusterOutput } from '@shared/ai/actions/cluster'
-import type { DistillOutput } from '@shared/ai/actions/distill-memory'
 import type { Thought } from '@/domain/types'
+import { learn } from '@/ai/memoryFlow'
 
 export type AbsorbResult = { kind: 'absorbed'; note: string } | { kind: 'empty' } | { kind: 'failed' }
 
@@ -60,16 +60,15 @@ export async function absorbText(text: string): Promise<AbsorbResult> {
   }
 }
 
-// passive memory — fire and forget, never blocking, never loud
-export function learnQuietly(text: string) {
+// Passive memory — fire and forget, never blocking, never loud.
+//
+// It used to extract facts and push every one of them, which is how the same
+// belief ended up in the list three times in three phrasings. It now proposes,
+// and the reconciler decides; most of the time the decision is that it already
+// knew, and nothing happens at all.
+export function learnQuietly(text: string, from = 'something you wrote') {
   if (text.length < 120) return
-  const s = useGraph.getState()
-  void runAction<DistillOutput>('distill_memory', {
-    text,
-    existing: s.memories.map((m) => m.content).slice(0, 100),
-  })
-    .then(({ output }) => output.facts.forEach((f) => s.addMemory(f, 'distilled')))
-    .catch(() => {})
+  void learn(text, { from })
 }
 
 // Organize — a brain dump (typed or spoken) becomes structure in the sky:

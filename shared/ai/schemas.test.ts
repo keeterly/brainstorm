@@ -35,7 +35,7 @@ function sampleInput(name: string): never {
     make_mind_map: { thoughts: [ref, { ...ref, id: 'bbbb' }] },
     generate_roadmap: { goal: ref, raw_content: 'launch the campaign' },
     prioritize: { actions: [{ id: 'aaaa', title: 'do a thing' }] },
-    distill_memory: { text: 'I prefer mornings', existing: [] },
+    remember: { text: 'I prefer mornings', known: [] },
     absorb: { text: 'the buyer moved our meeting to friday', thoughts: [ref] },
     organize: { text: 'a long messy dump about the campaign and the pop-up', thoughts: [ref], spoken: true },
     name_pool: { members: ['shoot on expired film', 'letters sealed with wax'] },
@@ -565,5 +565,86 @@ describe('running ⚡ on the same goal twice', () => {
     expect(p.user).toContain('arrives as a duplicate')
     // and it still gets the list to compare against
     expect(p.user).toContain('Assemble the financial packet')
+  })
+})
+
+describe('remember — memory that reconciles instead of accumulating', () => {
+  const remember = ACTION_REGISTRY.remember
+  const ctx = { nowISO: '2026-07-30T12:00:00Z', tzOffsetMin: -420, memory: [] }
+  const known = [
+    { id: 'm1', content: 'Two-person team based in Los Angeles', kind: 'fact' },
+    { id: 'm2', content: 'Works best in the morning', kind: 'pattern' },
+  ]
+
+  it('costs nothing and cannot go looking things up', () => {
+    // it runs after every capture, answer and draft; weight here is weight
+    // everywhere, and a reconciler that searches the web is a different feature
+    expect(remember.modelTier).toBe('fast')
+    expect(remember.searchMaxUses).toBe(0)
+    expect(remember.background).toBeFalsy()
+  })
+
+  it('shows it what it already believes, by id, so it can say "I know"', () => {
+    const p = remember.buildPrompt({ text: 'we are two people in LA', known }, ctx)
+    expect(p.user).toContain('[m1] Two-person team based in Los Angeles')
+    expect(p.user).toContain('we are two people in LA')
+    expect(p.user).toContain('already covers it')
+  })
+
+  it('says out loud that already-knowing is the usual answer', () => {
+    const p = remember.buildPrompt({ text: 'x', known: [] }, ctx)
+    expect(p.system).toContain('you already know this')
+    expect(p.user).toContain('empty list is a fine answer')
+  })
+
+  it('is told the asymmetry that makes archiving dangerous', () => {
+    // forgetting a constraint is not the mirror image of missing a fact: it
+    // produces confident work that breaks a rule you were told about
+    const p = remember.buildPrompt({ text: 'x', known }, ctx)
+    expect(p.system).toContain('direct contradiction')
+    expect(p.system).toContain('never because something has gone unmentioned')
+  })
+
+  it('carries where the material came from, so the trail can say', () => {
+    const p = remember.buildPrompt({ text: 'x', known: [], from: 'a draft of the buyer note' }, ctx)
+    expect(p.user).toContain('a draft of the buyer note')
+  })
+
+  it('accepts the four decisions it is allowed to make', () => {
+    const r = remember.outputSchema.safeParse({
+      ops: [
+        { op: 'add', content: 'Ships to Japan twice a year', kind: 'fact', why: 'you mentioned the Tokyo drop' },
+        { op: 'update', id: 'm1', content: 'Two-person label based in Los Angeles', kind: 'fact', why: 'label, not team' },
+        { op: 'archive', id: 'm2', why: 'you said mornings stopped working' },
+        { op: 'noop', id: 'm1' },
+      ],
+    })
+    expect(r.success).toBe(true)
+  })
+
+  it('accepts doing nothing at all, which is the point of it', () => {
+    expect(remember.outputSchema.safeParse({ ops: [] }).success).toBe(true)
+  })
+
+  it('will not invent a fifth kind of decision', () => {
+    expect(remember.outputSchema.safeParse({ ops: [{ op: 'delete', id: 'm1' }] }).success).toBe(false)
+  })
+
+  it('will not take a kind it has no ranking for', () => {
+    // an unknown kind would silently rank as an ordinary fact, which is a
+    // constraint quietly demoted to something that only rides along on a match
+    expect(remember.outputSchema.safeParse({ ops: [{ op: 'add', content: 'x', kind: 'vibe' }] }).success).toBe(false)
+    expect(remember.outputSchema.safeParse({ ops: [{ op: 'add', content: 'x', kind: 'constraint' }] }).success).toBe(true)
+  })
+
+  it('keeps a memory to one readable sentence', () => {
+    const long = 'x'.repeat(400)
+    expect(remember.outputSchema.safeParse({ ops: [{ op: 'add', content: long }] }).success).toBe(false)
+  })
+
+  it('caps how much one pass may change', () => {
+    const twelve = Array.from({ length: 12 }, (_, i) => ({ op: 'add' as const, content: `fact ${i}` }))
+    expect(remember.outputSchema.safeParse({ ops: twelve }).success).toBe(true)
+    expect(remember.outputSchema.safeParse({ ops: [...twelve, { op: 'add', content: 'one more' }] }).success).toBe(false)
   })
 })

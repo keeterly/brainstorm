@@ -7,7 +7,6 @@ import { toGoal } from './actions/to-goal'
 import { makeMindMap } from './actions/make-mind-map'
 import { generateRoadmap } from './actions/generate-roadmap'
 import { prioritize } from './actions/prioritize'
-import { distillMemory } from './actions/distill-memory'
 import { absorb } from './actions/absorb'
 import { organize } from './actions/organize'
 import { namePool } from './actions/name-pool'
@@ -18,6 +17,7 @@ import { gauge } from './actions/gauge'
 import { notice } from './actions/notice'
 import { reshape } from './actions/reshape'
 import { draft } from './actions/draft'
+import { remember } from './actions/remember'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const ACTION_REGISTRY: Record<string, ActionDef<any, any>> = {
@@ -29,7 +29,6 @@ export const ACTION_REGISTRY: Record<string, ActionDef<any, any>> = {
   [makeMindMap.name]: makeMindMap,
   [generateRoadmap.name]: generateRoadmap,
   [prioritize.name]: prioritize,
-  [distillMemory.name]: distillMemory,
   [absorb.name]: absorb,
   [organize.name]: organize,
   [namePool.name]: namePool,
@@ -40,6 +39,7 @@ export const ACTION_REGISTRY: Record<string, ActionDef<any, any>> = {
   [notice.name]: notice,
   [reshape.name]: reshape,
   [draft.name]: draft,
+  [remember.name]: remember,
 }
 
 export type ActionName = keyof typeof ACTION_REGISTRY

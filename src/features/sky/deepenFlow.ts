@@ -11,6 +11,7 @@ import type { DeepenOutput } from '@shared/ai/actions/deepen'
 import type { PromptImage } from '@shared/ai/types'
 import { markApplied } from '@/ai/pending'
 import type { Sizing } from './gaugeFlow'
+import { learnFacts } from '@/ai/memoryFlow'
 
 export type DeepenResult =
   | { kind: 'deepened'; note: string; added: number; output: DeepenOutput }
@@ -112,14 +113,10 @@ export function applyDeepen(subjectId: string, output: DeepenOutput, runId: stri
     })
   }
 
-  // it learns you — but only things it does not already know
-  const known = new Set(s.memories.map((m) => m.content.trim().toLowerCase()))
-  for (const fact of output.learned) {
-    const key = fact.trim().toLowerCase()
-    if (!key || known.has(key)) continue
-    known.add(key)
-    s.addMemory(fact, 'distilled')
-  }
+  // It learns you. Proposed rather than written: the reconciler decides
+  // whether each of these is new, a correction of something it already
+  // believed, or — most often — something it already knew.
+  void learnFacts(output.learned, `working out ${subject.title || subject.raw_content.slice(0, 80)}`, runId)
 
   // claimed: whoever comes back for it next will not land it a second time
   if (runId) void markApplied(runId)

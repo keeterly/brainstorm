@@ -124,11 +124,18 @@ describe('asking one thing on the map', () => {
     expect(art.sources[0].url).toBe('https://wwws.airfrance.us/x')
   })
 
-  it('learns you, once', async () => {
+  it('offers what it learned to memory rather than writing it there itself', async () => {
+    // It used to push straight into the list, which is how the same belief
+    // ended up in it three times in three phrasings. Whether this is new, a
+    // correction, or something already known is the reconciler's call now —
+    // this flow's job is only to hand it over, with where it came from.
     const { q } = seed()
     await answerThought(q.id)
-    await answerThought(q.id)
-    expect(useGraph.getState().memories).toHaveLength(1)
+    const offer = run.mock.calls.find((c) => c[0] === 'remember')
+    expect(offer).toBeTruthy()
+    const input = offer![1] as { text: string; from?: string }
+    expect(input.text).toContain('Flies LAX→CDG for fashion week')
+    expect(input.from).toContain('answering')
   })
 
   it('changes nothing at all when it cannot get out there', async () => {

@@ -6,6 +6,7 @@ import { useGraph } from '@/store/graph'
 import { ACTION_REGISTRY } from '@shared/ai/registry'
 import { DEMO, DEMO_OUTPUT } from '@/lib/demo'
 import { whyItFailed } from './why'
+import { recall, topicOf } from '@/domain/recall'
 
 /** Long enough for real research, short enough to give up eventually. */
 const BG_GIVE_UP_MS = 4 * 60 * 1000
@@ -27,12 +28,30 @@ async function authHeader(): Promise<string> {
   return `Bearer ${token}`
 }
 
-function buildCtx() {
-  const memory = useGraph
-    .getState()
-    .memories.map((m) => m.content)
-    .slice(0, 60)
-  return { tzOffsetMin: -new Date().getTimezoneOffset(), memory }
+/**
+ * What it knows about you, narrowed to what this particular ask needs.
+ *
+ * It used to be `.slice(0, 60)` in creation order: the same sixty sentences on
+ * every request whether or not any of them had anything to do with it, so a
+ * fact about a supplier mentioned once in March rode along on every call for
+ * the rest of the year. A model handed forty irrelevant facts learns that most
+ * of what it is given can be ignored, which is the opposite of the point.
+ *
+ * Now the ranker picks: what shares words with the ask, plus what holds
+ * regardless — preferences, constraints, how they work. And whatever gets
+ * carried gets reinforced, so memory that keeps proving useful outranks memory
+ * that has been riding along unread since the day it was written.
+ */
+function buildCtx(input?: unknown, action?: string) {
+  const s = useGraph.getState()
+  const live = s.memories.filter((m) => !m.archived_at)
+  // `remember` is handed the memories it must reason about, by id, in its own
+  // input. Recalling into it would be the same list twice, and would reinforce
+  // memories on the strength of the app having thought about them.
+  if (action === 'remember') return { tzOffsetMin: -new Date().getTimezoneOffset(), memory: [] as string[] }
+  const picked = recall(live, topicOf(input), 12)
+  if (picked.length) s.reinforceMemories(picked.map((m) => m.id))
+  return { tzOffsetMin: -new Date().getTimezoneOffset(), memory: picked.map((m) => m.content) }
 }
 
 export interface RunOptions {
@@ -72,7 +91,7 @@ async function runInBackground<O>(
   const res = await fetch('/.netlify/functions/ai-background', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: auth },
-    body: JSON.stringify({ action, input, runId, searches: opts.searches, ctx: buildCtx() }),
+    body: JSON.stringify({ action, input, runId, searches: opts.searches, ctx: buildCtx(input, action) }),
     signal: opts.signal,
   })
   // 202 is the happy path here; anything else was refused before it began
@@ -124,7 +143,7 @@ export async function runAction<O = unknown>(
   const res = await fetch('/api/ai', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: auth },
-    body: JSON.stringify({ action, input, searches: opts.searches, ctx: buildCtx() }),
+    body: JSON.stringify({ action, input, searches: opts.searches, ctx: buildCtx(input, action) }),
     signal: opts.signal,
   })
 
