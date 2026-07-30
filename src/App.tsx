@@ -26,6 +26,10 @@ export default function App() {
         <Routes>
           <Route path="/" element={<SkyPage />} />
           <Route path="/collect" element={<CollectPage />} />
+          {/* the sky is the world now; ThinkPage was a second drawing of the
+              same graph and rendered nowhere for months. The redirect stays for
+              anything holding an old link — a bookmark, a cached PWA start
+              url — but nothing in the app points here. */}
           <Route path="/think" element={<Navigate to="/" replace />} />
           <Route path="/current" element={<CurrentPage />} />
           <Route path="/memory" element={<MemoryPage />} />
@@ -33,7 +37,7 @@ export default function App() {
           <Route path="/runs" element={<RunsPage />} />
           <Route path="/import" element={<ImportPage />} />
           {/* pre-v2 paths */}
-          <Route path="/brain" element={<Navigate to="/think" replace />} />
+          <Route path="/brain" element={<Navigate to="/" replace />} />
           <Route path="/focus" element={<Navigate to="/current" replace />} />
           <Route path="/settings" element={<Navigate to="/memory" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />

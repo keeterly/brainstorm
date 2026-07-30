@@ -331,7 +331,9 @@ export default function CurrentPage() {
       {elsewhere > 0 && (
         <p className="faint" style={{ fontSize: 'var(--fs-caption)', textAlign: 'center', marginTop: 'var(--sp-5)' }}>
           {elsewhere} more wait{elsewhere === 1 ? 's' : ''} in{' '}
-          <button style={{ textDecoration: 'underline', color: 'inherit' }} onClick={() => navigate('/think')}>
+          {/* the sky, which is the world — this pointed at /think, a route
+              that has quietly redirected here for months */}
+          <button style={{ textDecoration: 'underline', color: 'inherit' }} onClick={() => navigate('/')}>
             the world
           </button>
         </p>

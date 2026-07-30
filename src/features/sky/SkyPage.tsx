@@ -17,7 +17,7 @@ import { applyDeepen, deepenThought } from './deepenFlow'
 import { applyAnswer, answerThought } from './answerFlow'
 import { fullDepth, sizeUp, waitingWord, type Sizing } from './gaugeFlow'
 import { isQuestion } from '@/domain/question'
-import { bin, membersOf, renameGroup, takeOut, ungroup, type Undone } from './groupFlow'
+import { addTo, bin, groupInto, membersOf, rename, takeOut, ungroup, type Undone } from './groupFlow'
 import { awaitRun, markApplied, pendingRuns, subjectOf } from '@/ai/pending'
 import { reshapeTally, reshapeThought } from './reshapeFlow'
 import { haptics } from '@/lib/haptics'
@@ -1430,26 +1430,24 @@ function mountSky(root: HTMLDivElement) {
     } else say(res.kind === 'failed' ? 'could not tidy just now' : 'nothing obvious to gather')
   })
   /**
-   * Things put away recently enough to still be looking for.
+   * Everything put away, however long ago.
    *
-   * A week, because that is how long a mistake stays a mistake. Older than
-   * that and it was a decision, and counting it forever turns the pill into a
-   * number nobody reads.
+   * This was a week, so that the pill would not grow a number nobody reads —
+   * which quietly meant anything older simply ceased to exist as far as the app
+   * was concerned. Now that there is a page listing them, the honest count is
+   * all of them: a pill saying twelve when there are forty is worse than a pill
+   * saying forty.
    */
   function putAway(): Thought[] {
-    const since = Date.now() - 7 * 86400000
-    return S().thoughts.filter((t) => t.status === 'archived' && new Date(t.updated_at).getTime() > since)
+    return S().thoughts.filter((t) => t.status === 'archived')
   }
+  // The pill used to bring everything back at once, which is the right gesture
+  // for three resting thoughts and the wrong one for a group you put away last
+  // month among forty others. It opens the list instead, and the list still has
+  // "bring all back" in it for when that is what you meant.
   restEl.addEventListener('click', () => {
-    const back = putAway()
-    for (const t of back) S().updateThought(t.id, { status: 'open' })
-    let woke = 0
-    for (const t of S().thoughts) {
-      if (t.status !== 'snoozed') continue
-      woke++
-      S().updateThought(t.id, { status: 'open', snooze_until: null })
-    }
-    say(back.length ? `${back.length + woke} back in the sky` : 'the clouds part — they return')
+    clearAll()
+    openPage('aside', undefined, W / 2, 120)
   })
   // wake anything whose rest is over
   for (const t of S().thoughts) {
@@ -1690,10 +1688,19 @@ function mountSky(root: HTMLDivElement) {
   })
 
   // ---------- the light page ----------
-  type PageMode = 'capture' | 'grow' | 'edit' | 'path' | 'brief' | 'news' | 'group'
+  type PageMode = 'capture' | 'grow' | 'edit' | 'path' | 'brief' | 'news' | 'group' | 'aside'
   /** The brief ⚡ brought back for this thought, if it went out for one. */
   const briefOf = (id: string) => S().artifacts.find((a) => a.thought_id === id) ?? null
   let pageFor: { mode: PageMode; tl?: TL; ox: number; oy: number } | null = null
+  /**
+   * Which group the writing box is currently naming.
+   *
+   * The group page has no Save, because the × sits an inch from the name box
+   * and a page that throws your typing away when you close it the obvious way
+   * is a page that does not work. So the name commits the moment you leave the
+   * field — the same rule every other field on that page already followed.
+   */
+  let nameFor: string | null = null
   function planOf(tl: TL): Step[] {
     if (tl.kind === 'drop') {
       const a = answersOf(tl.t)
@@ -1749,16 +1756,19 @@ function mountSky(root: HTMLDivElement) {
 
   function openPage(mode: PageMode, tl: TL | undefined, ox: number, oy: number) {
     pageFor = { mode, tl, ox, oy }
+    nameFor = null
     pageA.style.display = 'none'
     pageA.innerHTML = ''
-    const reading = mode === 'path' || mode === 'brief'
+    const reading = mode === 'path' || mode === 'brief' || mode === 'aside'
     pageT.style.display = reading ? 'none' : ''
     page.classList.toggle('path', reading)
     page.classList.toggle('brief', mode === 'brief')
-    page.classList.toggle('group', mode === 'group')
+    page.classList.toggle('group', mode === 'group' || mode === 'aside')
     pageD.textContent =
       mode === 'brief'
         ? 'Done reading'
+        : mode === 'aside'
+          ? 'Done'
         : mode === 'news'
           ? 'Work it in'
           : mode === 'path'
@@ -1799,11 +1809,17 @@ function mountSky(root: HTMLDivElement) {
       }
     } else if (mode === 'group' && tl) {
       // Everything you can do to a group, in the one place a group is a thing
-      // rather than a container: its name, what is in it, and the two ways to
-      // be rid of it.
+      // rather than a container: its name, what is in it, what you want to add
+      // to it, which of its contents belong together, and the two ways to be
+      // rid of it.
+      //
+      // Nothing here has a Save. Every field commits when you leave it, because
+      // the × sits an inch from the name box and a page that loses your typing
+      // when you close it the obvious way is a page that does not work.
       pageQ.textContent = 'This group'
       pageT.value = label(tl.t)
       pageT.placeholder = 'Name it'
+      nameFor = tl.t.id
       const inside = membersOf(tl.t.id)
       pageN.textContent = inside.length ? `${inside.length} inside` : 'nothing inside it yet'
       pageA.style.display = 'block'
@@ -1813,27 +1829,172 @@ function mountSky(root: HTMLDivElement) {
             inside
               .map(
                 (_m, i) =>
-                  `<div class="row" data-i="${i}"><span class="t"></span>` +
+                  `<div class="row" data-i="${i}">` +
+                  `<button class="pick" role="checkbox" aria-checked="false" aria-label="Pick this one"></button>` +
+                  `<input class="t" aria-label="What this is called" enterkeyhint="done" />` +
                   `<button class="out" aria-label="Take it out of this group">take out</button></div>`,
               )
               .join('')
           : '') +
+        `<div class="row add"><input class="t" placeholder="Add something to this group…" enterkeyhint="done" aria-label="Add something to this group" /></div>` +
+        `<div class="picked" hidden><button class="d go">Group these</button>` +
+        `<button class="d">Take these out</button></div>` +
         `<div class="danger">` +
         `<button class="d" data-act="ungroup">Ungroup — keep what is inside</button>` +
         `<button class="d bad" data-act="bin">Put the whole group away</button>` +
         `</div>`
-      // textContent, never innerHTML: these are the user's own words and they
-      // are not markup
-      ;[...pageA.querySelectorAll('.row')].forEach((row, i) => {
-        ;(row.querySelector('.t') as HTMLElement).textContent = label(inside[i])
+
+      const picked = new Set<string>()
+      const pickedBar = pageA.querySelector('.picked') as HTMLDivElement
+      const [groupBtn, takeBtn] = [...pickedBar.querySelectorAll('.d')] as HTMLButtonElement[]
+      const refreshPicked = () => {
+        pickedBar.hidden = picked.size < 1
+        groupBtn.hidden = picked.size < 2
+        groupBtn.textContent = `Group these ${picked.size}`
+        takeBtn.textContent = picked.size === 1 ? 'Take it out' : `Take these ${picked.size} out`
+      }
+      refreshPicked()
+
+      // .value, never innerHTML: these are the user's own words and they are
+      // not markup
+      ;[...pageA.querySelectorAll('.row:not(.add)')].forEach((row, i) => {
+        const field = row.querySelector('.t') as HTMLInputElement
+        field.value = label(inside[i])
+        // No edit mode, no pencil, no second screen: the row is the field, so
+        // fixing a name is typing over it. Committed when you leave it or press
+        // return — and re-rendering the list here would steal the caret, so it
+        // does not.
+        const commit = () => landUndo(rename(inside[i].id, field.value))
+        field.addEventListener('change', commit)
+        field.addEventListener('keydown', (e) => {
+          if ((e as KeyboardEvent).key === 'Enter') {
+            e.preventDefault()
+            field.blur()
+          }
+        })
+        const pick = row.querySelector('.pick') as HTMLButtonElement
+        pick.addEventListener('click', (e) => {
+          e.stopPropagation()
+          const on = !picked.has(inside[i].id)
+          if (on) picked.add(inside[i].id)
+          else picked.delete(inside[i].id)
+          pick.setAttribute('aria-checked', String(on))
+          row.classList.toggle('on', on)
+          refreshPicked()
+        })
         row.querySelector('.out')?.addEventListener('click', (e) => {
           e.stopPropagation()
+          // whatever they typed and did not commit goes in before the row does
+          commit()
           landUndo(takeOut(inside[i].id))
           // the page is showing a list that just changed
           openPage('group', tl, ox, oy)
         })
       })
+
+      // Something new, straight in. Closing the page, finding the sky, holding
+      // it, writing and dragging the result back is five moves for one thought.
+      const addField = pageA.querySelector('.row.add .t') as HTMLInputElement
+      const addOne = () => {
+        const u = addTo(tl.t.id, addField.value)
+        if (!u) return
+        addField.value = ''
+        landUndo(u)
+        openPage('group', tl, ox, oy)
+        // and the caret stays where you were typing, ready for the next one
+        ;(pageA.querySelector('.row.add .t') as HTMLInputElement)?.focus()
+      }
+      addField.addEventListener('change', addOne)
+      addField.addEventListener('keydown', (e) => {
+        if ((e as KeyboardEvent).key === 'Enter') {
+          e.preventDefault()
+          addOne()
+        }
+      })
+
+      groupBtn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const ids = inside.filter((m) => picked.has(m.id)).map((m) => m.id)
+        const res = groupInto(tl.t.id, ids, conceptName(inside.filter((m) => picked.has(m.id)).map(label)))
+        if (!res) return
+        landUndo(res.undone)
+        // the local guess lands instantly; a real name replaces it a moment later
+        nameThePool(res.groupId, res.texts)
+        closePage(false)
+        openPool = tl.t.id
+        paintAll()
+      })
+      takeBtn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const ids = inside.filter((m) => picked.has(m.id)).map((m) => m.id)
+        const undos = ids.map((id) => takeOut(id)).filter((u): u is Undone => !!u)
+        if (!undos.length) return
+        rebuild()
+        paintAll()
+        const note = undos.length === 1 ? undos[0].note : `${undos.length} loose again`
+        record(note)
+        offerAction(note, 'put them back', () => {
+          for (const u of [...undos].reverse()) u.undo()
+          rebuild()
+          paintAll()
+          say('back the way it was')
+        })
+        openPage('group', tl, ox, oy)
+      })
+
       wireDanger(pageA, tl)
+    } else if (mode === 'aside') {
+      // Everything that is out of the sky but not gone. Resting things come
+      // back on their own date; put-away things do not come back at all, and
+      // before this page the only way to reach one was an undo bar that the
+      // next action replaced. A bin you cannot open is a shredder.
+      const rest = S().thoughts.filter((t) => t.status === 'snoozed')
+      const away = S().thoughts
+        .filter((t) => t.status === 'archived')
+        .sort((a2, b2) => (a2.updated_at < b2.updated_at ? 1 : -1))
+      pageQ.textContent = 'Set aside'
+      pageN.textContent = ''
+      pageA.style.display = 'block'
+      const rows = (list: Thought[]) =>
+        list
+          .map(
+            (_t, i) =>
+              `<div class="row"><span class="t"></span>` +
+              `<button class="out" data-back="${i}" aria-label="Bring it back">bring back</button></div>`,
+          )
+          .join('')
+      pageA.innerHTML =
+        (rest.length ? `<div class="lab">resting — back on their own</div><div class="grp rest">${rows(rest)}</div>` : '') +
+        (away.length ? `<div class="lab">put away</div><div class="grp away">${rows(away)}</div>` : '') +
+        (!rest.length && !away.length ? `<div class="a">Nothing is set aside.</div>` : '') +
+        (rest.length + away.length > 1
+          ? `<div class="danger"><button class="d" data-act="all">Bring all ${rest.length + away.length} back</button></div>`
+          : '')
+      const wake = (t: Thought) => {
+        S().updateThought(t.id, { status: 'open', snooze_until: null })
+      }
+      for (const [sel, list] of [
+        ['.grp.rest .row', rest],
+        ['.grp.away .row', away],
+      ] as [string, Thought[]][]) {
+        ;[...pageA.querySelectorAll(sel)].forEach((row, i) => {
+          // textContent: the user's own words, not markup
+          ;(row.querySelector('.t') as HTMLElement).textContent = trim(label(list[i]), 46)
+          row.querySelector('.out')?.addEventListener('click', (e) => {
+            e.stopPropagation()
+            wake(list[i])
+            say(`“${trim(label(list[i]), 30)}” is back`)
+            openPage('aside', undefined, ox, oy)
+          })
+        })
+      }
+      pageA.querySelector('.danger .d')?.addEventListener('click', (e) => {
+        e.stopPropagation()
+        for (const t of [...rest, ...away]) wake(t)
+        closePage(false)
+        say(`${rest.length + away.length} back in the sky`)
+        fitWhenSettled()
+      })
     } else if (mode === 'news' && tl) {
       // The map can be told things. Everything else here only adds; this is the
       // one place you can say "it turned out otherwise" and have the shape of
@@ -1921,7 +2082,8 @@ function mountSky(root: HTMLDivElement) {
     stopMic()
     const pf = pageFor
     pageFor = null
-    pageT.blur()
+    pageT.blur() // fires change, which is what commits a group's name
+    nameFor = null
     page.classList.remove('on')
     page.style.clipPath = `circle(0px at ${pf.ox}px ${pf.oy}px)`
     setTimeout(() => page.classList.remove('show', 'path', 'reading'), reduced ? 0 : 580)
@@ -1984,7 +2146,7 @@ function mountSky(root: HTMLDivElement) {
       patchExtra(pf.tl.t, { kept: true })
       say('the path is kept — it will wait for you')
     } else if (pf.mode === 'group' && pf.tl) {
-      landUndo(renameGroup(pf.tl.t.id, v))
+      landUndo(rename(pf.tl.t.id, v))
     } else if (pf.tl) {
       const txt = v.trim()
       if (txt) S().updateThought(pf.tl.t.id, { raw_content: txt, title: null })
@@ -2046,6 +2208,10 @@ function mountSky(root: HTMLDivElement) {
     }
   }
 
+  // Leaving the name box is committing it, wherever you are going next.
+  pageT.addEventListener('change', () => {
+    if (nameFor) landUndo(rename(nameFor, pageT.value))
+  })
   pageD.addEventListener('click', () => {
     if (pageFor?.mode === 'capture' && micUsed && pageT.value.trim().length > 80) {
       void runOrganize(true)
@@ -2352,10 +2518,13 @@ function mountSky(root: HTMLDivElement) {
     const p = posOf(tl.t.id)
     const open = openPool === tl.t.id
     // below whatever the thing actually occupies: its own body, or the whole
-    // orbit if it has opened out into one
+    // orbit if it has opened out into one. A member you have opened up is a
+    // card rather than a disc and is measured, not guessed — radiusOf would
+    // put its actions across the middle of it.
+    const grown = shapes.get(tl.t.id)
     const below = open
       ? Math.max(orbitR(tl), ringR) + memberR(tl.members.length) + 46
-      : radiusOf(tl) + 52
+      : (peek === tl.t.id && grown ? grown.hh : radiusOf(tl)) + 52
     // As wide as they can be and still all fit. Six moons at the old fixed
     // spacing measured 444px across a 402px screen: the first and last were
     // half off the glass and only half tappable, which is what any drop ⚡ had
@@ -2740,6 +2909,9 @@ function mountSky(root: HTMLDivElement) {
       peek = null
       peekAt = null
       paintAll()
+      // back to the group you were reading out of, and to its actions
+      const g = openPool ? view.byId.get(openPool) : null
+      if (g) showMoons(g)
       return
     }
     if (wasOpen) {
@@ -3233,6 +3405,13 @@ function mountSky(root: HTMLDivElement) {
         peekSettle = 96
         paintAll()
         haptics.grab()
+        // And its actions, which it has never had. A thing inside a group
+        // could be read and it could be edited and that was the whole of it:
+        // no answering it, no working it, no gathering from it, no raining it,
+        // unless you first dragged it out of the group it belongs in. The
+        // moons follow whatever you last touched, so the group's step aside
+        // while you are looking at one of the things in it.
+        if (tl) showMoons(tl)
         return
       }
       const t = S().thoughts.find((x) => x.id === id)
@@ -3251,6 +3430,7 @@ function mountSky(root: HTMLDivElement) {
         peek = null
         peekAt = null
         paintAll()
+        showMoons(tl)
         return
       }
       if (openPool === tl.t.id) {

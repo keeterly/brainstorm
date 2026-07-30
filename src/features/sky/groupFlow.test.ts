@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { useGraph } from '@/store/graph'
-import { bin, membersOf, renameGroup, takeOut, ungroup } from './groupFlow'
+import { addTo, bin, groupInto, membersOf, rename, takeOut, ungroup } from './groupFlow'
 
 const S = () => useGraph.getState()
 const openIds = () => S().thoughts.filter((t) => t.status === 'open').map((t) => t.id)
@@ -32,10 +32,10 @@ function seed() {
 
 beforeEach(seed)
 
-describe('naming a group yourself', () => {
+describe('naming a thing yourself', () => {
   it('was impossible: the only way to rename anything was to tell the agent about it', () => {
     const { g } = seed()
-    const u = renameGroup(g.id, 'PFW Travel Booking')!
+    const u = rename(g.id, 'PFW Travel Booking')!
     expect(S().thoughts.find((t) => t.id === g.id)?.title).toBe('PFW Travel Booking')
     u.undo()
     expect(S().thoughts.find((t) => t.id === g.id)?.title).toBe('Travel')
@@ -43,13 +43,13 @@ describe('naming a group yourself', () => {
 
   it('does nothing at all for a name that is blank or unchanged', () => {
     const { g } = seed()
-    expect(renameGroup(g.id, '   ')).toBeNull()
-    expect(renameGroup(g.id, 'Travel')).toBeNull()
+    expect(rename(g.id, '   ')).toBeNull()
+    expect(rename(g.id, 'Travel')).toBeNull()
   })
 
   it('moves the raw text with the title, so nothing reads the old name back', () => {
     const { g } = seed()
-    renameGroup(g.id, 'PFW Travel')
+    rename(g.id, 'PFW Travel')
     const t = S().thoughts.find((x) => x.id === g.id)!
     expect(t.raw_content).toBe('PFW Travel')
   })
@@ -155,9 +155,75 @@ describe('putting a whole group away', () => {
 
 describe('when the thing is not there', () => {
   it('says so by doing nothing, rather than throwing', () => {
-    expect(renameGroup('nope', 'x')).toBeNull()
+    expect(rename('nope', 'x')).toBeNull()
     expect(takeOut('nope')).toBeNull()
     expect(ungroup('nope')).toBeNull()
     expect(bin('nope')).toBeNull()
+  })
+})
+
+describe('putting something new straight into a group', () => {
+  it('saves closing the page, finding the sky, writing, and dragging it back', () => {
+    const { g } = seed()
+    const u = addTo(g.id, '  Confirm the room block  ')!
+    const inside = membersOf(g.id).map((m) => m.title)
+    expect(inside).toContain('Confirm the room block')
+    u.undo()
+    expect(membersOf(g.id).map((m) => m.title)).not.toContain('Confirm the room block')
+  })
+
+  it('really removes it on undo, because it never existed before', () => {
+    // the one case where undoing is a delete rather than an archive: nothing
+    // else has ever pointed at this id
+    const { g } = seed()
+    const before = S().thoughts.length
+    addTo(g.id, 'A thing')!.undo()
+    expect(S().thoughts).toHaveLength(before)
+  })
+
+  it('ignores an empty one rather than making a nameless drop', () => {
+    const { g } = seed()
+    expect(addTo(g.id, '   ')).toBeNull()
+    expect(addTo('nope', 'x')).toBeNull()
+  })
+})
+
+describe('gathering some of a group into one of their own', () => {
+  it('is the move a list can make and a drag cannot: five at once', () => {
+    const { g, a, b, c } = seed()
+    const res = groupInto(g.id, [a.id, b.id, c.id], 'Travel')!
+    expect(membersOf(res.groupId).map((m) => m.id).sort()).toEqual([a.id, b.id, c.id].sort())
+    // and the new group is inside the one you were looking at
+    expect(partOf(res.groupId)).toBe(g.id)
+  })
+
+  it('hands back what is in it, so it can be given a real name afterwards', () => {
+    const { g, a, b } = seed()
+    expect(groupInto(g.id, [a.id, b.id], 'x')!.texts).toEqual(['Fares', 'Seat map'])
+  })
+
+  it('puts every one of them back where it came from', () => {
+    const { g, a, b, c } = seed()
+    const res = groupInto(g.id, [a.id, b.id], 'Travel')!
+    res.undone.undo()
+    for (const m of [a, b, c]) expect(partOf(m.id)).toBe(g.id)
+    expect(openIds()).not.toContain(res.groupId)
+  })
+
+  it('refuses to make a group of one, which is just a rename with extra steps', () => {
+    const { g, a } = seed()
+    expect(groupInto(g.id, [a.id], 'Travel')).toBeNull()
+    expect(groupInto(g.id, [], 'Travel')).toBeNull()
+  })
+
+  it('ignores ids that are not really there', () => {
+    const { g, a } = seed()
+    expect(groupInto(g.id, [a.id, 'ghost'], 'Travel')).toBeNull()
+  })
+
+  it('falls back to a name rather than making an unnamed group', () => {
+    const { g, a, b } = seed()
+    const res = groupInto(g.id, [a.id, b.id], '   ')!
+    expect(S().thoughts.find((t) => t.id === res.groupId)?.title).toBeTruthy()
   })
 })

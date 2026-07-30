@@ -40,8 +40,14 @@ const label = (t: Thought) => {
   return s.length > 34 ? s.slice(0, 33).trimEnd() + '…' : s
 }
 
-/** Give a group a name you chose, rather than the one it was given. */
-export function renameGroup(id: string, name: string): Undone | null {
+/**
+ * Give a thing the name you chose, rather than the one it was given.
+ *
+ * Any thing: the group at the top of its own page, and every row inside it.
+ * "I should be able to edit here" is the only sane response to a list of your
+ * own words that you are allowed to look at and not to fix.
+ */
+export function rename(id: string, name: string): Undone | null {
   const t = S().thoughts.find((x) => x.id === id)
   const next = name.trim()
   if (!t || !next || next === (t.title ?? '')) return null
@@ -138,6 +144,75 @@ export function bin(rootId: string): Undone | null {
     note: n ? `“${label(root)}” and ${n} inside it — put away` : `“${label(root)}” — put away`,
     undo: () => {
       for (const id of all) S().updateThought(id, { status: 'open' })
+    },
+  }
+}
+
+/**
+ * Put something new straight into the group.
+ *
+ * The group page is where you are when you notice the thing that is missing
+ * from it, and having to close it, find the sky, hold it, write, and then drag
+ * the result back in is five moves for one thought.
+ */
+export function addTo(groupId: string, text: string): Undone | null {
+  const body = text.trim()
+  if (!body || !S().thoughts.some((t) => t.id === groupId)) return null
+  const t = S().addThought({ raw_content: body, title: body })
+  S().addRelationship(t.id, groupId, 'part_of')
+  return {
+    note: `“${label(t)}” is in there now`,
+    // a thing that never existed before this is the one case where taking it
+    // away again really is taking it away
+    undo: () => S().deleteThought(t.id),
+  }
+}
+
+/**
+ * Gather several of the things in a group into one of their own.
+ *
+ * The sky does this by dragging one thing onto another, which works beautifully
+ * for two and not at all for five. A list is the right shape for picking out
+ * five, and this was the only organising move the list could not make.
+ */
+export function groupInto(
+  parentId: string,
+  memberIds: string[],
+  name: string,
+): { undone: Undone; groupId: string; texts: string[] } | null {
+  const ids = memberIds.filter((id) => S().thoughts.some((t) => t.id === id && t.status === 'open'))
+  if (ids.length < 2) return null
+  const title = name.trim() || 'Together'
+  const g = S().addThought({ raw_content: title, title, type: 'goal' })
+  // the new group stands where its contents stood
+  if (parentId) S().addRelationship(g.id, parentId, 'part_of')
+
+  const moved: { id: string; from: string | null }[] = []
+  for (const id of ids) {
+    const old = S().relationships.find((r) => r.type === 'part_of' && r.from_id === id)
+    moved.push({ id, from: old ? old.to_id : null })
+    if (old) S().deleteRelationship(old.id)
+    S().addRelationship(id, g.id, 'part_of')
+  }
+
+  const texts = ids
+    .map((id) => S().thoughts.find((t) => t.id === id))
+    .filter((t): t is Thought => !!t)
+    .map((t) => t.title || t.raw_content)
+
+  return {
+    groupId: g.id,
+    texts,
+    undone: {
+      note: `${ids.length} gathered into “${title}”`,
+      undo: () => {
+        for (const m of moved) {
+          const made = S().relationships.find((r) => r.type === 'part_of' && r.from_id === m.id && r.to_id === g.id)
+          if (made) S().deleteRelationship(made.id)
+          if (m.from) S().addRelationship(m.id, m.from, 'part_of')
+        }
+        S().deleteThought(g.id)
+      },
     },
   }
 }

@@ -520,15 +520,29 @@ body.sky-held {
   padding: 3px 0;
   border-top: 0.5px solid rgba(19, 26, 36, 0.08);
 }
+/* The row is the field. No pencil, no edit mode, no second screen: a list of
+   your own words that you may look at and not fix is not a list, it is a
+   receipt. Borderless until you are in it, so the page still reads as a list. */
 .sky-page .pans .row .t {
   flex: 1;
   min-width: 0;
   font-size: 13.5px;
   line-height: 1.45;
   color: var(--paper-ink, #3d4b5c);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-family: inherit;
+  font-weight: inherit;
+  background: none;
+  border: 0;
+  border-radius: 7px;
+  padding: 10px 6px;
+  margin: 0 -6px;
+  min-height: 40px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.sky-page .pans .row .t:focus {
+  outline: none;
+  background: rgba(19, 26, 36, 0.05);
 }
 /* 44pt of target for a 10px label: the words are small because they are not
    the point of the row, but the thing you press is not. */
@@ -546,6 +560,59 @@ body.sky-held {
   border: 0;
 }
 .sky-page .pans .row .out:active { color: var(--paper-ink, #3d4b5c); }
+
+/* Picking several at once — the one organising move a list can make and a drag
+   cannot. An empty ring until it is chosen, because a page of ticked boxes
+   reads as a form and this is meant to read as a list. */
+.sky-page .pans .row .pick {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  margin: 0 -6px 0 -9px;
+  padding: 0;
+  background: none;
+  border: 0;
+  position: relative;
+}
+.sky-page .pans .row .pick::before {
+  content: '';
+  position: absolute;
+  inset: 12px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(19, 26, 36, 0.22);
+  transition: background 160ms ease, border-color 160ms ease;
+}
+.sky-page .pans .row.on .pick::before {
+  background: var(--paper-ink, #3d4b5c);
+  border-color: var(--paper-ink, #3d4b5c);
+}
+.sky-page .pans .row.on .t { color: var(--paper-ink, #3d4b5c); }
+
+/* The last row is always the empty one, so adding is typing rather than
+   finding a button. */
+.sky-page .pans .row.add { border-top: 0.5px solid rgba(19, 26, 36, 0.08); }
+.sky-page .pans .row.add .t { padding-left: 0; margin-left: 0; }
+.sky-page .pans .row.add .t::placeholder { color: var(--paper-soft, #9db0c2); }
+
+.sky-page .pans .picked {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 0.5px solid rgba(19, 26, 36, 0.1);
+}
+.sky-page .pans .picked .d {
+  min-height: 40px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 560;
+  background: none;
+  border: 0;
+  color: var(--paper-ink, #3d4b5c);
+}
+.sky-page .pans .picked .d:active { opacity: 0.5; }
+.sky-page .pans .picked .d[hidden] { display: none; }
 
 .sky-page .pans .danger {
   display: flex;
