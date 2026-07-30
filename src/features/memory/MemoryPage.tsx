@@ -55,6 +55,7 @@ function AccountSection() {
           autoComplete="new-password"
           value={pw}
           onChange={(e) => setPw(e.target.value)}
+          className="field"
           style={inputStyle}
         />
         <button className="btn btn--ghost" type="submit" disabled={busy || pw.length < 8}>
@@ -157,9 +158,9 @@ export default function MemoryPage() {
 
   return (
     <div className="page">
-      <div className="eyebrow" style={{ marginBottom: 6 }}>
-        Memory
-      </div>
+      {/* No eyebrow saying "Memory" above it: the tab you pressed to get here
+          already says Memory, and labelling a room with its own name is the
+          kind of thing a page does when it is not sure of itself. */}
       <h1 className="page-title">What the water keeps</h1>
 
       <TellMe />
@@ -200,6 +201,7 @@ export default function MemoryPage() {
                 setNewMem('')
               }
             }}
+            className="field"
             style={inputStyle}
           />
           <button
@@ -222,7 +224,8 @@ export default function MemoryPage() {
             onChange={(e) => setDistillText(e.target.value)}
             rows={4}
             placeholder="Paste notes, an email, a bio — durable facts are extracted for your review."
-            style={{ ...inputStyle, width: '100%', marginTop: 8, padding: 12, resize: 'vertical', minHeight: 90 }}
+            className="field"
+            style={{ marginTop: 8, resize: 'vertical', minHeight: 90 }}
           />
           <button
             className="btn btn--sm btn--accent"
@@ -353,15 +356,9 @@ export default function MemoryPage() {
   )
 }
 
-const inputStyle: React.CSSProperties = {
-  flex: 1,
-  minHeight: 40,
-  padding: '0 12px',
-  border: '0.5px solid rgba(255,255,255,0.22)',
-  borderRadius: 'var(--r-md)',
-  background: 'rgba(255,255,255,0.05)',
-  color: 'var(--ink)',
-}
+// kept only for the few places that need it as an object; the look lives in
+// .field so every page types into the same water
+const inputStyle: React.CSSProperties = { flex: 1 }
 
 function MemoryRow({
   content,
@@ -379,7 +376,7 @@ function MemoryRow({
   if (editing) {
     return (
       <div style={{ display: 'flex', gap: 6 }}>
-        <input value={v} onChange={(e) => setV(e.target.value)} style={inputStyle} />
+        <input className="field" value={v} onChange={(e) => setV(e.target.value)} style={inputStyle} />
         <button
           className="btn btn--sm"
           onClick={() => {
@@ -400,8 +397,8 @@ function MemoryRow({
       >
         {content}
       </button>
-      <span className="mono faint" style={{ fontSize: 'var(--fs-caption)' }}>
-        {source}
+      <span className="faint" style={{ fontSize: 'var(--fs-caption)', flex: '0 0 auto' }}>
+        {source === 'distilled' ? 'learned' : source}
       </span>
       <button aria-label="Delete memory" className="faint hit" onClick={onDelete} style={{ flex: '0 0 auto' }}>
         ×

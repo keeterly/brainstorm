@@ -25,14 +25,17 @@ body {
   overscroll-behavior-y: none;
 }
 
+/* The sky never raises its voice. 650 was heavier than anything in it, which
+   made every page read as a document with headings rather than as a room with
+   things in it. Size carries the hierarchy; weight only has to help. */
 h1,
 h2,
 h3,
 h4 {
   font-family: var(--font-display);
   margin: 0;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-weight: 520;
+  letter-spacing: -0.014em;
   text-wrap: balance;
 }
 
@@ -220,13 +223,85 @@ a {
   color: var(--water);
 }
 
+/*
+ * A surface, made of the same water as the sky.
+ *
+ * These were plain grey rectangles with a hairline round them — competent, and
+ * from a different product. The sky is a place: everything in it is a body of
+ * water with light on its shoulder, a rim where the light catches, a glow
+ * bouncing up off whatever is below, and an edge that was never quite drawn
+ * straight. There is no reason a page cannot be made of that too.
+ *
+ * Not a copy of the drop: a drop's body is built from circular gradients,
+ * which on anything wider than it is tall leave the corners empty. A broad
+ * surface needs the light placed for a broad surface — the sheen sits where it
+ * would fall on a wide pane, and the body runs top to bottom rather than out
+ * from a centre.
+ */
 .card {
-  background: var(--glass);
-  border: 0.5px solid var(--glass-line);
+  position: relative;
   border-radius: var(--r-lg);
   padding: var(--sp-4);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background:
+    /* the light on its shoulder */
+    radial-gradient(ellipse 60% 42% at 14% 0%, rgba(255, 255, 255, 0.075), transparent 68%),
+    /* light bouncing up off what is underneath, in the hour's own colour */
+    radial-gradient(ellipse 90% 34% at 50% 108%, var(--drop-glow, rgba(122, 215, 255, 0.16)), transparent 66%),
+    /* and the body of it, lit from above like everything else here */
+    linear-gradient(var(--drop-body-hi, rgba(48, 59, 79, 0.72)), var(--drop-body-lo, rgba(21, 27, 38, 0.82)));
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  border: 0;
+  box-shadow:
+    /* the hard line where the light catches the top edge */
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    /* the thickness of the glass, seen through its own walls */
+    inset 0 0 0 0.5px rgba(205, 228, 255, 0.13),
+    /* it is floating, and it has weight */
+    0 14px 34px rgba(0, 0, 0, 0.34);
+}
+/*
+ * Hand-blown, not moulded. A page of surfaces all rounded to exactly 18px is
+ * the one thing the sky never does — nothing in it is a true anything. CSS
+ * cannot draw from a seed, so five corners take turns: enough that no two
+ * neighbours agree, quiet enough that you would not catch it looking.
+ */
+.card:nth-of-type(5n + 1) { border-radius: 19px 17px 18px 20px / 17px 20px 18px 17px; }
+.card:nth-of-type(5n + 2) { border-radius: 17px 20px 19px 17px / 20px 17px 19px 18px; }
+.card:nth-of-type(5n + 3) { border-radius: 20px 18px 17px 19px / 18px 19px 17px 20px; }
+.card:nth-of-type(5n + 4) { border-radius: 18px 19px 20px 17px / 19px 18px 20px 17px; }
+.card:nth-of-type(5n + 5) { border-radius: 17px 18px 19px 20px / 20px 19px 17px 18px; }
+
+/*
+ * Somewhere to type, made of the same water.
+ *
+ * A field is the one place a surface has to look like it will *take*
+ * something, so it is the inverse of a card: the light falls inside it rather
+ * than on it, and it sits down into the page instead of floating above it.
+ */
+.field {
+  width: 100%;
+  min-height: 46px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 15px 13px 14px 16px / 13px 16px 14px 13px;
+  color: var(--ink);
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0.08) 40%, transparent),
+    var(--drop-body-lo, rgba(21, 27, 38, 0.6));
+  box-shadow:
+    /* pressed in: the shadow is at the top, where a rim would cast one */
+    inset 0 1px 2px rgba(0, 0, 0, 0.36),
+    inset 0 0 0 0.5px rgba(205, 228, 255, 0.12);
+  outline: none;
+  transition: box-shadow 220ms ease;
+}
+.field::placeholder { color: var(--ink-faint); }
+.field:focus {
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 1px rgba(var(--accent-rgb), 0.42),
+    0 0 0 4px rgba(var(--accent-rgb), 0.09);
 }
 
 .hairline {
@@ -257,6 +332,12 @@ a {
   color: var(--ink-faint);
 }
 
+/*
+ * Every page stands in the same world as the sky, under the same light: it
+ * comes from above and the frame closes in at the edges, by exactly the amount
+ * the hour says. Without this a page was simply a flat dark background that
+ * happened to use the same colours — the same paint, none of the same room.
+ */
 .page {
   position: relative;
   z-index: 1;
@@ -264,16 +345,32 @@ a {
   margin: 0 auto;
   padding: calc(var(--sat) + var(--sp-5)) var(--sp-4) calc(var(--tabbar-h) + var(--sab) + var(--sp-7));
 }
+.page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 90% 32% at 50% -6%, rgba(255, 255, 255, calc(0.05 + var(--sky-lift, 0.4) * 0.05)), transparent 70%),
+    radial-gradient(ellipse 120% 44% at 50% 108%, var(--drop-glow, rgba(122, 215, 255, 0.14)), transparent 66%),
+    radial-gradient(ellipse at 50% 44%, transparent 52%, var(--sky-vignette, rgba(2, 3, 6, 0.45)) 100%);
+}
 
+/* The sky never shouts, and these were set at 700 — heavier than anything in
+   it. Same size, less weight, more air: a title, not a headline. */
 .page-title {
   font-size: var(--fs-xl);
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-weight: 500;
+  letter-spacing: -0.022em;
   margin-bottom: var(--sp-5);
 }
 
+/* Waiting, in the shape of the thing being waited for. --r-full on a block
+   200 pixels tall drew a lozenge the size of the screen — a placeholder that
+   looks like nothing the page will ever contain is worse than a blank. */
 .skeleton {
-  border-radius: var(--r-full);
+  border-radius: var(--r-lg);
   background: linear-gradient(90deg, rgba(255, 255, 255, 0.04) 25%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.04) 75%);
   background-size: 200% 100%;
   animation: skel 1.4s ease-in-out infinite;

@@ -1569,7 +1569,15 @@ function mountSky(root: HTMLDivElement) {
   let nextFor: string | null = null
   function paintNext() {
     const hide = !!openPool || !!pageFor || !!moonsFor
-    const n = hide ? null : nextAction(S().thoughts, S().relationships, todayISO())
+    let n = hide ? null : nextAction(S().thoughts, S().relationships, todayISO())
+    // If the agent has been asked to choose, its pick wins here too. Current
+    // honours it; the sky did not, so the two could name different things at
+    // the same moment — which is two recommendations, not one.
+    const rec = S().profile?.settings.recommended_action as { id?: string; why?: string } | undefined
+    if (!hide && rec?.id) {
+      const t = S().thoughts.find((x) => x.id === rec.id && x.status === 'open')
+      if (t) n = { thought: t, why: rec.why || 'the agent put this first' }
+    }
     nextFor = n?.thought.id ?? null
     nextEl.classList.toggle('show', !!n)
     if (!n) return

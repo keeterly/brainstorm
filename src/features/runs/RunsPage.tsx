@@ -14,21 +14,34 @@ export default function RunsPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let live = true
+    // Somewhere to stop. A query that never answers — no signal, no account,
+    // a deployment without a database behind it — used to leave a placeholder
+    // shimmering on the screen for as long as you cared to look at it.
+    const giveUp = setTimeout(() => {
+      if (live) setError('Could not reach your activity just now.')
+    }, 12000)
     void supabase
       .from('agent_runs')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(100)
       .then(({ data, error }) => {
+        if (!live) return
+        clearTimeout(giveUp)
         if (error) setError(error.message)
         else setRuns((data ?? []) as AgentRun[])
       })
+    return () => {
+      live = false
+      clearTimeout(giveUp)
+    }
   }, [])
 
   return (
     <div className="page">
       <h1 className="page-title">AI activity</h1>
-      {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
+      {error && <p className="faint">{error}</p>}
       {!runs && !error && <div className="skeleton" style={{ height: 200 }} />}
       {runs && runs.length === 0 && <p className="faint">No AI runs yet.</p>}
       <div style={{ display: 'grid', gap: 8 }}>

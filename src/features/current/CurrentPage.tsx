@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGraph } from '@/store/graph'
+import { nextAction } from '@/domain/next-action'
 import { prioritizePrepass, todayISO } from '@/domain/prioritize-prepass'
 import { humanDue } from '@/domain/human-date'
 import { useAction } from '@/ai/useAction'
@@ -52,14 +53,17 @@ export default function CurrentPage() {
     const b = prepass.buckets.get(t.id)
     return b === 'now' || b === 'next'
   })
-  const primary = recThought ?? flow[0] ?? prepass.visible[0] ?? null
-  const primaryWhy = recThought && rec
-    ? rec.why
-    : primary?.due_date
-      ? `${humanDue(primary.due_date, today)} — the water goes here first.`
-      : primary
-        ? 'The oldest thing waiting — a place to start.'
-        : ''
+  // The same answer the sky gives, from the same rules.
+  //
+  // This page used to work out its own first thing and its own reason for it,
+  // which meant the sky could say "due in 4 days" about the very thought this
+  // page called "due Monday — the water goes here first". One recommendation
+  // told two ways is two recommendations as far as anyone reading is
+  // concerned. The AI's own pick still wins when it has made one; everything
+  // under that is now the one tested set of rules.
+  const auto = useMemo(() => nextAction(thoughts, relationships, today), [thoughts, relationships, today])
+  const primary = recThought ?? auto?.thought ?? null
+  const primaryWhy = recThought && rec ? rec.why : (auto?.why ?? '')
   const rest = flow.filter((t) => t.id !== primary?.id)
   const elsewhere = prepass.visible.length - (primary ? 1 : 0) - rest.length
 
