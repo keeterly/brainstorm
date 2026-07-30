@@ -3510,7 +3510,31 @@ function mountSky(root: HTMLDivElement) {
   const TAP_SLOP = 9
   const slopFor = (e: PointerEvent) => (e.pointerType === 'mouse' ? TAP_SLOP : 20)
   const PAN_SLOP = 16
+  /**
+   * The last time a real finger touched the glass.
+   *
+   * iOS delivers one press twice: the touch, and then the mouse events Safari
+   * synthesises after it for pages written before touch existed. Both arrive
+   * as pointer events, so the app sees two presses where there was one — which
+   * is the "sometimes it acts like a double tap" in this bug, and cannot be
+   * fixed by any timing guess, because how long Safari waits before sending
+   * the second one varies.
+   *
+   * So the duplicate is refused at the door: once a touch has been seen, mouse
+   * events are ignored for as long as any compatibility event could still be
+   * coming. A real mouse on a real desktop is untouched — it never sets this.
+   */
+  let lastTouchAt = 0
+  const GHOST_MS = 900
+  const ghost = (e: PointerEvent) => {
+    if (e.pointerType === 'touch') {
+      lastTouchAt = performance.now()
+      return false
+    }
+    return e.pointerType === 'mouse' && performance.now() - lastTouchAt < GHOST_MS
+  }
   stage.addEventListener('pointerdown', (e) => {
+    if (ghost(e)) return
     // iOS only hands over the tilt sensor from inside a real gesture, so the
     // first touch of the session is when we ask. It asks at most once.
     armUpright()
@@ -3749,6 +3773,7 @@ function mountSky(root: HTMLDivElement) {
   // the tab bar or off the edge still ends its gesture. Pointer capture already
   // routes these through the stage, so this hears each release exactly once.
   const onUp = (e: PointerEvent) => {
+    if (ghost(e)) return
     touches.delete(e.pointerId)
     if (pinch) {
       if (touches.size < 2) pinch = null
@@ -3767,6 +3792,15 @@ function mountSky(root: HTMLDivElement) {
     }
     if (!drag) {
       if (bgDown && Math.hypot(e.clientX - bgDown.x, e.clientY - bgDown.y) < slopFor(e)) {
+        // The second half of a double tap can land on open sky, because the
+        // first half moved the thing: tapping a group flies the camera to it.
+        // The finger did not move, so this is still that gesture.
+        const again = doubleHit(e.clientX, e.clientY)
+        if (again) {
+          bgDown = null
+          openThing(again)
+          return
+        }
         const now = performance.now()
         if (now - lastTap < 320) {
           // two taps on open water: frame the whole sky
@@ -3788,7 +3822,9 @@ function mountSky(root: HTMLDivElement) {
     clearFuse()
     hideTide()
     if (!d.moved) {
-      onTap(d.id, d.isMember)
+      const again = doubleHit(e.clientX, e.clientY)
+      if (again) openThing(again)
+      else onTap(d.id, d.isMember, { x: e.clientX, y: e.clientY })
       return
     }
     if (d.tl.kind === 'drop' && e.clientY > seaLineAt(e.clientX, worldTilt(), W) - 12) {
@@ -3837,47 +3873,78 @@ function mountSky(root: HTMLDivElement) {
     if (touches.has(e.pointerId)) onCancel(e)
   })
   /**
-   * How long the second tap has to arrive in.
+   * A double tap is two taps in the same *place*, quickly.
    *
-   * Generous, and it has to be: the first tap on a group flies the camera to
-   * it, so by the time you tap again the thing has moved out from under your
-   * finger and you have to find it. 320ms — a browser's idea of a double
-   * click — fails that constantly. This is the window in which a second tap is
-   * still plainly part of the same intention.
+   * Not two taps on the same element, which is what this used to be, and the
+   * reason it had to be given a window of over a second: the first tap on a
+   * group flies the camera to it, so the thing has moved out from under your
+   * finger before the second tap lands. Matching on the element meant waiting
+   * long enough for you to find it again — and a window that long makes a
+   * slow, deliberate second tap, the one that means "show me the actions",
+   * indistinguishable from a double tap.
+   *
+   * A finger does not move. So the *point* is remembered along with what was
+   * under it, and a second tap near that point within 400ms is a double tap on
+   * whatever the first one hit, wherever that thing has since gone — even if
+   * it has gone far enough that the second tap lands on open sky.
    */
-  const DOUBLE_MS = 1400
-  /** …and this close together are one *press*, delivered twice */
-  const DUPE_MS = 90
+  const DOUBLE_MS = 400
+  /** …and this close together are one *press*, delivered twice.
+   *  The real duplicate — Safari's synthesised mouse event — is refused at the
+   *  door by ghost(); this is only the backstop for a doubled touch, so it can
+   *  sit just under the fastest a human double tap actually goes. */
+  const DUPE_MS = 70
+  /** how far a thumb wanders between the two halves of a double tap */
+  const DOUBLE_SLOP = 46
   let tapId: string | null = null
   let tapAt = 0
-  function onTap(id: string, isMember: boolean) {
+  let tapPt: { x: number; y: number } | null = null
+  /**
+   * The thing itself — a group's page, a drop's page, a member's page. What
+   * the second of two quick taps gets you, from wherever the first one landed.
+   */
+  function openThing(id: string) {
+    closeMoons()
+    const tl = view.byId.get(id)
+    const p = posOf(id)
+    if (tl) {
+      openPage('open', tl, toScreenX(p.x), toScreenY(p.y))
+      return
+    }
+    // a member is not in the view index unless its group is open; it is still
+    // a thought and it still has a page
+    const t = S().thoughts.find((x) => x.id === id)
+    if (t) openPage('open', { kind: 'drop', t, members: [] }, toScreenX(p.x), toScreenY(p.y))
+  }
+
+  /**
+   * Was that the second half of a double tap? If so, what was under the first.
+   *
+   * Consumed by asking: a third tap in the same place is a new first tap, not
+   * a second double.
+   */
+  function doubleHit(x: number, y: number): string | null {
+    if (!tapId || !tapPt) return null
+    const dt = performance.now() - tapAt
+    if (dt < DUPE_MS || dt >= DOUBLE_MS) return null
+    if (Math.hypot(x - tapPt.x, y - tapPt.y) > DOUBLE_SLOP) return null
+    const id = tapId
+    tapId = null
+    tapPt = null
+    return id
+  }
+  function onTap(id: string, isMember: boolean, at: { x: number; y: number }) {
     /*
-     * One tap is the actions. Two is the thing itself.
+     * One tap is the actions. A quick two is the thing itself.
      *
-     * It used to be "the second tap, whenever it comes, if the actions happen
-     * to still be up" — and the actions stay up until something closes them,
-     * so tapping a group you had tapped a minute ago opened its page instead
-     * of its actions. Which reads as the app deciding at random, because from
-     * where you are standing nothing has changed between the two taps.
-     *
-     * So the clock and the state both have to agree: the actions are up for
-     * this thing *and* you tapped it recently. Either alone is wrong — the
-     * state alone is the bug above, and the clock alone breaks on a group,
-     * because the first tap flies the camera to it and the second one lands
-     * where it used to be.
-     *
-     * And a shorter guard in front of it, because iOS can deliver one press
-     * twice: a touch, and then the mouse event Safari synthesises after it.
-     * Two of those arrive milliseconds apart and would otherwise read as a
-     * deliberate double tap — which is exactly the "sometimes" in this bug.
-     * Nobody taps twice in ninety milliseconds.
+     * Whether this was the second of a pair is decided before we get here, by
+     * doubleHit(), on the point rather than the element — see it for why. What
+     * is left here is the first tap of any pair: remember where it landed and
+     * what was under it, and show the actions.
      */
-    const now = performance.now()
-    const since = tapId === id ? now - tapAt : Infinity
-    if (since < DUPE_MS) return
-    const soon = since < DOUBLE_MS
     tapId = id
-    tapAt = now
+    tapAt = performance.now()
+    tapPt = at
     const tl = view.byId.get(id)
     if (isMember) {
       // a group inside a group opens like any other: you go in one more level
@@ -3917,22 +3984,11 @@ function mountSky(root: HTMLDivElement) {
         if (tl) showMoons(tl)
         return
       }
-      // …and the same clock here. Reading a member leaves it open, so "tap the
-      // one that is already open" was true for as long as you left it that way
-      // and a lone tap on it stopped giving you its actions.
-      if (!soon) {
-        if (tl) showMoons(tl)
-        return
-      }
-      const t = S().thoughts.find((x) => x.id === id)
-      if (t) {
-        const p = posOf(id)
-        openPage('open', { kind: 'drop', t, members: [] }, toScreenX(p.x), toScreenY(p.y))
-      }
+      // already open, and this was a lone tap: its actions, again
+      if (tl) showMoons(tl)
       return
     }
     if (!tl) return
-    const p = posOf(id)
     if (tl.kind === 'pool') {
       // tapping the group you are reading out of puts the card away: the thing
       // it was covering is the obvious place to press to get it back
@@ -3948,10 +4004,7 @@ function mountSky(root: HTMLDivElement) {
         // do to it, again for the thing itself. Until now the second tap on a
         // group did nothing, which is why a group could not be renamed,
         // emptied or thrown away from the only screen it appears on.
-        if (soon && moonsFor === tl.t.id) {
-          closeMoons()
-          openPage('open', tl, toScreenX(p.x), toScreenY(p.y))
-        } else showMoons(tl)
+        showMoons(tl)
       } else {
         clearAll()
         openPool = tl.t.id
@@ -3963,17 +4016,8 @@ function mountSky(root: HTMLDivElement) {
       }
       return
     }
-    if (soon && moonsFor === id) {
-      closeMoons()
-      // The second tap is the way to the thing itself, for a drop exactly as
-      // for a group. It used to land on a page of its own that held the same
-      // four things this one does, which is why `open` sat in the row doing
-      // what the gesture already did.
-      openPage('open', tl, toScreenX(p.x), toScreenY(p.y))
-    } else {
-      clearAll()
-      showMoons(tl)
-    }
+    clearAll()
+    showMoons(tl)
   }
 
   // ---------- frame loop ----------
