@@ -27,22 +27,10 @@ body.sky-held {
   touch-action: none;
   z-index: 1;
 }
-/*
- * The vignette used to be .sky-stage::after, which put it inside an
- * overflow:hidden box whose height the whole world is measured from — so it
- * could not be extended past the bottom edge without moving the waterline and
- * every drop with it. It is decoration and nothing measures it, so it lives on
- * its own now, and carries on for another --bleed into the strip behind the
- * home indicator. Without that the strip came out lighter than the row above
- * it by exactly the 42% this darkens by.
- */
-.sky-vign {
-  position: fixed;
-  inset: 0 0 calc(-1 * var(--bleed)) 0;
-  z-index: 1;
-  pointer-events: none;
-  background: radial-gradient(ellipse at 50% 42%, transparent 58%, rgba(2, 3, 7, 0.42) 100%);
-}
+/* The sky's own darkening used to live here, and before that on
+   .sky-stage::after. It is in the Atmosphere now, with the one the world
+   already had — see WORLD_VIGNETTE. One world, closed one way, so the strip
+   below the glass continues all three views instead of one. */
 
 .sky-links { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .sky-links line.kin { stroke: rgba(var(--accent-rgb), 0.13); stroke-width: 1; }

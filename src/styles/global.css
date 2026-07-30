@@ -468,20 +468,13 @@ a {
   margin: 0 auto;
   padding: calc(var(--sat) + var(--sp-5)) var(--sp-4) calc(var(--tabbar-h) + var(--sab) + var(--sp-7));
 }
-.page::before {
-  content: '';
-  position: fixed;
-  /* and on past the bottom edge, into the strip behind the home indicator —
-     see --bleed. The Current does not scroll, so this layer was the last thing
-     painted above that strip and the seam was between the two. */
-  inset: 0 0 calc(-1 * var(--bleed)) 0;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    radial-gradient(ellipse 90% 32% at 50% -6%, rgba(255, 255, 255, calc(0.05 + var(--sky-lift, 0.4) * 0.05)), transparent 70%),
-    radial-gradient(ellipse 120% 44% at 50% 108%, var(--drop-glow, rgba(122, 215, 255, 0.14)), transparent 66%),
-    radial-gradient(ellipse at 50% 44%, transparent 52%, var(--sky-vignette, rgba(2, 3, 6, 0.45)) 100%);
-}
+/* The page used to close its own edges here — a top glow, a bottom glow and a
+   vignette, fixed, painted over the world. So did the sky, with a different
+   vignette again, and the Atmosphere had one of its own underneath both. Three
+   treatments of one thing, which is why the strip below the glass could only
+   ever match one view at a time: it is a continuation of the world, and each
+   view was standing on a different world. There is one now, in Atmosphere.tsx,
+   and every view stands on it. */
 
 /* The sky never shouts, and these were set at 700 — heavier than anything in
    it. Same size, less weight, more air: a title, not a headline. */

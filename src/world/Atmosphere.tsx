@@ -28,7 +28,25 @@ const WORLD_BG =
   // the floor takes the hour too — a fixed blue here was quietly holding the
   // bottom of every screen at midnight all day long
   'linear-gradient(var(--sky-ground, #04060c) 0%, var(--sky-ground, #05070f) 52%, var(--ground-high, #070d18) 100%)'
-const WORLD_VIGNETTE = 'radial-gradient(ellipse at 50% 42%, transparent 52%, var(--sky-vignette, rgba(2, 3, 6, 0.6)) 100%)'
+/**
+ * How the world closes at its edges — once, for everything.
+ *
+ * There were three of these. The Atmosphere had this one; the sky laid a
+ * second over it; and every page laid a third of its own, with a bottom glow
+ * and a top glow besides. Which meant each view was standing on a slightly
+ * different world, and the strip below the glass — which is a continuation of
+ * the world — could only ever be right for one of them at a time. Measured at
+ * the bottom edge: the sky was 10 away from what the strip paints, the Current
+ * 28, Memory 65.
+ *
+ * Both of the sky's layers are here now and nothing else has its own, so every
+ * view closes the same way and the continuation is the same continuation. The
+ * pages lose a bottom glow they were painting twice over — the horizon glow in
+ * WORLD_BG already warms that edge for everybody.
+ */
+const WORLD_VIGNETTE =
+  'radial-gradient(ellipse at 50% 42%, transparent 58%, rgba(2, 3, 7, 0.42) 100%),' +
+  'radial-gradient(ellipse at 50% 42%, transparent 52%, var(--sky-vignette, rgba(2, 3, 6, 0.6)) 100%)'
 
 const OVERDRAW_X = 0.3
 const canvasW = () => Math.round(window.innerWidth * (1 + OVERDRAW_X * 2))
@@ -66,6 +84,36 @@ function measureBleed() {
 }
 
 /**
+ * The ocean's own colour where it meets the bottom of the glass — read off the
+ * water rather than worked out from it.
+ *
+ * The canvas can carry the world's gradients because they are gradients, but
+ * the ocean is a canvas, and the last thing between the world and the bottom
+ * edge is a wash of it. Modelling that wash means re-deriving drawWater's three
+ * stops, where the gradient starts, how far below the screen it ends and where
+ * on it the bottom edge falls — four numbers to keep in step with a function
+ * that is allowed to change. Sampling costs one pixel and cannot drift.
+ *
+ * The row taken is the one that lands exactly on the bottom edge: the canvas is
+ * bottom-anchored at -WATER_DEEP, so screen-bottom is canvas y = WATER_H.
+ */
+function seaTint(): string {
+  const c = document.querySelector('canvas[data-water]') as HTMLCanvasElement | null
+  const ctx = c?.getContext('2d')
+  if (!c || !ctx || !c.width) return ''
+  try {
+    const y = Math.min(c.height - 1, Math.round(WATER_H * devicePixelRatio))
+    const [r, g, b, a] = ctx.getImageData(Math.round(c.width / 2), y, 1, 1).data
+    if (!a) return ''
+    const t = `rgba(${r},${g},${b},${(a / 255).toFixed(3)})`
+    return `linear-gradient(${t},${t})`
+  } catch {
+    // a tainted canvas would throw; the world simply goes without the wash
+    return ''
+  }
+}
+
+/**
  * Painting the part of the screen the glass cannot reach.
  *
  * --bleed tells every fixed layer to carry on past the bottom of the viewport,
@@ -93,7 +141,7 @@ function paintBeyondTheGlass() {
   const floor = seaFloor(s.ground)
   const root = document.documentElement
   const bleed = parseFloat(getComputedStyle(root).getPropertyValue('--bleed')) || 0
-  root.style.backgroundImage = `${WORLD_VIGNETTE},${WORLD_BG}`
+  root.style.backgroundImage = [WORLD_VIGNETTE, seaTint(), WORLD_BG].filter(Boolean).join(',')
   root.style.backgroundSize = `100% ${Math.round(window.innerHeight + bleed)}px`
   root.style.backgroundRepeat = 'no-repeat'
   root.style.backgroundPosition = '0 0'
@@ -118,6 +166,8 @@ export function Atmosphere() {
     const cur = { fog: targetRef.current.fog, light: targetRef.current.light }
     let raf = 0
     let t = 0
+    /** whether the ocean has been sampled for the canvas below the glass yet */
+    let washed = false
     const canvas = waterRef.current
     const ctx = canvas?.getContext('2d')
 
@@ -180,6 +230,14 @@ export function Atmosphere() {
       }
 
       if (ctx && canvas) drawWater(ctx, canvasW(), t, reduced)
+      // The canvas beyond the glass needs the ocean's colour, and the ocean
+      // does not have one until it has been drawn once. The first paint runs
+      // before this loop, so it comes back for the wash the moment there is
+      // water to sample.
+      if (!washed && ctx && canvas) {
+        washed = true
+        paintBeyondTheGlass()
+      }
       raf = requestAnimationFrame(frame)
     }
     raf = requestAnimationFrame(frame)
