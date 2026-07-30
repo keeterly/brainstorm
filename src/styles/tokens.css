@@ -93,18 +93,21 @@
   /*
    * How far the world has to keep going after the glass has stopped.
    *
-   * The strip behind the home indicator is outside the layout viewport, so
-   * nothing laid out `position: fixed; inset: 0` ever reaches it — and every
-   * layer that paints this world is exactly that. On a page long enough to
-   * scroll it never shows, because the document itself does reach down there;
-   * that is the whole reason Memory looked right and the Sky and the Current
-   * ended in a flat bar of some other colour.
+   * On an installed iPhone the layout viewport is shorter than the screen and
+   * anchored at the top, so everything laid out `position: fixed; inset: 0` —
+   * which is every layer that paints this world — stops short of the bottom
+   * and the last of the screen falls through to the document canvas as a flat
+   * bar. Rather than work out what colour that bar should be, which is a
+   * different colour on every screen (water under a vignette under a page glow
+   * under film grain), every layer that touches the bottom edge carries on for
+   * another --bleed and they compose down there exactly as they do up here.
+   * No seam to match, because no seam.
    *
-   * Rather than work out what colour that bar should be — it is a different
-   * colour on every screen, being water under a vignette under a page glow —
-   * every layer that touches the bottom edge is simply told to carry on for
-   * another --bleed. They then compose down there exactly as they do up here,
-   * and there is no seam to match because there is no seam.
+   * The real value is measured off the device by measureBleed() in
+   * Atmosphere.tsx and set inline on the root, because it cannot be derived:
+   * it came out at 59pt on a 393×852 phone, which is the inset at the *top*
+   * and 25pt more than the home indicator below. This is only what stands in
+   * for the frame or two before that runs.
    */
   --bleed: env(safe-area-inset-bottom, 0px);
 

@@ -8,25 +8,53 @@ import { SURFACE, WATER_DEEP, WATER_DRAW_H, WATER_H, drawWater, invalidateWaterl
 import { stepUpright, worldTilt } from './upright'
 import { tickDaylight } from './daylight'
 
-// The strip behind the home indicator, twice over.
-//
-// It sits outside the layout viewport, so nothing laid out `position: fixed;
-// inset: 0` reaches it — which is every layer of this world. The fix that
-// actually removes the seam is --bleed: every layer that touches the bottom
-// edge is told to carry on for another safe-area inset, so the same stack
-// composes down there as up here. What follows is the belt to that pair of
-// braces: iOS fills anything still unpainted from the document canvas and the
-// theme colour, and both are handed the ocean's deepest colour, so the worst
-// case is a strip that is too dark rather than a bar of some colour nobody
-// chose. The theme colour is not optional either — it is what the system tints
-// the status bar with.
 // The ocean is drawn bigger than the window it shows through: wider on both
 // sides and deeper than the bottom edge, so however far it tilts to stay level
 // there is still water in every corner.
 const OVERDRAW_X = 0.3
 const canvasW = () => Math.round(window.innerWidth * (1 + OVERDRAW_X * 2))
 
+/**
+ * How far the screen goes on after the viewport stops.
+ *
+ * On an installed iPhone the layout viewport is *shorter than the screen*, and
+ * it is anchored at the top: `innerHeight` comes back as the screen height
+ * minus the inset the notch takes, and the shortfall is left over at the
+ * bottom. Everything in this app that paints the world is `position: fixed;
+ * inset: 0`, so all of it stops there, and the last of the screen falls
+ * through to the document canvas — a flat bar under the sky. Memory never
+ * showed it only because Memory is long enough to scroll, and a scrolled
+ * document does reach down there.
+ *
+ * This was guessed at first, as `env(safe-area-inset-bottom)` — and it is
+ * emphatically not that. Measured off the device, the bar is 59.0pt on a
+ * 393×852 phone: the size of the inset at the *top*, which is 25pt more than
+ * the home indicator's 34. So it is measured rather than assumed, and the two
+ * guards are for what the number would mean anywhere else:
+ *
+ *   - **portrait only.** `screen.height` is the portrait height on iOS however
+ *     the phone is held, so in landscape the difference is meaningless.
+ *   - **and never more than a status bar's worth.** This is a correction for a
+ *     viewport that falls short of its own screen, not a licence to paint an
+ *     arbitrary distance past the bottom of one. In a browser tab the gap is
+ *     the toolbars, which is the same order of size and harmless to fill:
+ *     whatever we paint there is behind them.
+ */
+function measureBleed() {
+  const gap = Math.round(screen.height - window.innerHeight)
+  const bleed = window.innerHeight > window.innerWidth && gap > 0 && gap < 160 ? gap : 0
+  document.documentElement.style.setProperty('--bleed', `${bleed}px`)
+}
 
+/**
+ * The belt to that pair of braces.
+ *
+ * Whatever --bleed still fails to cover, iOS fills from the document canvas
+ * and the theme colour, so both are handed the colour the ocean reaches at its
+ * deepest — the worst case is then a strip that is too dark rather than a bar
+ * of some colour nobody chose. The theme colour is not optional either: it is
+ * what the system tints the status bar with.
+ */
 function paintBeyondTheGlass() {
   const s = tickDaylight()
   const floor = seaFloor(s.ground)
@@ -55,6 +83,9 @@ export function Atmosphere() {
     const ctx = canvas?.getContext('2d')
 
     const size = () => {
+      // before the early return: the world has to keep going past the bottom of
+      // the glass whether or not there is a canvas to draw water on
+      measureBleed()
       if (!canvas || !ctx) return
       const W = canvasW()
       canvas.width = W * devicePixelRatio
@@ -76,7 +107,11 @@ export function Atmosphere() {
     paintBeyondTheGlass()
     const clock = setInterval(paintBeyondTheGlass, 120000)
     const wake = () => {
-      if (document.visibilityState === 'visible') paintBeyondTheGlass()
+      if (document.visibilityState !== 'visible') return
+      paintBeyondTheGlass()
+      // coming back to the front is also when the viewport most often turns
+      // out to be a different size than when it was put away
+      measureBleed()
     }
     document.addEventListener('visibilitychange', wake)
 
