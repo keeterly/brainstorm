@@ -145,11 +145,12 @@ function paintBeyondTheGlass() {
   // The hem carries the world into the strip; see the element itself. Sized to
   // the world's box and bottom-aligned, so its gradients sit where the fixed
   // layers' gradients sit.
+  // …as a custom property rather than an inline background, so the stylesheet
+  // can put paper there instead while a full-screen page is up. An inline
+  // background would beat any rule that tried.
+  root.style.setProperty('--hem-bg', stack)
   const hem = document.querySelector('.world-hem > div') as HTMLDivElement | null
-  if (hem) {
-    hem.style.height = `${Math.round(window.innerHeight + bleed)}px`
-    hem.style.background = stack
-  }
+  if (hem) hem.style.height = `${Math.round(window.innerHeight + bleed)}px`
   root.style.backgroundImage = stack
   root.style.backgroundSize = `100% ${Math.round(window.innerHeight + bleed)}px`
   root.style.backgroundRepeat = 'no-repeat'

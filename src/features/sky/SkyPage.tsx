@@ -2324,6 +2324,10 @@ function mountSky(root: HTMLDivElement) {
     pageAbsorb.classList.toggle('show', mode === 'capture' && !S().offline)
     pageLater.classList.toggle('show', mode === 'open')
     page.classList.add('show')
+    // the strip of screen below the glass turns to paper with the page — see
+    // .world-hem, which is document content and so is not covered by anything
+    // fixed, however full-screen it looks
+    document.body.classList.add('on-paper')
     page.style.clipPath = `circle(0px at ${ox}px ${oy}px)`
     // Far enough to reach every corner from wherever it opened. A fixed screen
     // diagonal is only enough when the origin is on screen — and a drop's
@@ -2405,6 +2409,7 @@ function mountSky(root: HTMLDivElement) {
     nameFor = null
     page.classList.remove('on')
     page.style.clipPath = `circle(0px at ${pf.ox}px ${pf.oy}px)`
+    document.body.classList.remove('on-paper')
     setTimeout(() => page.classList.remove('show', 'path', 'reading'), reduced ? 0 : 580)
     if (!commit) return
     const v = pageT.value
@@ -3831,7 +3836,48 @@ function mountSky(root: HTMLDivElement) {
   stage.addEventListener('lostpointercapture', (e) => {
     if (touches.has(e.pointerId)) onCancel(e)
   })
+  /**
+   * How long the second tap has to arrive in.
+   *
+   * Generous, and it has to be: the first tap on a group flies the camera to
+   * it, so by the time you tap again the thing has moved out from under your
+   * finger and you have to find it. 320ms — a browser's idea of a double
+   * click — fails that constantly. This is the window in which a second tap is
+   * still plainly part of the same intention.
+   */
+  const DOUBLE_MS = 1400
+  /** …and this close together are one *press*, delivered twice */
+  const DUPE_MS = 90
+  let tapId: string | null = null
+  let tapAt = 0
   function onTap(id: string, isMember: boolean) {
+    /*
+     * One tap is the actions. Two is the thing itself.
+     *
+     * It used to be "the second tap, whenever it comes, if the actions happen
+     * to still be up" — and the actions stay up until something closes them,
+     * so tapping a group you had tapped a minute ago opened its page instead
+     * of its actions. Which reads as the app deciding at random, because from
+     * where you are standing nothing has changed between the two taps.
+     *
+     * So the clock and the state both have to agree: the actions are up for
+     * this thing *and* you tapped it recently. Either alone is wrong — the
+     * state alone is the bug above, and the clock alone breaks on a group,
+     * because the first tap flies the camera to it and the second one lands
+     * where it used to be.
+     *
+     * And a shorter guard in front of it, because iOS can deliver one press
+     * twice: a touch, and then the mouse event Safari synthesises after it.
+     * Two of those arrive milliseconds apart and would otherwise read as a
+     * deliberate double tap — which is exactly the "sometimes" in this bug.
+     * Nobody taps twice in ninety milliseconds.
+     */
+    const now = performance.now()
+    const since = tapId === id ? now - tapAt : Infinity
+    if (since < DUPE_MS) return
+    const soon = since < DOUBLE_MS
+    tapId = id
+    tapAt = now
     const tl = view.byId.get(id)
     if (isMember) {
       // a group inside a group opens like any other: you go in one more level
@@ -3871,6 +3917,13 @@ function mountSky(root: HTMLDivElement) {
         if (tl) showMoons(tl)
         return
       }
+      // …and the same clock here. Reading a member leaves it open, so "tap the
+      // one that is already open" was true for as long as you left it that way
+      // and a lone tap on it stopped giving you its actions.
+      if (!soon) {
+        if (tl) showMoons(tl)
+        return
+      }
       const t = S().thoughts.find((x) => x.id === id)
       if (t) {
         const p = posOf(id)
@@ -3895,7 +3948,7 @@ function mountSky(root: HTMLDivElement) {
         // do to it, again for the thing itself. Until now the second tap on a
         // group did nothing, which is why a group could not be renamed,
         // emptied or thrown away from the only screen it appears on.
-        if (moonsFor === tl.t.id) {
+        if (soon && moonsFor === tl.t.id) {
           closeMoons()
           openPage('open', tl, toScreenX(p.x), toScreenY(p.y))
         } else showMoons(tl)
@@ -3910,7 +3963,7 @@ function mountSky(root: HTMLDivElement) {
       }
       return
     }
-    if (moonsFor === id) {
+    if (soon && moonsFor === id) {
       closeMoons()
       // The second tap is the way to the thing itself, for a drop exactly as
       // for a group. It used to land on a page of its own that held the same
@@ -4524,6 +4577,8 @@ function mountSky(root: HTMLDivElement) {
     if (deafT) clearTimeout(deafT)
     document.documentElement.style.removeProperty('--kb')
     document.body.classList.remove('sky-held')
+    // leaving the sky with a page open would strand the hem on paper
+    document.body.classList.remove('on-paper')
     document.body.classList.remove('sky-resting')
     stopMic()
     if (layoutT) clearTimeout(layoutT)

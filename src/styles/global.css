@@ -56,6 +56,24 @@ body,
   left: 0;
   right: 0;
   bottom: 0;
+  background: var(--hem-bg);
+  transition: background 200ms ease;
+}
+/*
+ * …and paper while a full-screen page is up.
+ *
+ * The page is fixed, so it stops at the bottom of the viewport like everything
+ * else, and the hem underneath it went on being the night sky — a dark band
+ * under a light page, which is the same bar this whole exercise was about,
+ * wearing the opposite colour. The page's own backdrop, continued: the hem is
+ * already the height of the world's box and bottom-aligned, so these land
+ * where the page's land.
+ */
+body.on-paper .world-hem > div {
+  background:
+    radial-gradient(circle 320px at 30% 10%, var(--paper-lit, rgba(255, 255, 255, 0.5)), transparent 72%),
+    radial-gradient(ellipse 92% 42% at 50% 108%, rgba(var(--accent-rgb), 0.16), transparent 62%),
+    var(--paper, #dbe3ec);
 }
 
 /* The column the hem hangs from — see .world-hem.
