@@ -568,18 +568,14 @@ body.sky-held {
    the point of the row, but the thing you press is not. */
 .sky-page .pans .row .out {
   flex-shrink: 0;
-  min-height: 38px;
-  padding: 0 10px;
-  margin: -4px -8px -4px 0;
-  font-size: 10.5px;
+  min-height: 30px;
+  padding: 0 11px;
+  margin: -4px 0 -4px 4px;
+  font-size: 9.5px;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--paper-soft, #8fa3b6);
-  background: none;
-  border: 0;
 }
-.sky-page .pans .row .out:active { color: var(--paper-ink, #3d4b5c); }
 
 /* Ticking off, and choosing — two things a round control on the left of a row
    can mean, which are not the same thing. Ticking off is what you do
@@ -592,17 +588,51 @@ body.sky-held {
   justify-content: space-between;
   gap: 12px;
 }
-.sky-page .pans .lab.head .sel {
-  font: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
+/* One family of controls.
+   The tick is a circle with a hairline that fills with ink when it is on. Every
+   other thing you can press on this page was bare text, so the circles were the
+   only part of the page that looked like a control at all. They are all the
+   same object now — a hairline, a soft body, ink when engaged — and the tick is
+   simply the round one. */
+.sky-page .pans .ctl {
+  font-family: inherit;
+  border-radius: 999px;
+  border: 1px solid rgba(19, 26, 36, 0.18);
+  background: rgba(19, 26, 36, 0.035);
   color: var(--paper-soft, #8fa3b6);
-  background: none;
-  border: 0;
-  padding: 6px 0 6px 12px;
-  margin: -6px 0;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
 }
-.sky-page .pans.picking .lab.head .sel { color: var(--paper-ink, #3d4b5c); }
+.sky-page .pans .ctl:active {
+  background: var(--paper-ink, #3d4b5c);
+  border-color: var(--paper-ink, #3d4b5c);
+  color: #fff;
+}
+
+.sky-page .pans .lab.head .sel {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0 11px;
+  min-height: 30px;
+  margin: -7px 0;
+}
+/* On — outlined rather than filled. A tick fills because the fill *is* the
+   answer to "is this one done". This button only says which mode the page is
+   in, and filled black in the header makes the loudest thing on the page the
+   one part of it that is not your work. So the border and the words go to ink
+   and the body stays paper: unmistakably engaged, still second to the rows. */
+.sky-page .pans.picking .lab.head .sel {
+  background: rgba(19, 26, 36, 0.05);
+  border-color: rgba(19, 26, 36, 0.45);
+  color: var(--paper-ink, #3d4b5c);
+}
+/* pressing is still the filled state, as it is everywhere else in the family */
+.sky-page .pans.picking .lab.head .sel:active {
+  background: var(--paper-ink, #3d4b5c);
+  border-color: var(--paper-ink, #3d4b5c);
+  color: #fff;
+}
 
 .sky-page .pans .row .tick {
   flex-shrink: 0;
@@ -663,7 +693,10 @@ body.sky-held {
 }
 
 /* choosing: square, hollow until chosen, and no tick inside it */
-.sky-page .pans.picking .row .tick::before { border-radius: 6px; }
+/* 4px, not 6: the circle is 14px across, so a 6px corner is 43% of it and
+   still reads as round at arm's length — which defeats the whole point of
+   changing the shape. */
+.sky-page .pans.picking .row .tick::before { border-radius: 4px; }
 .sky-page .pans.picking .row .tick::after { display: none; }
 .sky-page .pans.picking .row.ticked .tick::before {
   background: none;
@@ -685,22 +718,30 @@ body.sky-held {
 .sky-page .pans .picked {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 18px;
+  gap: 8px;
   margin-top: 12px;
   padding-top: 10px;
   border-top: 0.5px solid rgba(19, 26, 36, 0.1);
 }
 .sky-page .pans .picked .d {
-  min-height: 40px;
-  padding: 0;
+  min-height: 38px;
+  padding: 0 15px;
   font-size: 13px;
   font-weight: 560;
-  background: none;
-  border: 0;
   color: var(--paper-ink, #3d4b5c);
 }
-.sky-page .pans .picked .d.bad { color: #b4534b; }
-.sky-page .pans .picked .d:active { opacity: 0.5; }
+/* the one that gathers is the one you came here for */
+.sky-page .pans .picked .d.go {
+  background: var(--paper-ink, #3d4b5c);
+  border-color: var(--paper-ink, #3d4b5c);
+  color: #fff;
+}
+.sky-page .pans .picked .d.bad {
+  color: #b4534b;
+  border-color: rgba(180, 83, 75, 0.32);
+  background: rgba(180, 83, 75, 0.05);
+}
+.sky-page .pans .picked .d.bad:active { background: #a8332a; border-color: #a8332a; color: #fff; }
 .sky-page .pans .picked .d[hidden] { display: none; }
 /* `display: flex` above beats the browser's own rule for [hidden], so without
    this the bar stood there permanently offering to take out zero things. */
@@ -710,22 +751,25 @@ body.sky-held {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: 8px;
   margin-top: 14px;
   padding-top: 10px;
   border-top: 0.5px solid rgba(19, 26, 36, 0.1);
 }
 .sky-page .pans .danger .d {
-  min-height: 40px;
-  padding: 0;
+  align-self: flex-start;
+  min-height: 38px;
+  padding: 0 15px;
   font-size: 13px;
   font-weight: 500;
   text-align: left;
-  color: var(--paper-soft, #8fa3b6);
-  background: none;
-  border: 0;
 }
-.sky-page .pans .danger .d.bad { color: #b4534b; }
+.sky-page .pans .danger .d.bad {
+  color: #b4534b;
+  border-color: rgba(180, 83, 75, 0.32);
+  background: rgba(180, 83, 75, 0.05);
+}
+.sky-page .pans .danger .d.bad:active { background: #a8332a; border-color: #a8332a; color: #fff; }
 /* Armed: the button has become the question, and it is the only loud thing on
    a quiet page for exactly as long as it is waiting for an answer. */
 .sky-page .pans .danger .d.armed {

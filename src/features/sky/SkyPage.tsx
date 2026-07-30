@@ -1733,6 +1733,18 @@ function mountSky(root: HTMLDivElement) {
    * field — the same rule every other field on that page already followed.
    */
   let nameFor: string | null = null
+  /**
+   * What still has to be written down before this page can go.
+   *
+   * Every field on the group page saves on `change`, which fires on blur. That
+   * is enough on a desktop, where blur is delivered before the click that
+   * caused it finishes. It is not enough on a phone: iOS can deliver blur
+   * *after* the page has already begun tearing down, and a commit that arrives
+   * after teardown is a commit that finds nothing to write to. So each field
+   * also leaves behind a way to be read directly, and closing the page reads
+   * them all first. Nothing here depends on an event arriving in time.
+   */
+  let pending: (() => void)[] = []
   function planOf(tl: TL): Step[] {
     if (tl.kind === 'drop') {
       const a = answersOf(tl.t)
@@ -1787,6 +1799,13 @@ function mountSky(root: HTMLDivElement) {
   measureKeyboard()
 
   function openPage(mode: PageMode, tl: TL | undefined, ox: number, oy: number) {
+    // The group page re-renders itself in place whenever its list changes, and
+    // a half-typed name in the box above that list must survive the row you
+    // just took out. Anything the outgoing render still owed goes in first —
+    // safely, because every one of these is a no-op when nothing changed.
+    const owed = pending
+    pending = []
+    for (const write of owed) write()
     pageFor = { mode, tl, ox, oy }
     nameFor = null
     pageA.style.display = 'none'
@@ -1852,6 +1871,7 @@ function mountSky(root: HTMLDivElement) {
       pageT.value = label(tl.t)
       pageT.placeholder = 'Name it'
       nameFor = tl.t.id
+      pending.push(() => landUndo(rename(tl.t.id, pageT.value)))
       // Keeping what was just ticked, so the row strikes through under your
       // finger instead of vanishing out from under it — and settling to the
       // bottom, because four finished things stranded among nine unfinished
@@ -1878,24 +1898,24 @@ function mountSky(root: HTMLDivElement) {
       pageA.innerHTML =
         (inside.length
           ? `<div class="lab head"><span>what is inside</span>` +
-            `<button class="sel">Select</button></div>` +
+            `<button class="ctl sel">Select</button></div>` +
             inside
               .map(
                 (_m, i) =>
                   `<div class="row" data-i="${i}">` +
                   `<button class="tick" role="checkbox" aria-checked="false" aria-label="Done"></button>` +
                   `<input class="t" aria-label="What this is called" enterkeyhint="done" />` +
-                  `<button class="out" aria-label="Take it out of this group">take out</button></div>`,
+                  `<button class="ctl out" aria-label="Take it out of this group">take out</button></div>`,
               )
               .join('')
           : '') +
         `<div class="row add"><input class="t" placeholder="Add something to this group…" enterkeyhint="done" aria-label="Add something to this group" /></div>` +
-        `<div class="picked" hidden><button class="d go">Group these</button>` +
-        `<button class="d out">Take these out</button>` +
-        `<button class="d bad away">Put these away</button></div>` +
+        `<div class="picked" hidden><button class="ctl d go">Group these</button>` +
+        `<button class="ctl d out">Take these out</button>` +
+        `<button class="ctl d bad away">Put these away</button></div>` +
         `<div class="danger">` +
-        `<button class="d" data-act="ungroup">Ungroup — keep what is inside</button>` +
-        `<button class="d bad" data-act="bin">Put the whole group away</button>` +
+        `<button class="ctl d" data-act="ungroup">Ungroup — keep what is inside</button>` +
+        `<button class="ctl d bad" data-act="bin">Put the whole group away</button>` +
         `</div>`
 
       // Two things a round control on the left of a row can mean, and they are
@@ -1918,7 +1938,10 @@ function mountSky(root: HTMLDivElement) {
         groupBtn.textContent = `Group these ${picked.size}`
         takeBtn.textContent = picked.size === 1 ? 'Take it out' : `Take these ${picked.size} out`
         awayBtn.textContent = picked.size === 1 ? 'Put it away' : `Put these ${picked.size} away`
-        if (selBtn) selBtn.textContent = picking ? 'Done selecting' : 'Select'
+        // "Cancel" rather than "Done selecting": leaving the mode drops the
+        // picks, which is exactly what cancelling means, and the short word
+        // keeps the header a header rather than a slab.
+        if (selBtn) selBtn.textContent = picking ? 'Cancel' : 'Select'
       }
       selBtn?.addEventListener('click', (e) => {
         e.stopPropagation()
@@ -1943,6 +1966,7 @@ function mountSky(root: HTMLDivElement) {
         // return — and re-rendering the list here would steal the caret, so it
         // does not.
         const commit = () => landUndo(rename(m.id, field.value))
+        pending.push(commit)
         field.addEventListener('change', commit)
         field.addEventListener('keydown', (e) => {
           if ((e as KeyboardEvent).key === 'Enter') {
@@ -1987,12 +2011,18 @@ function mountSky(root: HTMLDivElement) {
       const addOne = () => {
         const u = addTo(tl.t.id, addField.value)
         if (!u) return
+        // emptied, so closing the page does not add it a second time
         addField.value = ''
         landUndo(u)
         openPage('group', tl, ox, oy)
         // and the caret stays where you were typing, ready for the next one
         ;(pageA.querySelector('.row.add .t') as HTMLInputElement)?.focus()
       }
+      // half-typed and then closed is still something you wrote
+      pending.push(() => {
+        const u = addTo(tl.t.id, addField.value)
+        if (u) landUndo(u)
+      })
       addField.addEventListener('change', addOne)
       addField.addEventListener('keydown', (e) => {
         if ((e as KeyboardEvent).key === 'Enter') {
@@ -2055,7 +2085,7 @@ function mountSky(root: HTMLDivElement) {
           .map(
             (_t, i) =>
               `<div class="row"><span class="t"></span>` +
-              `<button class="out" data-back="${i}" aria-label="Bring it back">bring back</button></div>`,
+              `<button class="ctl out" data-back="${i}" aria-label="Bring it back">bring back</button></div>`,
           )
           .join('')
       pageA.innerHTML =
@@ -2063,7 +2093,7 @@ function mountSky(root: HTMLDivElement) {
         (away.length ? `<div class="lab">put away</div><div class="grp away">${rows(away)}</div>` : '') +
         (!rest.length && !away.length ? `<div class="a">Nothing is set aside.</div>` : '') +
         (rest.length + away.length > 1
-          ? `<div class="danger"><button class="d" data-act="all">Bring all ${rest.length + away.length} back</button></div>`
+          ? `<div class="danger"><button class="ctl d" data-act="all">Bring all ${rest.length + away.length} back</button></div>`
           : '')
       const wake = (t: Thought) => {
         S().updateThought(t.id, { status: 'open', snooze_until: null })
@@ -2128,7 +2158,7 @@ function mountSky(root: HTMLDivElement) {
         (answers.length
           ? `<div class="lab">what it has absorbed</div>` + answers.map(() => `<div class="a"></div>`).join('')
           : '') +
-        `<div class="danger"><button class="d bad" data-act="bin">Put this away</button></div>`
+        `<div class="danger"><button class="ctl d bad" data-act="bin">Put this away</button></div>`
       const im = pageA.querySelector('img')
       if (im && imgOf(tl.t)) im.src = imgOf(tl.t) as string
       ;[...pageA.querySelectorAll('.a')].forEach((el, i) => ((el as HTMLElement).textContent = answers[i]))
@@ -2174,6 +2204,14 @@ function mountSky(root: HTMLDivElement) {
   }
   function closePage(commit: boolean) {
     if (!pageFor) return
+    // Whatever is in the fields goes in now, read straight from them, whether
+    // or not blur ever arrives. There is no cancel on the group page — every
+    // other thing you do there saves itself — so the name and the rows must
+    // save the same way, however you left.
+    const owed = pending
+    pending = []
+    nameFor = null
+    for (const write of owed) write()
     stopMic()
     const pf = pageFor
     pageFor = null
