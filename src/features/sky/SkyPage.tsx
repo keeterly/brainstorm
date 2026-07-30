@@ -13,6 +13,7 @@ import { KIN_EVIDENCE, KIN_POOL, KIN_THREAD, type Kinship, kinship } from '@/dom
 import { humanDate } from '@/domain/human-date'
 import { armUpright, stepUpright, worldTilt } from '@/world/upright'
 import { deepenThought } from './deepenFlow'
+import { reshapeTally, reshapeThought } from './reshapeFlow'
 import { haptics } from '@/lib/haptics'
 import { echoRing, wabiBlob, wabiSeed } from '@/world/echo'
 import { type Body, card, contact, disc, oilPath, pull } from '@/world/shape'
@@ -226,6 +227,8 @@ const MOON_ICONS: Record<string, string> = {
   work: 'M13.2 2.8 5.4 13.1a.5.5 0 0 0 .4.8h4.3l-1.3 7.3 7.8-10.3a.5.5 0 0 0-.4-.8h-4.3l1.3-7.3Z',
   // what it brought back: pages, with something written on them
   brief: 'M6.2 3.6h8.1l3.5 3.5v13.3H6.2zM14.3 3.6v3.5h3.5M9 12.2h6M9 15.6h4.2',
+  // telling it something: a line going in, and the shape rearranging around it
+  tell: 'M3.4 8.6h6.2M3.4 12h4M3.4 15.4h6.2M14 5.4l6 6.6-6 6.6M20 12h-6.4',
 }
 function moonSvg(key: string) {
   return (
@@ -1443,7 +1446,7 @@ function mountSky(root: HTMLDivElement) {
   }
 
   // ---------- the light page ----------
-  type PageMode = 'capture' | 'grow' | 'edit' | 'path' | 'brief'
+  type PageMode = 'capture' | 'grow' | 'edit' | 'path' | 'brief' | 'news'
   /** The brief ⚡ brought back for this thought, if it went out for one. */
   const briefOf = (id: string) => S().artifacts.find((a) => a.thought_id === id) ?? null
   let pageFor: { mode: PageMode; tl?: TL; ox: number; oy: number } | null = null
@@ -1509,7 +1512,13 @@ function mountSky(root: HTMLDivElement) {
     page.classList.toggle('path', reading)
     page.classList.toggle('brief', mode === 'brief')
     pageD.textContent =
-      mode === 'brief' ? 'Done reading' : mode === 'path' ? (tl && isKept(tl.t) ? 'Keep it' : 'Keep this path') : 'Done'
+      mode === 'brief'
+        ? 'Done reading'
+        : mode === 'news'
+          ? 'Work it in'
+          : mode === 'path'
+            ? (tl && isKept(tl.t) ? 'Keep it' : 'Keep this path')
+            : 'Done'
     if (mode === 'path' && tl) {
       pageQ.textContent = `The rain from “${trim(label(tl.t), 44)}”`
       const stale = isKept(tl.t) && !!ex(tl.t).planSig && ex(tl.t).planSig !== sigOf(tl)
@@ -1543,6 +1552,18 @@ function mountSky(root: HTMLDivElement) {
         a.setAttribute('target', '_blank')
         a.setAttribute('rel', 'noreferrer noopener')
       }
+    } else if (mode === 'news' && tl) {
+      // The map can be told things. Everything else here only adds; this is the
+      // one place you can say "it turned out otherwise" and have the shape of
+      // what you think move rather than just grow.
+      pendingImage = null
+      pageQ.textContent = 'What did you find out?'
+      pageT.value = ''
+      pageT.placeholder =
+        tl.kind === 'pool'
+          ? 'Tell it what changed, and it will move what is inside…'
+          : 'Tell it what changed…'
+      pageN.textContent = trim(label(tl.t), 46)
     } else if (mode === 'capture') {
       pendingImage = null
       pageQ.textContent = 'What’s on your mind?'
@@ -1570,9 +1591,9 @@ function mountSky(root: HTMLDivElement) {
         ;[...pageA.querySelectorAll('.a')].forEach((el, i) => ((el as HTMLElement).textContent = answers[i]))
       }
     }
-    pageMic.classList.toggle('show', speechOK && (mode === 'capture' || mode === 'grow'))
+    pageMic.classList.toggle('show', speechOK && (mode === 'capture' || mode === 'grow' || mode === 'news'))
     pageMic.classList.remove('live')
-    pagePic.classList.toggle('show', mode === 'capture')
+    pagePic.classList.toggle('show', mode === 'capture' || mode === 'news')
     pageAbsorb.classList.toggle('show', mode === 'capture' && !S().offline)
     pageLater.classList.toggle('show', mode === 'edit')
     page.classList.add('show')
@@ -1665,6 +1686,13 @@ function mountSky(root: HTMLDivElement) {
       patchExtra(t, { answers: [...answersOf(t), ans], plan: null, planSig: null })
       absorbAnim(t.id)
       say(answersOf(t).length === 0 ? 'saturated — it’s ready to rain' : 'absorbed — the path grows richer')
+    } else if (pf.mode === 'news' && pf.tl) {
+      const txt = v.trim()
+      const img = pendingImage
+      if (!txt && !img) return
+      void runReshape(pf.tl, txt, img, micUsed)
+      micUsed = false
+      pendingImage = null
     } else if (pf.mode === 'path' && pf.tl) {
       patchExtra(pf.tl.t, { kept: true })
       say('the path is kept — it will wait for you')
@@ -1903,6 +1931,18 @@ function mountSky(root: HTMLDivElement) {
         },
       })
     }
+    // Tell it something. The map is not only somewhere thinking goes — it is
+    // somewhere thinking changes, and until now nothing here could say that
+    // what you wrote last week has since turned out otherwise.
+    acts.push({
+      icon: 'tell',
+      lb: 'tell it',
+      dim: S().offline,
+      run: () => {
+        closeMoons()
+        openPage('news', tl, toScreenX(p.x), toScreenY(p.y))
+      },
+    })
     // what it brought back last time, kept and readable
     if (briefOf(tl.t.id)) {
       acts.push({
@@ -2018,6 +2058,68 @@ function mountSky(root: HTMLDivElement) {
   // ⚡ — the agent goes away and does the legwork on one drop, and what it
   // finds arrives as real work hanging under it rather than as a wall of prose.
   let working: string | null = null
+  /**
+   * Work new information into a part of the map.
+   *
+   * The one thing here that can take something away, so it is the one thing
+   * that must be a single move you can put back. It is offered as one, and the
+   * offer does not expire on its own — an edit you cannot see the shape of yet
+   * is exactly the one you want to undo two minutes later.
+   */
+  async function runReshape(tl: TL, news: string, img: { mediaType: string; dataB64: string } | null, spoken: boolean) {
+    if (working || S().offline) return
+    const id = tl.t.id
+    working = id
+    els.get(id)?.classList.add('working')
+    hold('working it in…')
+    const res = await reshapeThought(id, news || 'See the attached picture.', {
+      image: img ? { mediaType: img.mediaType, dataB64: img.dataB64 } : undefined,
+      spoken: spoken || undefined,
+    })
+    working = null
+    els.get(id)?.classList.remove('working')
+    if (res.kind === 'failed') {
+      hold(res.why ?? 'could not work that in just now')
+      offerAction('nothing was changed', 'try again', () => {
+        hold(null)
+        void runReshape(tl, news, img, spoken)
+      })
+      return
+    }
+    if (res.kind === 'unchanged') {
+      // Saying "the map already covered that" is a real answer and a good one.
+      // Inventing an edit to look busy is how a map fills up with noise.
+      hold(null)
+      say(res.note)
+      return
+    }
+    // whatever it made arrives around the thing it belongs to
+    const gp = posOf(id)
+    const fresh = S()
+      .relationships.filter((r) => r.type === 'part_of' && r.to_id === id)
+      .slice(-res.change.added - res.change.grouped)
+    fresh.forEach((r, i, all) => {
+      const p = pos.get(r.from_id)
+      if (p && p.s >= 1) return // already on stage; leave it where it stands
+      const q = posOf(r.from_id)
+      const a = -Math.PI / 2 + (i / Math.max(1, all.length)) * Math.PI * 2
+      q.x = q.rx = gp.x + Math.cos(a) * 150
+      q.y = q.ry = gp.y + Math.sin(a) * 120
+      q.s = 0.3
+    })
+    rebuild()
+    paintAll()
+    haptics.join()
+    hold(res.change.note)
+    offerAction(reshapeTally(res.change) || 'the map moved', 'put it back', () => {
+      res.change.undo()
+      rebuild()
+      paintAll()
+      say('back the way it was')
+    })
+    fitWhenSettled()
+  }
+
   async function runDeepen(tl: TL) {
     if (working || S().offline) return
     working = tl.t.id

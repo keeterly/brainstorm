@@ -41,6 +41,7 @@ function sampleInput(name: string): never {
     name_pool: { members: ['shoot on expired film', 'letters sealed with wax'] },
     cluster: { loose: [ref], pools: [{ id: 'p1', name: 'SS27 show', members: ['book the space'] }] },
     deepen: { subject: ref, context: ['book the space'] },
+    reshape: { subject: ref, inside: [ref], news: 'the studio fell through, Ana offered her garage' },
     notice: { thoughts: [ref], pools: [], recentlyDone: [] },
   }
   return inputs[name] as never
