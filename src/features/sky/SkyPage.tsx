@@ -95,12 +95,6 @@ export default function SkyPage() {
             </button>
             <span className="note" data-sky="pageN" />
           </div>
-          {/* The second way out, and it only ever appears on the page that has
-              two. See the `say` mode: you choose what happens to what you
-              wrote after you have written it. */}
-          <button className="done alt" data-sky="pageD2" hidden>
-            Work it in
-          </button>
           <button className="done" data-sky="pageD">
             Done
           </button>
@@ -415,7 +409,6 @@ function mountSky(root: HTMLDivElement) {
   const pageA = $('pageA')
   const pageN = $('pageN')
   const pageD = $('pageD')
-  const pageD2 = $('pageD2')
   const pageX = $('pageX')
   const pageMic = $('pageMic')
   const pagePic = $('pagePic')
@@ -1793,7 +1786,7 @@ function mountSky(root: HTMLDivElement) {
   })
 
   // ---------- the light page ----------
-  type PageMode = 'capture' | 'say' | 'edit' | 'path' | 'brief' | 'open' | 'aside'
+  type PageMode = 'capture' | 'say' | 'ask' | 'path' | 'brief' | 'open' | 'aside'
   /** The brief ⚡ brought back for this thought, if it went out for one. */
   const briefOf = (id: string) => S().artifacts.find((a) => a.thought_id === id) ?? null
   /** `into` is the group a capture belongs to — see the long press. */
@@ -1893,6 +1886,10 @@ function mountSky(root: HTMLDivElement) {
     page.classList.toggle('path', reading)
     page.classList.toggle('brief', mode === 'brief')
     page.classList.toggle('group', mode === 'open' || mode === 'aside')
+    // A group's field holds a name and a drop's holds the thought itself, so
+    // the two want very different amounts of room. Capping both at a name's
+    // worth is what made the drop's own page a separate mode for so long.
+    page.classList.toggle('solo', mode === 'open' && tl?.kind !== 'pool')
     pageD.textContent =
       mode === 'brief'
         ? 'Done reading'
@@ -1900,13 +1897,11 @@ function mountSky(root: HTMLDivElement) {
           ? 'Done'
           : mode === 'say'
             ? 'Keep it'
-            : mode === 'path'
-              ? (tl && isKept(tl.t) ? 'Keep it' : 'Keep this path')
-              : 'Done'
-    // The agent's way out of the writing page. Not offered with nothing to
-    // send it, and not offered when there is no way to reach it.
-    pageD2.hidden = mode !== 'say' || S().offline
-    sayVerb()
+            : mode === 'ask'
+              ? 'Ask'
+              : mode === 'path'
+                ? (tl && isKept(tl.t) ? 'Keep it' : 'Keep this path')
+                : 'Done'
     if (mode === 'path' && tl) {
       pageQ.textContent = `The rain from “${trim(label(tl.t), 44)}”`
       const stale = isKept(tl.t) && !!ex(tl.t).planSig && ex(tl.t).planSig !== sigOf(tl)
@@ -2260,27 +2255,37 @@ function mountSky(root: HTMLDivElement) {
       }
     } else if (mode === 'say' && tl) {
       /*
-       * One page for putting words into a thing.
+       * Your words, into the thing. One page, one way out.
        *
-       * There were two, and the line between them was mine rather than yours:
-       * `grow` kept what you wrote inside the drop, `tell it` handed it to the
-       * agent to move the map around. Both are "I want to add to this", and
-       * both made you pick which one you meant *before* you had written a
-       * word — which is the wrong order, because you find out what you have
-       * said by saying it.
-       *
-       * So: write first. The two ways out are at the bottom, and choosing
-       * between them is a decision about the sentence in front of you rather
-       * than a guess about the sentence you are about to write.
+       * It had two buttons for a while — keep it, or hand it to the agent —
+       * and choosing between them is a decision you can only make after you
+       * have written the thing, so the page asked you at the end rather than
+       * the start. That was better than two moons and still wrong: a page with
+       * a fork in it is a page you have to read. The words are kept, full
+       * stop, and the other thing you might have wanted is offered afterwards,
+       * where offers already live.
        */
       pendingImage = null
       pageQ.textContent = QUESTIONS[answersOf(tl.t).length] || 'What else wants to be said?'
       pageT.value = ''
-      pageT.placeholder = 'What you know, what changed — or ask it something about this…'
-      // The subject is the one thing you cannot have forgotten — you tapped it
-      // a second ago — and with two buttons in the row it was being ellipsised
-      // down to four characters. The room goes to the verbs.
-      pageN.textContent = ''
+      pageT.placeholder = 'What you know, what changed, what you found out…'
+      pageN.textContent = trim(label(tl.t), 46)
+    } else if (mode === 'ask' && tl) {
+      /*
+       * Anything you want to know, with this as the context.
+       *
+       * The thing you are looking at is most of the question. "What is mem
+       * 2.0" asked in front of a memory architecture is a narrower question
+       * than the same five words on their own, and until now there was nowhere
+       * to ask it: the agent could only be pointed at a thing that already
+       * read as a question. Every group, every note, every photograph could be
+       * worked on and never asked about.
+       */
+      pendingImage = null
+      pageQ.textContent = 'Ask about this'
+      pageT.value = ''
+      pageT.placeholder = 'Anything you want to know…'
+      pageN.textContent = trim(label(tl.t), 46)
     } else if (tl) {
       pageQ.textContent = 'Inside this drop'
       pageT.value = tl.t.raw_content
@@ -2312,11 +2317,12 @@ function mountSky(root: HTMLDivElement) {
       ;[...pageA.querySelectorAll('.a')].forEach((el, i) => ((el as HTMLElement).textContent = answers[i]))
       wireDanger(pageA, tl)
     }
-    pageMic.classList.toggle('show', speechOK && (mode === 'capture' || mode === 'say'))
+    // asking out loud is the most natural way to ask
+    pageMic.classList.toggle('show', speechOK && (mode === 'capture' || mode === 'say' || mode === 'ask'))
     pageMic.classList.remove('live')
     pagePic.classList.toggle('show', mode === 'capture' || mode === 'say')
     pageAbsorb.classList.toggle('show', mode === 'capture' && !S().offline)
-    pageLater.classList.toggle('show', mode === 'edit')
+    pageLater.classList.toggle('show', mode === 'open')
     page.classList.add('show')
     page.style.clipPath = `circle(0px at ${ox}px ${oy}px)`
     // Far enough to reach every corner from wherever it opened. A fixed screen
@@ -2452,33 +2458,33 @@ function mountSky(root: HTMLDivElement) {
               : 'it’s yours — drag it, grow it, pool it',
       )
     } else if (pf.mode === 'say' && pf.tl) {
-      // Which of the two things happens to what you wrote was decided by the
-      // button you left through — `handOver` is set by "Work it in" and by
-      // nothing else.
       const txt = v.trim()
       const img = pendingImage
-      if (handOver) {
-        handOver = false
-        if (!txt && !img) return
-        // A question goes to be answered; anything else goes to be worked in.
-        // The same test the button used to choose its word, so what happens is
-        // what the button said would happen.
-        if (txt && isQuestion(txt)) {
-          pendingImage = null
-          micUsed = false
-          void runAnswer(pf.tl, txt)
-          return
-        }
-        void runReshape(pf.tl, txt, img, micUsed)
-        micUsed = false
-        pendingImage = null
-        return
-      }
+      pendingImage = null
       if (!txt) return
-      const t = pf.tl.t
+      const tl = pf.tl
+      const t = tl.t
       patchExtra(t, { answers: [...answersOf(t), txt], plan: null, planSig: null })
       absorbAnim(t.id)
       say(answersOf(t).length === 0 ? 'saturated — it’s ready to rain' : 'absorbed — the path grows richer')
+      // The other thing you might have meant, offered once it has landed
+      // rather than asked before you had written it. Telling the map that
+      // something turned out otherwise is a real act and it is rare; this is
+      // where the app already puts the follow-up to what just happened.
+      if (!S().offline) {
+        const spoken = micUsed
+        offerAction('kept — it can move the map too', 'work it in', () => {
+          hideUndo()
+          void runReshape(tl, txt, img, spoken)
+        })
+      }
+      micUsed = false
+    } else if (pf.mode === 'ask' && pf.tl) {
+      const q = v.trim()
+      micUsed = false
+      pendingImage = null
+      if (!q) return
+      void runAnswer(pf.tl, q)
     } else if (pf.mode === 'path' && pf.tl) {
       patchExtra(pf.tl.t, { kept: true })
       say('the path is kept — it will wait for you')
@@ -2630,35 +2636,6 @@ function mountSky(root: HTMLDivElement) {
     }
     closePage(true)
   })
-  /**
-   * The second way out of the writing page, which is two verbs.
-   *
-   * Everything you write about a thing is either something you are telling it
-   * or something you are asking it, and those want opposite things back: one
-   * moves the map, the other explains. Which one it is, is in the words —
-   * isQuestion() is the same test that decides whether a drop gets `answer it`
-   * or `work it`, so a sentence that reads as a question here is treated as a
-   * question everywhere.
-   *
-   * This is the thing that went missing when I cut the row to three: you could
-   * ask a *question* about itself, and nothing anywhere let you ask a question
-   * about something that was not one. Standing in front of "Memory
-   * architecture proof of concept" and wanting to know what mem 2.0 is had no
-   * gesture at all. It is this one, and the answer comes back as a brief on
-   * the thing you asked it about, which is where it belongs.
-   */
-  const sayVerb = () => {
-    const asking = isQuestion(pageT.value)
-    pageD2.textContent = asking ? 'Answer it' : 'Work it in'
-    pageD2.classList.toggle('ask', asking)
-  }
-  pageT.addEventListener('input', () => {
-    if (pageFor?.mode === 'say') sayVerb()
-  })
-  pageD2.addEventListener('click', () => {
-    handOver = true
-    closePage(true)
-  })
   pageX.addEventListener('click', () => closePage(false))
   function absorbAnim(id: string) {
     const p = posOf(id)
@@ -2683,8 +2660,6 @@ function mountSky(root: HTMLDivElement) {
   const speechOK = !!SRCls
   let rec: SpeechRecognitionLike | null = null
   let micUsed = false
-  /** Set only by the writing page's second button: give this to the agent. */
-  let handOver = false
   // the stored thumbnail is far too small to read text from, so a capture also
   // keeps a legible copy in memory for as long as the page is open
   let pendingImage: { mediaType: string; dataB64: string } | null = null
@@ -2836,7 +2811,7 @@ function mountSky(root: HTMLDivElement) {
   pageAbsorb.addEventListener('click', () => void runOrganize(micUsed))
 
   pageLater.addEventListener('click', () => {
-    if (!pageFor || pageFor.mode !== 'edit' || !pageFor.tl) return
+    if (!pageFor || pageFor.mode !== 'open' || !pageFor.tl) return
     const t = pageFor.tl.t
     closePage(false)
     restDrop(t)
@@ -2896,24 +2871,25 @@ function mountSky(root: HTMLDivElement) {
     const ready = isKept(tl.t) || isRipe(tl.t) || !!briefOf(tl.t.id)
     const canRain = tl.kind === 'drop' || tl.members.length >= 1
 
-    // 1. Everything this thing holds, in one place.
-    acts.push({
-      icon: 'list',
-      lb: 'open',
-      run: () => {
-        closeMoons()
-        openPage('open', tl, toScreenX(p.x), toScreenY(p.y))
-      },
-    })
-
-    // 2. Words into it. What happens to them is decided on the page, after
-    //    they exist.
+    // 1. Words into it. Yours, kept, no round trip.
     acts.push({
       icon: 'tell',
       lb: 'say',
       run: () => {
         closeMoons()
         openPage('say', tl, toScreenX(p.x), toScreenY(p.y))
+      },
+    })
+
+    // 2. Words *to* it. Anything you want to know, with this as the context —
+    //    which is most of what makes the question worth asking.
+    acts.push({
+      icon: 'ask',
+      lb: 'ask',
+      dim: S().offline,
+      run: () => {
+        closeMoons()
+        openPage('ask', tl, toScreenX(p.x), toScreenY(p.y))
       },
     })
 
@@ -3898,7 +3874,7 @@ function mountSky(root: HTMLDivElement) {
       const t = S().thoughts.find((x) => x.id === id)
       if (t) {
         const p = posOf(id)
-        openPage('edit', { kind: 'drop', t, members: [] }, toScreenX(p.x), toScreenY(p.y))
+        openPage('open', { kind: 'drop', t, members: [] }, toScreenX(p.x), toScreenY(p.y))
       }
       return
     }
@@ -3936,7 +3912,11 @@ function mountSky(root: HTMLDivElement) {
     }
     if (moonsFor === id) {
       closeMoons()
-      openPage('edit', tl, toScreenX(p.x), toScreenY(p.y))
+      // The second tap is the way to the thing itself, for a drop exactly as
+      // for a group. It used to land on a page of its own that held the same
+      // four things this one does, which is why `open` sat in the row doing
+      // what the gesture already did.
+      openPage('open', tl, toScreenX(p.x), toScreenY(p.y))
     } else {
       clearAll()
       showMoons(tl)
