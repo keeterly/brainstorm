@@ -14,6 +14,7 @@ import { NoticedPanel } from './Noticed'
 import { Answered } from './Answered'
 import { isQuestion } from '@/domain/question'
 import { answerThought } from '@/features/sky/answerFlow'
+import { fullDepth, sizeUp, waitingWord, type Sizing } from '@/features/sky/gaugeFlow'
 import type { AnswerOutput } from '@shared/ai/actions/answer'
 import type { Thought } from '@/domain/types'
 
@@ -37,6 +38,7 @@ export default function CurrentPage() {
   const [askedFor, setAskedFor] = useState<{ id: string; out: AnswerOutput } | null>(null)
   const [askFailed, setAskFailed] = useState<string | null>(null)
   const [waited, setWaited] = useState(0)
+  const [sizing, setSizing] = useState<Sizing | null>(null)
 
   const today = todayISO()
   const prepass = useMemo(
@@ -123,12 +125,18 @@ export default function CurrentPage() {
     setAskFailed(null)
     setAskedFor(null)
     setWaited(0)
-    // it really is a minute; a button that just dims for that long reads as broken
+    setSizing(null)
+    // How long depends entirely on the question, so a cheap read goes first and
+    // then the button says what it is actually doing rather than dimming for an
+    // unspecified minute, which reads as broken.
     const began = Date.now()
     const tick = setInterval(() => setWaited(Math.round((Date.now() - began) / 1000)), 1000)
-    const res = await answerThought(t.id)
+    const sz = await sizeUp(t.id, 'answer', 3)
+    setSizing(sz)
+    const res = await answerThought(t.id, { sizing: sz })
     clearInterval(tick)
     setAsking(null)
+    setSizing(null)
     if (res.kind === 'answered') setAskedFor({ id: t.id, out: res.output })
     else setAskFailed(res.why ?? 'could not get out there just now')
   }
@@ -189,24 +197,38 @@ export default function CurrentPage() {
                 className="btn btn--primary"
                 onClick={() => void askIt(primary)}
                 disabled={!!asking || offline}
+                // A fixed label while it works. What it is doing varies in
+                // length and belongs on the line below; putting it in the
+                // button made the button grow mid-press and shunted Done onto
+                // a second row, which is the layout moving under your thumb.
+                style={{ minWidth: 116 }}
               >
-                {asking === primary.id ? (waited > 10 ? `finding out · ${waited}s` : 'finding out…') : 'Answer it'}
+                {asking === primary.id ? 'Answering…' : 'Answer it'}
               </button>
             )}
-            <button
-              className={primaryAsks && !answerHere ? 'btn btn--ghost' : 'btn btn--primary'}
-              onClick={() => setFocusId(primary.id)}
-            >
-              Focus
-            </button>
+            {/* Focus is for sitting with the thing. While it is being answered
+                you are not sitting with it, and the row is better with room. */}
+            {asking !== primary.id && (
+              <button
+                className={primaryAsks && !answerHere ? 'btn btn--ghost' : 'btn btn--primary'}
+                onClick={() => setFocusId(primary.id)}
+              >
+                Focus
+              </button>
+            )}
             <button className="btn btn--ghost" onClick={() => complete(primary)}>
               Done
             </button>
           </div>
 
+          {/* Where the variable-length truth goes: what it is doing, how long
+              it has been, and — only when it is genuinely going to be a while —
+              that you can put the phone down. An ask that needs nothing looked
+              up lands before you could lock anything. */}
           {asking === primary.id && (
-            <p className="faint" style={{ fontSize: 'var(--fs-caption)', marginTop: 12 }}>
-              it keeps going if you lock the phone
+            <p className="muted" style={{ fontSize: 'var(--fs-caption)', marginTop: 12 }}>
+              {waitingWord(sizing ?? { ...fullDepth(3), why: 'sizing it up' }, waited)}
+              {sizing && !sizing.quick && ' · it keeps going if you lock the phone'}
             </p>
           )}
           {askFailed && !asking && (

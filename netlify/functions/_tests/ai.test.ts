@@ -364,3 +364,51 @@ describe('the waiting around a fast action', () => {
     expect(typeof t.auth_ms).toBe('number')
   })
 })
+
+describe('sizing the work to the ask', () => {
+  it('spends nothing on searching when the caller says nothing needs looking up', async () => {
+    state.anthropicResponses = [anthropicToolResponse(DEEPEN_OUT)]
+    await handler(req({ ...DEEPEN_REQ, searches: 0 }))
+    const call = state.anthropicCalls[0] as { tools: { type?: string }[]; tool_choice: { type: string } }
+    expect(call.tools.some((t) => t.type === 'web_search_20250305')).toBe(false)
+    // and with nothing to search for, emit can be forced — one call, no
+    // second pass to collect an answer it never got round to giving
+    expect(call.tool_choice.type).toBe('tool')
+  })
+
+  it('spends what it was told to, when it was told less than the ceiling', async () => {
+    state.anthropicResponses = [anthropicToolResponse(DEEPEN_OUT)]
+    await handler(req({ ...DEEPEN_REQ, searches: 2 }))
+    const call = state.anthropicCalls[0] as { tools: { type?: string; max_uses?: number }[] }
+    expect(call.tools.find((t) => t.type === 'web_search_20250305')?.max_uses).toBe(2)
+  })
+
+  it('will not let a caller ask for more searching than the action allows', async () => {
+    // the action definition is the authority on what a run may cost; the
+    // request is only permitted to want less of it
+    state.anthropicResponses = [anthropicToolResponse(DEEPEN_OUT)]
+    await handler(req({ ...DEEPEN_REQ, searches: 10 }))
+    const call = state.anthropicCalls[0] as { tools: { type?: string; max_uses?: number }[] }
+    expect(call.tools.find((t) => t.type === 'web_search_20250305')?.max_uses).toBe(4)
+  })
+
+  it('cannot be used to make an action search that was never allowed to', async () => {
+    state.anthropicResponses = [anthropicToolResponse(GOOD_OUTPUT)]
+    await handler(req({ ...VALID, searches: 8 }))
+    const call = state.anthropicCalls[0] as { tools: { type?: string }[] }
+    expect(call.tools.some((t) => t.type === 'web_search_20250305')).toBe(false)
+  })
+
+  it('falls back to the action’s own depth when nobody said', async () => {
+    state.anthropicResponses = [anthropicToolResponse(DEEPEN_OUT)]
+    await handler(req(DEEPEN_REQ))
+    const call = state.anthropicCalls[0] as { tools: { type?: string; max_uses?: number }[] }
+    expect(call.tools.find((t) => t.type === 'web_search_20250305')?.max_uses).toBe(4)
+  })
+
+  it('records how deep it went, so the choice can be second-guessed later', async () => {
+    state.anthropicResponses = [anthropicToolResponse(DEEPEN_OUT)]
+    await handler(req({ ...DEEPEN_REQ, searches: 0 }))
+    expect((state.runPatches[0].timings as { searches?: number }).searches).toBe(0)
+  })
+})

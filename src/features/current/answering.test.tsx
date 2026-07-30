@@ -62,9 +62,19 @@ function seed(title: string) {
   })
 }
 
+// Asking now costs two calls: a cheap read that decides how much looking-up
+// this one needs, then the answer itself at that depth.
+const GAUGED = { depth: 'deep', needs: ['live fares for those dates'], why: 'checking the fares' }
+let answerFails: Error | null = null
+
 beforeEach(() => {
+  answerFails = null
   run.mockReset()
-  run.mockResolvedValue({ runId: 'r1', output: OUT })
+  run.mockImplementation(async (action: string) => {
+    if (action === 'gauge') return { runId: null, output: GAUGED }
+    if (answerFails) throw answerFails
+    return { runId: 'r1', output: OUT }
+  })
 })
 
 describe('the one thing to do, when it is a question', () => {
@@ -111,7 +121,7 @@ describe('the one thing to do, when it is a question', () => {
 
   it('says so, in the user’s words, when it could not get out there', async () => {
     seed(QUESTION)
-    run.mockRejectedValueOnce(new Error('offline'))
+    answerFails = new Error('offline')
     render(
       <MemoryRouter>
         <CurrentPage />

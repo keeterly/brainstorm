@@ -14,6 +14,7 @@ import { namePool } from './actions/name-pool'
 import { cluster } from './actions/cluster'
 import { deepen } from './actions/deepen'
 import { answer } from './actions/answer'
+import { gauge } from './actions/gauge'
 import { notice } from './actions/notice'
 import { reshape } from './actions/reshape'
 
@@ -34,6 +35,7 @@ export const ACTION_REGISTRY: Record<string, ActionDef<any, any>> = {
   [cluster.name]: cluster,
   [deepen.name]: deepen,
   [answer.name]: answer,
+  [gauge.name]: gauge,
   [notice.name]: notice,
   [reshape.name]: reshape,
 }

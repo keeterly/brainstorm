@@ -10,6 +10,7 @@ import { runAction } from '@/ai/client'
 import type { AnswerOutput } from '@shared/ai/actions/answer'
 import type { PromptImage } from '@shared/ai/types'
 import { markApplied } from '@/ai/pending'
+import type { Sizing } from './gaugeFlow'
 
 export type AnswerResult =
   | { kind: 'answered'; line: string; added: number; settled: boolean; output: AnswerOutput }
@@ -17,7 +18,7 @@ export type AnswerResult =
 
 export async function answerThought(
   subjectId: string,
-  opts: { intent?: string; image?: PromptImage } = {},
+  opts: { intent?: string; image?: PromptImage; sizing?: Sizing } = {},
 ): Promise<AnswerResult> {
   const s = useGraph.getState()
   const subject = s.thoughts.find((t) => t.id === subjectId)
@@ -46,19 +47,24 @@ export async function answerThought(
     .map(title)
 
   try {
-    const { output, runId } = await runAction<AnswerOutput>('answer', {
-      subject: {
-        id: subject.id,
-        title: title(subject),
-        type: subject.type,
-        summary: subject.summary,
-        due: subject.due_date,
+    const { output, runId } = await runAction<AnswerOutput>(
+      'answer',
+      {
+        subject: {
+          id: subject.id,
+          title: title(subject),
+          type: subject.type,
+          summary: subject.summary,
+          due: subject.due_date,
+        },
+        context: [...inside, ...siblings].slice(0, 40),
+        under: parent ? title(parent) : undefined,
+        intent: opts.intent?.trim() || undefined,
+        image: opts.image,
       },
-      context: [...inside, ...siblings].slice(0, 40),
-      under: parent ? title(parent) : undefined,
-      intent: opts.intent?.trim() || undefined,
-      image: opts.image,
-    })
+      // a question whose answer needs nothing looked up comes back in seconds
+      opts.sizing ? { searches: opts.sizing.searches, background: !opts.sizing.quick } : {},
+    )
     return applyAnswer(subjectId, output, runId)
   } catch (e) {
     const why = (e as Error)?.message

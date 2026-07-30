@@ -38,6 +38,21 @@ function buildCtx() {
 export interface RunOptions {
   onDelta?: (chunk: string) => void
   signal?: AbortSignal
+  /** How much looking-up this one needs, when it has already been worked out.
+   *  The server clamps it to the action's ceiling, so this can only ask for
+   *  less. */
+  searches?: number
+  /**
+   * Override the route for this one run.
+   *
+   * ⚡ is a background job because research does not fit inside a request. But
+   * "research" is a property of the question, not of the button: an ask that
+   * turns out to need nothing looked up is an ordinary model call that lands in
+   * seconds, and sending it the long way round costs a spare Netlify
+   * invocation and several seconds of polling for an answer that was already
+   * ready. So when the caller knows, it says.
+   */
+  background?: boolean
 }
 
 /**
@@ -57,7 +72,7 @@ async function runInBackground<O>(
   const res = await fetch('/.netlify/functions/ai-background', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: auth },
-    body: JSON.stringify({ action, input, runId, ctx: buildCtx() }),
+    body: JSON.stringify({ action, input, runId, searches: opts.searches, ctx: buildCtx() }),
     signal: opts.signal,
   })
   // 202 is the happy path here; anything else was refused before it began
@@ -98,15 +113,18 @@ export async function runAction<O = unknown>(
   // it says it after a believable pause, so the demo shows the app working
   // rather than a row of buttons that fail.
   if (DEMO && DEMO_OUTPUT[action]) {
-    await new Promise((r) => setTimeout(r, 1400))
+    // paced like the real thing: the read that sizes up the ask is meant to be
+    // barely noticeable, and the work it sizes up is not
+    await new Promise((r) => setTimeout(r, ACTION_REGISTRY[action]?.modelTier === 'fast' ? 400 : 1400))
     return { runId: null, output: DEMO_OUTPUT[action] as O }
   }
   const auth = await authHeader()
-  if (ACTION_REGISTRY[action]?.background) return runInBackground<O>(action, input, auth, opts)
+  const long = opts.background ?? !!ACTION_REGISTRY[action]?.background
+  if (long) return runInBackground<O>(action, input, auth, opts)
   const res = await fetch('/api/ai', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: auth },
-    body: JSON.stringify({ action, input, ctx: buildCtx() }),
+    body: JSON.stringify({ action, input, searches: opts.searches, ctx: buildCtx() }),
     signal: opts.signal,
   })
 

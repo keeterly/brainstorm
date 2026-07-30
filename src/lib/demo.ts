@@ -134,6 +134,11 @@ export const DEMO_SEED = {
  * the shape of a real reply can be seen and read, not that it is true.
  */
 export const DEMO_OUTPUT: Record<string, unknown> = {
+  gauge: {
+    depth: 'deep',
+    needs: ['live LAX→CDG premium economy fares for those dates', 'Flying Blue award availability'],
+    why: 'checking two things first',
+  },
   answer: {
     asked: 'What does LAX→CDG premium economy cost, 28 September out and 9 October back?',
     answer:

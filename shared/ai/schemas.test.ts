@@ -42,6 +42,7 @@ function sampleInput(name: string): never {
     cluster: { loose: [ref], pools: [{ id: 'p1', name: 'SS27 show', members: ['book the space'] }] },
     deepen: { subject: ref, context: ['book the space'] },
     answer: { subject: ref, context: ['arrive by September 28'] },
+    gauge: { subject: ref, context: ['book the space'], kind: 'plan' },
     reshape: { subject: ref, inside: [ref], news: 'the studio fell through, Ana offered her garage' },
     notice: { thoughts: [ref], pools: [], recentlyDone: [] },
   }
@@ -409,5 +410,51 @@ describe('answer — the other half of ⚡, for the things that are questions', 
     const without: Record<string, unknown> = { ...good }
     delete without.settled
     expect(answer.outputSchema.safeParse(without).success).toBe(false)
+  })
+})
+
+describe('gauge — how much work the ask is worth', () => {
+  const gauge = ACTION_REGISTRY.gauge
+  const ctx = { nowISO: '2026-07-30T12:00:00Z', tzOffsetMin: -420, memory: [] }
+
+  it('is the cheapest call in the app, because it runs in front of every other one', () => {
+    expect(gauge.modelTier).toBe('fast')
+    expect(gauge.maxTokens).toBeLessThanOrEqual(500)
+    // it must not go and look things up in order to decide whether to look
+    // things up
+    expect(gauge.searchMaxUses).toBe(0)
+    expect(gauge.background).toBeFalsy()
+  })
+
+  it('is told which way being wrong is expensive', () => {
+    const p = gauge.buildPrompt({ subject: { id: 'g1', title: 'SS27 Lookbook' }, context: [], kind: 'plan' }, ctx)
+    expect(p.system).toContain('not symmetric')
+    expect(p.system).toContain('their own work')
+    expect(p.user).toContain('SS27 Lookbook')
+  })
+
+  it('knows whether a plan or an answer is coming next', () => {
+    const plan = gauge.buildPrompt({ subject: { id: 'g1', title: 'x' }, context: [], kind: 'plan' }, ctx)
+    const ask = gauge.buildPrompt({ subject: { id: 'g1', title: 'x' }, context: [], kind: 'answer' }, ctx)
+    expect(plan.user).toContain('the real way through')
+    expect(ask.user).toContain('the answer to this')
+  })
+
+  it('accepts the three depths and nothing else', () => {
+    for (const depth of ['known', 'light', 'deep']) {
+      expect(gauge.outputSchema.safeParse({ depth, needs: [], why: 'x' }).success, depth).toBe(true)
+    }
+    expect(gauge.outputSchema.safeParse({ depth: 'exhaustive', needs: [], why: 'x' }).success).toBe(false)
+  })
+})
+
+describe('the search ceiling belongs to the action', () => {
+  it('every action that may search declares how much it may search', () => {
+    for (const def of Object.values(ACTION_REGISTRY)) {
+      if (def.searchMaxUses === undefined) continue
+      expect(def.searchMaxUses, def.name).toBeGreaterThanOrEqual(0)
+      // a ceiling nobody would ever want to pay for is not a ceiling
+      expect(def.searchMaxUses, def.name).toBeLessThanOrEqual(8)
+    }
   })
 })

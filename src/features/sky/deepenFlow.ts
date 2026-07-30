@@ -10,6 +10,7 @@ import { runAction } from '@/ai/client'
 import type { DeepenOutput } from '@shared/ai/actions/deepen'
 import type { PromptImage } from '@shared/ai/types'
 import { markApplied } from '@/ai/pending'
+import type { Sizing } from './gaugeFlow'
 
 export type DeepenResult =
   | { kind: 'deepened'; note: string; added: number; output: DeepenOutput }
@@ -19,7 +20,7 @@ export type DeepenResult =
 
 export async function deepenThought(
   subjectId: string,
-  opts: { intent?: string; image?: PromptImage } = {},
+  opts: { intent?: string; image?: PromptImage; sizing?: Sizing } = {},
 ): Promise<DeepenResult> {
   const s = useGraph.getState()
   const subject = s.thoughts.find((t) => t.id === subjectId)
@@ -34,18 +35,25 @@ export async function deepenThought(
     .slice(0, 40)
 
   try {
-    const { output, runId } = await runAction<DeepenOutput>('deepen', {
-      subject: {
-        id: subject.id,
-        title: subject.title || subject.raw_content.slice(0, 300),
-        type: subject.type,
-        summary: subject.summary,
-        due: subject.due_date,
+    const { output, runId } = await runAction<DeepenOutput>(
+      'deepen',
+      {
+        subject: {
+          id: subject.id,
+          title: subject.title || subject.raw_content.slice(0, 300),
+          type: subject.type,
+          summary: subject.summary,
+          due: subject.due_date,
+        },
+        context,
+        intent: opts.intent?.trim() || undefined,
+        image: opts.image,
       },
-      context,
-      intent: opts.intent?.trim() || undefined,
-      image: opts.image,
-    })
+      // Nothing to look up is an ordinary call: it lands in seconds, and going
+      // the long way round would spend a background invocation and several
+      // seconds of polling on an answer that was already sitting there.
+      opts.sizing ? { searches: opts.sizing.searches, background: !opts.sizing.quick } : {},
+    )
 
     return applyDeepen(subjectId, output, runId)
   } catch (e) {

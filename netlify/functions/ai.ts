@@ -26,6 +26,10 @@ const DAILY_RUN_CAP = 400
 const BodySchema = z.object({
   action: z.string(),
   input: z.unknown(),
+  /** How much looking-up this run needs, when the caller has already worked
+   *  that out. Clamped below to the action's own ceiling: a request can only
+   *  ever ask for less than the action allows, never more. */
+  searches: z.number().int().min(0).max(10).optional(),
   ctx: z
     .object({
       tzOffsetMin: z.number().int().min(-840).max(840).default(0),
@@ -77,6 +81,11 @@ export default async (req: Request): Promise<Response> => {
     return json(429, { error: `Daily AI limit reached (${DAILY_RUN_CAP} runs). Try again tomorrow.` }, cors)
   }
 
+  // Only ever downward. The action definition is the authority on how much
+  // this may cost; the caller is merely allowed to want less of it.
+  const searchMaxUses =
+    body.searches === undefined ? undefined : Math.min(body.searches, def.searchMaxUses ?? 0)
+
   const ctx: PromptCtx = {
     nowISO: new Date().toISOString(),
     tzOffsetMin: body.ctx.tzOffsetMin,
@@ -106,7 +115,8 @@ export default async (req: Request): Promise<Response> => {
     runId: null, // filled in once the row lands
     startedAt,
     onDelta,
-    timings: { auth_ms, gate_ms },
+    searchMaxUses,
+    timings: { auth_ms, gate_ms, ...(searchMaxUses === undefined ? {} : { searches: searchMaxUses }) },
   })
 
   // ---- streaming path (SSE) ----

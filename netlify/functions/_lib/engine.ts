@@ -24,6 +24,10 @@ export interface RunRequest {
   runId: string | null
   startedAt: number
   onDelta?: (chunk: string) => void
+  /** How much looking-up this particular run gets, when the caller has already
+   *  worked out that this one needs less than the action's ceiling. Already
+   *  clamped to that ceiling by the endpoint. */
+  searchMaxUses?: number
   /** Anything the caller measured before the model was reached. */
   timings?: Record<string, number>
 }
@@ -69,7 +73,7 @@ export async function runToValidated(req: RunRequest): Promise<RunOutcome> {
         outputSchema: def.outputSchema,
         stream: def.stream,
         onDelta,
-        searchMaxUses: def.searchMaxUses,
+        searchMaxUses: req.searchMaxUses ?? def.searchMaxUses,
       })
     try {
       return await call(true)

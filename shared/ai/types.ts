@@ -31,8 +31,10 @@ export interface ActionDef<I = unknown, O = unknown> {
   modelTier: ModelTier
   maxTokens: number
   stream?: boolean
-  /** Let this action look things up on the web, up to this many searches.
-   *  Absent or zero means it answers from what it was given. */
+  /** The most this action may ever look things up on the web. A ceiling, not
+   *  a quota: a single run may ask for fewer, and the server clamps whatever it
+   *  asks for down to this, never up. Absent or zero means it answers from what
+   *  it was given. */
   searchMaxUses?: number
   /** This one cannot finish inside a request. Run it in the background and
    *  collect the answer from agent_runs. */

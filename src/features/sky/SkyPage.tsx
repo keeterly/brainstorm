@@ -15,6 +15,7 @@ import { nextAction } from '@/domain/next-action'
 import { armUpright, stepUpright, worldTilt } from '@/world/upright'
 import { applyDeepen, deepenThought } from './deepenFlow'
 import { applyAnswer, answerThought } from './answerFlow'
+import { fullDepth, sizeUp, waitingWord, type Sizing } from './gaugeFlow'
 import { isQuestion } from '@/domain/question'
 import { awaitRun, markApplied, pendingRuns, subjectOf } from '@/ai/pending'
 import { reshapeTally, reshapeThought } from './reshapeFlow'
@@ -2390,18 +2391,28 @@ function mountSky(root: HTMLDivElement) {
     // whole of that, and counts, rather than blinking once and leaving a
     // glowing drop and silence — which reads as nothing happening.
     const began = Date.now()
+    // How long this takes is a property of the ask, not of the button, so the
+    // notice stops promising a minute for everything. A cheap read decides
+    // first, and what it says stands as the wait.
+    let sizing: Sizing = { ...fullDepth(4), why: 'sizing it up' }
     const tick = () => {
       if (working !== tl.t.id) return
-      const s = Math.round((Date.now() - began) / 1000)
-      hold(s < 12 ? 'out finding out — this takes a minute' : `still out there · ${s}s`)
+      hold(waitingWord(sizing, Math.round((Date.now() - began) / 1000)))
     }
     tick()
-    const patience = setInterval(tick, 3000)
+    const patience = setInterval(tick, 1000)
+    sizing = await sizeUp(tl.t.id, 'plan', 4)
+    if (dead) {
+      clearInterval(patience)
+      return
+    }
+    tick()
     // if the drop is a picture, the picture is the thing being asked about
     const img = ex(tl.t).img as string | undefined
     const b64 = img?.includes(',') ? img.split(',')[1] : undefined
     const res = await deepenThought(tl.t.id, {
       image: b64 ? { mediaType: 'image/jpeg', dataB64: b64 } : undefined,
+      sizing,
     })
     clearInterval(patience)
     working = null
@@ -2468,17 +2479,24 @@ function mountSky(root: HTMLDivElement) {
     working = tl.t.id
     els.get(tl.t.id)?.classList.add('working')
     const began = Date.now()
+    let sizing: Sizing = { ...fullDepth(3), why: 'sizing it up' }
     const tick = () => {
       if (working !== tl.t.id) return
-      const s = Math.round((Date.now() - began) / 1000)
-      hold(s < 12 ? 'finding out — this takes a minute' : `still looking · ${s}s`)
+      hold(waitingWord(sizing, Math.round((Date.now() - began) / 1000)))
     }
     tick()
-    const patience = setInterval(tick, 3000)
+    const patience = setInterval(tick, 1000)
+    sizing = await sizeUp(tl.t.id, 'answer', 3)
+    if (dead) {
+      clearInterval(patience)
+      return
+    }
+    tick()
     const img = ex(tl.t).img as string | undefined
     const b64 = img?.includes(',') ? img.split(',')[1] : undefined
     const res = await answerThought(tl.t.id, {
       image: b64 ? { mediaType: 'image/jpeg', dataB64: b64 } : undefined,
+      sizing,
     })
     clearInterval(patience)
     working = null

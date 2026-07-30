@@ -20,6 +20,10 @@ const DAILY_RUN_CAP = 400
 const BodySchema = z.object({
   action: z.string(),
   input: z.unknown(),
+  /** How much looking-up this run needs, when the caller has already worked
+   *  that out. Clamped below to the action's own ceiling: a request can only
+   *  ever ask for less than the action allows, never more. */
+  searches: z.number().int().min(0).max(10).optional(),
   // the client picks the id so it knows what to watch, since a background
   // function has no way to answer
   runId: z.string().uuid(),
@@ -74,9 +78,16 @@ export default async (req: Request): Promise<Response> => {
     input: parsedInput.data,
   })
 
+  // Only ever downward. The action definition is the authority on how much
+  // this may cost; the caller is merely allowed to want less of it.
+  const searchMaxUses =
+    body.searches === undefined ? undefined : Math.min(body.searches, def.searchMaxUses ?? 0)
+
   const request: RunRequest = {
     def,
     input: parsedInput.data,
+    searchMaxUses,
+    timings: searchMaxUses === undefined ? undefined : { searches: searchMaxUses },
     ctx: {
       nowISO: new Date().toISOString(),
       tzOffsetMin: body.ctx.tzOffsetMin,
