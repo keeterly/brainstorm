@@ -1823,8 +1823,17 @@ function mountSky(root: HTMLDivElement) {
       pageT.placeholder = 'Name it'
       nameFor = tl.t.id
       // Keeping what was just ticked, so the row strikes through under your
-      // finger instead of vanishing out from under it.
-      const inside = membersOf(tl.t.id, true)
+      // finger instead of vanishing out from under it — and settling to the
+      // bottom, because four finished things stranded among nine unfinished
+      // ones is a list you have to read twice to find your place in.
+      const statusOf = (id: string) => S().thoughts.find((t) => t.id === id)?.status
+      const inside = membersOf(tl.t.id, true).sort((a2, b2) => {
+        const da = statusOf(a2.id) === 'done' ? 1 : 0
+        const db = statusOf(b2.id) === 'done' ? 1 : 0
+        if (da !== db) return da - db
+        // among the finished, in the order they were finished
+        return da ? String(a2.completed_at ?? '').localeCompare(String(b2.completed_at ?? '')) : 0
+      })
       const done = () => inside.filter((m) => S().thoughts.find((t) => t.id === m.id)?.status === 'done').length
       const tally = () => {
         const d = done()
@@ -1929,6 +1938,7 @@ function mountSky(root: HTMLDivElement) {
           const nowDone = S().thoughts.find((t) => t.id === m.id)?.status === 'done'
           tick.setAttribute('aria-checked', String(nowDone))
           row.classList.toggle('ticked', nowDone)
+          settle(row as HTMLDivElement, nowDone)
           tally()
         })
         row.querySelector('.out')?.addEventListener('click', (e) => {
@@ -2228,6 +2238,60 @@ function mountSky(root: HTMLDivElement) {
       redrawGroupPage()
       say('back the way it was')
     })
+  }
+
+  /**
+   * Send a finished row to the bottom, and bring an un-finished one back up.
+   *
+   * Ticking something off left it exactly where it was, so a list of nine
+   * ended up with four struck-through rows scattered through it and you had to
+   * read the whole thing to find your place. Done work belongs underneath the
+   * work that is left.
+   *
+   * Moved, then animated from where it was — measure, reorder, offset every row
+   * that shifted by how far it shifted, and let all of them travel to zero
+   * together. Offsets are taken from offsetTop rather than the viewport,
+   * because the list scrolls and reordering inside a scrolled box moves the
+   * viewport out from under the measurement.
+   */
+  function settle(row: HTMLDivElement, done: boolean) {
+    const host = row.parentElement
+    if (!host) return
+    const rows = () => [...host.querySelectorAll('.row:not(.add)')] as HTMLDivElement[]
+    const before = new Map(rows().map((r) => [r, r.offsetTop]))
+
+    const all = rows()
+    if (done) {
+      // after everything, finished or not: the most recently done sits last
+      const last = all[all.length - 1]
+      if (last !== row) last.after(row)
+    } else {
+      // back up to just above the first finished row, which is where the
+      // unfinished work ends
+      const firstDone = all.find((r) => r !== row && r.classList.contains('ticked'))
+      if (firstDone) firstDone.before(row)
+      else {
+        const last = all[all.length - 1]
+        if (last !== row) last.after(row)
+      }
+    }
+    if (reduced) return
+
+    for (const r of rows()) {
+      const was = before.get(r)
+      if (was === undefined) continue
+      const delta = was - r.offsetTop
+      if (!delta) continue
+      r.style.transition = 'none'
+      r.style.transform = `translateY(${delta}px)`
+    }
+    // one reflow, then let them all travel home together
+    void host.offsetHeight
+    for (const r of rows()) {
+      if (!r.style.transform) continue
+      r.style.transition = 'transform 380ms cubic-bezier(0.2, 0.8, 0.2, 1)'
+      r.style.transform = ''
+    }
   }
 
   /**

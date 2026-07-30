@@ -641,12 +641,25 @@ body.sky-held {
   border-color: var(--paper-ink, #3d4b5c);
 }
 .sky-page .pans .row.ticked .tick::after { opacity: 1; transform: rotate(-45deg) scale(1); }
-/* struck through and stepped back, but still legible and still yours to un-tick */
+/* Struck through and stepped back — the whole row, not only its words. The
+   tick, the text and the way out all belong to something finished, so they
+   recede together and the unfinished work above keeps the page's attention.
+   Still legible, and still yours to un-tick. */
 .sky-page .pans .row.ticked .t {
   color: var(--paper-soft, #8fa3b6);
   text-decoration: line-through;
   text-decoration-thickness: 1px;
-  text-decoration-color: rgba(19, 26, 36, 0.3);
+  text-decoration-color: rgba(19, 26, 36, 0.28);
+}
+.sky-page .pans .row.ticked { opacity: 0.62; }
+.sky-page .pans .row.ticked .tick::before {
+  background: var(--paper-soft, #8fa3b6);
+  border-color: var(--paper-soft, #8fa3b6);
+}
+/* the rows travel when one of them sinks; nothing else about them moves */
+.sky-page .pans .row { will-change: transform; }
+@media (prefers-reduced-motion: reduce) {
+  .sky-page .pans .row { transition: none !important; }
 }
 
 /* choosing: square, hollow until chosen, and no tick inside it */
@@ -656,6 +669,7 @@ body.sky-held {
   background: none;
   border-color: rgba(19, 26, 36, 0.22);
 }
+.sky-page .pans.picking .row.ticked { opacity: 1; }
 .sky-page .pans.picking .row.on .tick::before {
   background: var(--paper-ink, #3d4b5c);
   border-color: var(--paper-ink, #3d4b5c);
