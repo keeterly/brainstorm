@@ -11,6 +11,7 @@
 // finished-and-unclaimed, hands each one to whoever knows how to apply it, and
 // marks it claimed so a second device does not apply it twice.
 import { supabase } from '@/lib/supabase'
+import { whyItFailed } from './why'
 
 export interface PendingRun {
   id: string
@@ -76,11 +77,12 @@ export async function awaitRun(
   while (Date.now() < deadline) {
     if (opts.signal?.aborted) return { ok: false, why: 'cancelled' }
     await new Promise((r) => setTimeout(r, wait))
-    wait = Math.min(wait * 1.4, 6000)
+    wait = Math.min(wait * 1.4, 3000)
     const { data } = await supabase.from('agent_runs').select('status,output,error').eq('id', runId).maybeSingle()
     if (!data || data.status === 'running') continue
     if (data.status === 'succeeded') return { ok: true, output: data.output }
-    return { ok: false, why: (data.error as string) || 'the agent could not finish' }
+    // the row's own words are for the record; this is what a person is told
+    return { ok: false, why: whyItFailed(data.status as string, (data.error as string) ?? null) }
   }
   return { ok: false, why: 'it never came back' }
 }

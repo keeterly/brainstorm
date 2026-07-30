@@ -15,6 +15,10 @@ export interface CompleteResult {
   model: string
   /** What it actually went and looked up, when it was allowed to look. */
   searched?: string[]
+  /** Why the model stopped. 'max_tokens' means the answer was cut off, which
+   *  is a completely different failure from the answer being wrong, and used
+   *  to arrive dressed as the same one. */
+  stopReason?: string
 }
 
 export interface LLMProvider {
@@ -49,6 +53,7 @@ interface AnthropicResponse {
   content?: Block[]
   usage?: { input_tokens?: number; output_tokens?: number }
   model?: string
+  stop_reason?: string
 }
 
 /** What it typed into the search box, for the record shown to the user. */
@@ -117,6 +122,7 @@ export class AnthropicProvider implements LLMProvider {
     const data = (await r.json()) as AnthropicResponse
     let content = data.content || []
     let usage = data.usage
+    let stopReason = data.stop_reason
     const searched = queriesIn(content)
 
     let toolBlock = content.find((b) => b.type === 'tool_use' && b.name === 'emit')
@@ -135,6 +141,7 @@ export class AnthropicProvider implements LLMProvider {
         })
       ).json()) as AnthropicResponse
       content = second.content || []
+      stopReason = second.stop_reason
       toolBlock = content.find((b) => b.type === 'tool_use' && b.name === 'emit')
       usage = {
         input_tokens: (usage?.input_tokens ?? 0) + (second.usage?.input_tokens ?? 0),
@@ -150,6 +157,7 @@ export class AnthropicProvider implements LLMProvider {
       },
       model: data.model ?? opts.model,
       searched,
+      stopReason,
     }
   }
 
@@ -189,6 +197,7 @@ export class AnthropicProvider implements LLMProvider {
     let jsonBuf = ''
     let inputTokens = 0
     let outputTokens = 0
+    let stopReason: string | undefined
     for (;;) {
       const { done, value } = await reader.read()
       if (done) break
@@ -201,7 +210,7 @@ export class AnthropicProvider implements LLMProvider {
         if (!payload || payload === '[DONE]') continue
         let ev: {
           type?: string
-          delta?: { type?: string; partial_json?: string }
+          delta?: { type?: string; partial_json?: string; stop_reason?: string }
           message?: { usage?: { input_tokens?: number } }
           usage?: { output_tokens?: number; input_tokens?: number }
         }
@@ -218,8 +227,9 @@ export class AnthropicProvider implements LLMProvider {
           jsonBuf += chunk
           if (chunk && onDelta) onDelta(chunk)
         }
-        if (ev.type === 'message_delta' && ev.usage?.output_tokens) {
-          outputTokens = ev.usage.output_tokens
+        if (ev.type === 'message_delta') {
+          if (ev.usage?.output_tokens) outputTokens = ev.usage.output_tokens
+          if (ev.delta?.stop_reason) stopReason = ev.delta.stop_reason
         }
       }
     }
@@ -230,6 +240,6 @@ export class AnthropicProvider implements LLMProvider {
     } catch {
       throw new Error('Streamed structured output was not valid JSON')
     }
-    return { json, usage: { inputTokens, outputTokens }, model }
+    return { json, usage: { inputTokens, outputTokens }, model, stopReason }
   }
 }

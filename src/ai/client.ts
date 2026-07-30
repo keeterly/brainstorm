@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { useGraph } from '@/store/graph'
 import { ACTION_REGISTRY } from '@shared/ai/registry'
 import { DEMO, DEMO_OUTPUT } from '@/lib/demo'
+import { whyItFailed } from './why'
 
 /** Long enough for real research, short enough to give up eventually. */
 const BG_GIVE_UP_MS = 4 * 60 * 1000
@@ -69,7 +70,12 @@ async function runInBackground<O>(
   let wait = 1500
   while (Date.now() - started < BG_GIVE_UP_MS) {
     await new Promise((r) => setTimeout(r, wait))
-    wait = Math.min(wait * 1.4, 6000)
+    // Capped at three seconds, not six. The work finishes on a server and the
+    // page finds out on its next look, so half the cap is dead time added to
+    // every background run — six seconds of a phone showing "still out there"
+    // after the answer was already written down. The extra polls are one
+    // indexed row each.
+    wait = Math.min(wait * 1.4, 3000)
     if (opts.signal?.aborted) throw new AIError('Cancelled', runId)
     const { data } = await supabase
       .from('agent_runs')
@@ -78,7 +84,7 @@ async function runInBackground<O>(
       .maybeSingle()
     if (!data || data.status === 'running') continue
     if (data.status === 'succeeded') return { runId, output: data.output as O }
-    throw new AIError(data.error || 'The agent could not finish', runId)
+    throw new AIError(whyItFailed(data.status as string, (data.error as string) ?? null), runId)
   }
   throw new AIError('Still working — it may land on its own', runId)
 }
@@ -147,6 +153,11 @@ export async function runAction<O = unknown>(
     output?: O
     error?: string
   }
-  if (!res.ok) throw new AIError(body.error ?? `HTTP ${res.status}`, body.runId ?? null, res.status)
+  // 4xx are already precise and addressed to the reader; a 502 is the engine
+  // failing, and the reader should not be handed the engine's own words for it
+  if (!res.ok) {
+    const msg = res.status >= 500 ? whyItFailed(null, body.error ?? null) : (body.error ?? `HTTP ${res.status}`)
+    throw new AIError(msg, body.runId ?? null, res.status)
+  }
   return { runId: body.runId ?? null, output: body.output as O }
 }

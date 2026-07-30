@@ -111,14 +111,15 @@ export const deepen: ActionDef<DeepenInput, DeepenOutput> = {
         `vocabulary. If it names a programme, a scheme, a place or a person, name it back.\n` +
         `found: what you learned by looking, that they could not have written themselves. Real numbers, real ` +
         `requirements, real names. Each with one line of why it matters to them specifically. Nothing generic; ` +
-        `if searching turned up nothing worth saying, return fewer.\n` +
-        `steps: the actual sequence, first thing first. Each one small enough to sit down and do, phrased as an ` +
-        `action they take. Use dependsOn with your own tempIds where order genuinely matters. Effort is 1 (a few ` +
-        `minutes) to 5 (a week of real work).\n` +
-        `watchOuts: where this usually goes wrong, if you know. Omit rather than pad.\n` +
-        `sources: what you actually used, with real URLs from the search results.\n` +
+        `if searching turned up nothing worth saying, return fewer. At most 8.\n` +
+        `steps: the actual sequence, first thing first. **At most 10** — if the work is bigger than ten steps, ` +
+        `give the ten that come first and let the rest wait; an eleventh is not accepted. Each one small enough ` +
+        `to sit down and do, phrased as an action they take. Use dependsOn with your own tempIds where order ` +
+        `genuinely matters. Effort is 1 (a few minutes) to 5 (a week of real work).\n` +
+        `watchOuts: where this usually goes wrong, if you know. At most 4. Omit rather than pad.\n` +
+        `sources: what you actually used, with real URLs from the search results. At most 10.\n` +
         `learned: anything durable you now know about *them* — how they work, what they are building, what they ` +
-        `already have. Not about this task. Nothing you were already told above. Omit if nothing.\n` +
+        `already have. At most 3. Not about this task. Nothing you were already told above. Omit if nothing.\n` +
         `note: one sentence to hand back, in their language.`,
       images: input.image ? [input.image] : undefined,
     }

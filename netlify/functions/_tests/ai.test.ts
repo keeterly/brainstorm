@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import handler from '../ai'
+import { forgetVerified } from '../_lib/auth'
 
 // End-to-end function tests with the network fully mocked: Supabase auth,
 // agent_runs REST, and the Anthropic API.
@@ -29,6 +30,9 @@ function anthropicToolResponse(input: unknown) {
 }
 
 beforeEach(() => {
+  // a passed token check is remembered for a minute in the real thing; each
+  // test here needs to start from nobody being known
+  forgetVerified()
   state = {
     authOk: true,
     runRows: [],
@@ -232,5 +236,131 @@ describe('going out to look things up', () => {
     await handler(req(VALID))
     const call = state.anthropicCalls[0] as { tools: { type?: string }[] }
     expect(call.tools.some((t) => t.type === 'web_search_20250305')).toBe(false)
+  })
+})
+
+describe('being generous is not the same as being wrong', () => {
+  const eleven = {
+    ...DEEPEN_OUT,
+    steps: Array.from({ length: 11 }, (_, i) => ({
+      tempId: `s${i}`,
+      title: `step ${i}`,
+      why: 'because',
+      effort: 2,
+      dependsOn: [],
+    })),
+  }
+
+  it('keeps the research instead of spending another minute re-asking', async () => {
+    // the real failure: eighty-five seconds of live research thrown away over
+    // an eleventh step in a schema that allows ten
+    state.anthropicResponses = [anthropicToolResponse(eleven)]
+    const r = await handler(req(DEEPEN_REQ))
+    expect(r.status).toBe(200)
+    // one call, not two: it was clipped rather than re-asked
+    expect(state.anthropicCalls).toHaveLength(1)
+    const body = (await r.json()) as { output: { steps: unknown[] } }
+    expect(body.output.steps).toHaveLength(10)
+  })
+
+  it('says in the record that it clipped something, rather than pretending it did not', async () => {
+    state.anthropicResponses = [anthropicToolResponse(eleven)]
+    await handler(req(DEEPEN_REQ))
+    const timings = state.runPatches[0].timings as { trimmed?: string[] }
+    expect(timings.trimmed?.join(' ')).toContain('kept 10 of 11')
+  })
+
+  it('still re-asks when the output is actually wrong, not merely long', async () => {
+    // a bad enum is a misunderstanding; clipping must never paper over one
+    state.anthropicResponses = [
+      anthropicToolResponse({ ...GOOD_OUTPUT, type: 'martian' }),
+      anthropicToolResponse(GOOD_OUTPUT),
+    ]
+    const r = await handler(req(VALID))
+    expect(r.status).toBe(200)
+    expect(state.anthropicCalls).toHaveLength(2)
+  })
+})
+
+describe('what a failed run leaves behind', () => {
+  it('names the field, instead of one sentence that says nothing', async () => {
+    state.anthropicResponses = [
+      anthropicToolResponse({ ...GOOD_OUTPUT, type: 'martian' }),
+      anthropicToolResponse({ ...GOOD_OUTPUT, type: 'venusian' }),
+    ]
+    await handler(req(VALID))
+    const patch = state.runPatches[0]
+    expect(patch.status).toBe('invalid_output')
+    expect(String(patch.error)).toContain('type')
+  })
+
+  it('keeps what the model actually sent, so it can be looked at', async () => {
+    state.anthropicResponses = [
+      anthropicToolResponse({ ...GOOD_OUTPUT, type: 'martian' }),
+      anthropicToolResponse({ ...GOOD_OUTPUT, type: 'venusian' }),
+    ]
+    await handler(req(VALID))
+    const timings = state.runPatches[0].timings as { raw?: string }
+    expect(timings.raw).toContain('venusian')
+  })
+
+  it('tells a truncated answer apart from a wrong one', async () => {
+    // running out of room and misunderstanding the question used to arrive
+    // wearing the same message
+    state.anthropicResponses = [
+      { ...anthropicToolResponse({ read: 'partial' }), stop_reason: 'max_tokens' },
+      { ...anthropicToolResponse({ read: 'partial' }), stop_reason: 'max_tokens' },
+    ]
+    await handler(req(DEEPEN_REQ))
+    expect(String(state.runPatches[0].error)).toContain('ran out of room')
+  })
+})
+
+describe('the waiting around a fast action', () => {
+  it('does not queue the run row in front of the question', async () => {
+    // the row used to be written, and awaited, before the model was reached
+    let rowWrittenAt = 0
+    let modelCalledAt = 0
+    const inner = globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>
+    vi.stubGlobal('fetch', async (u: string | URL | Request, i?: RequestInit) => {
+      const s = String(u)
+      if (s.includes('/rest/v1/agent_runs') && i?.method === 'POST') rowWrittenAt = performance.now()
+      if (s.includes('api.anthropic.com')) modelCalledAt = performance.now()
+      return inner(String(u), i)
+    })
+    state.anthropicResponses = [anthropicToolResponse(GOOD_OUTPUT)]
+    const r = await handler(req(VALID))
+    expect(r.status).toBe(200)
+    // both start; neither waits on the other
+    expect(rowWrittenAt).toBeGreaterThan(0)
+    expect(modelCalledAt).toBeGreaterThan(0)
+    // and the answer still carries the row id
+    expect(((await r.json()) as { runId: string }).runId).toBe('run-1')
+  })
+
+  it('asks Supabase who you are once, not once per action', async () => {
+    state.anthropicResponses = [anthropicToolResponse(GOOD_OUTPUT), anthropicToolResponse(GOOD_OUTPUT)]
+    await handler(req(VALID))
+    await handler(req(VALID))
+    const calls = (globalThis.fetch as unknown as { mock: { calls: [string][] } }).mock.calls
+    const authCalls = calls.filter(([u]) => String(u).includes('/auth/v1/user'))
+    expect(authCalls).toHaveLength(1)
+  })
+
+  it('never remembers a token that was refused', async () => {
+    state.authOk = false
+    expect((await handler(req(VALID))).status).toBe(401)
+    state.authOk = true
+    state.anthropicResponses = [anthropicToolResponse(GOOD_OUTPUT)]
+    expect((await handler(req(VALID))).status).toBe(200)
+  })
+
+  it('records where the time went', async () => {
+    state.anthropicResponses = [anthropicToolResponse(GOOD_OUTPUT)]
+    await handler(req(VALID))
+    const t = state.runPatches[0].timings as Record<string, number>
+    expect(typeof t.model_ms).toBe('number')
+    expect(typeof t.total_ms).toBe('number')
+    expect(typeof t.auth_ms).toBe('number')
   })
 })

@@ -51,6 +51,8 @@ export async function finishRun(
     output_tokens?: number
     cost_usd?: number
     latency_ms?: number
+    /** phase breakdown, and on a failure the evidence for it */
+    timings?: Record<string, unknown>
   },
 ): Promise<void> {
   try {

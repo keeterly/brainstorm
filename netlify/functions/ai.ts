@@ -2,14 +2,24 @@
 // Runs named, versioned, Zod-validated actions server-side. The Anthropic key
 // never leaves this function; callers authenticate with their Supabase JWT and
 // every run is logged to agent_runs under their own user id (RLS enforced).
+//
+// The order things happen in here is the whole of how fast the app feels.
+// classify_thought measured between 1.9 and 3.4 seconds for one line of text,
+// and the model is under a second of that: the rest was three Supabase round
+// trips queued up in front of it — who are you, how many runs today, here is a
+// new row — each waiting for the last, before the question was even asked. Two
+// of those no longer block: the token check is remembered for a minute, and the
+// run row is opened alongside the model call rather than ahead of it. Only the
+// spend gate still goes first, because a guard that runs after the money is
+// spent is not a guard.
 import { z } from 'zod'
 import { ACTION_REGISTRY } from '../../shared/ai/registry'
-import { costUSD, MODEL_FOR_TIER } from '../../shared/ai/pricing'
+import { MODEL_FOR_TIER } from '../../shared/ai/pricing'
 import type { PromptCtx } from '../../shared/ai/types'
 import { corsHeaders, originAllowed } from './_lib/guard'
 import { verifyUser } from './_lib/auth'
-import { AnthropicProvider } from './_lib/provider'
-import { insertRun, finishRun, runsToday } from './_lib/runs'
+import { recordFailure, recordOutcome, runToValidated, type RunRequest } from './_lib/engine'
+import { insertRun, runsToday } from './_lib/runs'
 
 const DAILY_RUN_CAP = 400
 
@@ -37,7 +47,9 @@ export default async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') return json(405, { error: 'Method Not Allowed' }, cors)
   if (!originAllowed(req)) return json(403, { error: 'Forbidden' }, cors)
 
+  const startedAt = Date.now()
   const user = await verifyUser(req)
+  const auth_ms = Date.now() - startedAt
   if (!user) return json(401, { error: 'Sign in to use AI actions' }, cors)
 
   const apiKey = process.env.ANTHROPIC_API_KEY
@@ -58,7 +70,9 @@ export default async (req: Request): Promise<Response> => {
     return json(400, { error: 'Invalid input', details: parsedInput.error.flatten() }, cors)
   }
 
+  const gateAt = Date.now()
   const used = await runsToday(user.token, user.id)
+  const gate_ms = Date.now() - gateAt
   if (used >= DAILY_RUN_CAP) {
     return json(429, { error: `Daily AI limit reached (${DAILY_RUN_CAP} runs). Try again tomorrow.` }, cors)
   }
@@ -69,89 +83,31 @@ export default async (req: Request): Promise<Response> => {
     memory: body.ctx.memory,
   }
   const model = MODEL_FOR_TIER[def.modelTier]
-  const prompt = def.buildPrompt(parsedInput.data, ctx)
-  const provider = new AnthropicProvider(apiKey)
-  const startedAt = Date.now()
 
-  const runId = await insertRun(user.token, {
+  // Opened alongside the question, not in front of it. Nothing needs the row to
+  // exist until there is an outcome to write into it.
+  const rowP = insertRun(user.token, {
     user_id: user.id,
     action: def.name,
     action_version: def.version,
     model,
     input: parsedInput.data,
   })
+  // an unhandled rejection here would take the process down for a row nobody
+  // is waiting on; insertRun already swallows, this is the belt
+  rowP.catch(() => null)
 
-  // One transport retry on 429/5xx, then one schema-repair retry.
-  const attempt = async (extraUser: string, onDelta?: (c: string) => void) => {
-    try {
-      return await provider.completeStructured({
-        model,
-        maxTokens: def.maxTokens,
-        system: prompt.system,
-        user: prompt.user + extraUser,
-        images: prompt.images,
-        outputSchema: def.outputSchema,
-        stream: def.stream,
-        onDelta,
-        searchMaxUses: def.searchMaxUses,
-      })
-    } catch (e) {
-      const status = (e as { status?: number }).status
-      if (status === 429 || (status && status >= 500)) {
-        await new Promise((res) => setTimeout(res, 1500))
-        return provider.completeStructured({
-          model,
-          maxTokens: def.maxTokens,
-          system: prompt.system,
-          user: prompt.user + extraUser,
-          outputSchema: def.outputSchema,
-          stream: def.stream,
-          onDelta,
-          searchMaxUses: def.searchMaxUses,
-        })
-      }
-      throw e
-    }
-  }
-
-  const runToValidated = async (onDelta?: (c: string) => void) => {
-    let result = await attempt('', onDelta)
-    let parsed = def.outputSchema.safeParse(result.json)
-    let totalIn = result.usage.inputTokens
-    let totalOut = result.usage.outputTokens
-    if (!parsed.success) {
-      // Repair retry: show the model its own output and the validation errors.
-      const repair =
-        `\n\nYour previous attempt produced output that failed validation.\n` +
-        `Previous output: ${JSON.stringify(result.json).slice(0, 4000)}\n` +
-        `Validation errors: ${JSON.stringify(parsed.error.flatten()).slice(0, 2000)}\n` +
-        `Call emit again with corrected output.`
-      result = await attempt(repair, onDelta)
-      totalIn += result.usage.inputTokens
-      totalOut += result.usage.outputTokens
-      parsed = def.outputSchema.safeParse(result.json)
-    }
-    return { parsed, totalIn, totalOut, model: result.model }
-  }
-
-  const finalize = async (
-    parsed: z.SafeParseReturnType<unknown, unknown>,
-    totalIn: number,
-    totalOut: number,
-  ) => {
-    const latency = Date.now() - startedAt
-    if (runId) {
-      await finishRun(user.token, runId, {
-        status: parsed.success ? 'succeeded' : 'invalid_output',
-        output: parsed.success ? parsed.data : undefined,
-        error: parsed.success ? undefined : 'Output failed schema validation after repair retry',
-        input_tokens: totalIn,
-        output_tokens: totalOut,
-        cost_usd: costUSD(model, totalIn, totalOut),
-        latency_ms: latency,
-      })
-    }
-  }
+  const request = (onDelta?: (c: string) => void): RunRequest => ({
+    def,
+    input: parsedInput.data,
+    ctx,
+    apiKey,
+    userToken: user.token,
+    runId: null, // filled in once the row lands
+    startedAt,
+    onDelta,
+    timings: { auth_ms, gate_ms },
+  })
 
   // ---- streaming path (SSE) ----
   if (def.stream) {
@@ -161,22 +117,17 @@ export default async (req: Request): Promise<Response> => {
         const send = (obj: unknown) =>
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`))
         ;(async () => {
+          const rq = request((chunk) => send({ type: 'delta', chunk }))
           try {
-            const { parsed, totalIn, totalOut } = await runToValidated((chunk) =>
-              send({ type: 'delta', chunk }),
-            )
-            await finalize(parsed, totalIn, totalOut)
-            if (parsed.success) send({ type: 'result', runId, output: parsed.data })
-            else send({ type: 'error', runId, message: 'AI output failed validation — try again' })
+            const out = await runToValidated(rq)
+            rq.runId = await rowP
+            await recordOutcome(rq, out)
+            if (out.parsed.success) send({ type: 'result', runId: rq.runId, output: out.parsed.data })
+            else send({ type: 'error', runId: rq.runId, message: 'AI output failed validation — try again' })
           } catch (e) {
-            if (runId) {
-              await finishRun(user.token, runId, {
-                status: 'failed',
-                error: String((e as Error).message || e),
-                latency_ms: Date.now() - startedAt,
-              })
-            }
-            send({ type: 'error', runId, message: String((e as Error).message || e) })
+            rq.runId = await rowP
+            await recordFailure(rq, e)
+            send({ type: 'error', runId: rq.runId, message: String((e as Error).message || e) })
           } finally {
             controller.close()
           }
@@ -190,20 +141,17 @@ export default async (req: Request): Promise<Response> => {
   }
 
   // ---- buffered path ----
+  const rq = request()
   try {
-    const { parsed, totalIn, totalOut } = await runToValidated()
-    await finalize(parsed, totalIn, totalOut)
-    if (parsed.success) return json(200, { runId, output: parsed.data }, cors)
-    return json(502, { runId, error: 'AI output failed validation — try again' }, cors)
+    const out = await runToValidated(rq)
+    rq.runId = await rowP
+    await recordOutcome(rq, out)
+    if (out.parsed.success) return json(200, { runId: rq.runId, output: out.parsed.data }, cors)
+    return json(502, { runId: rq.runId, error: 'AI output failed validation — try again' }, cors)
   } catch (e) {
-    if (runId) {
-      await finishRun(user.token, runId, {
-        status: 'failed',
-        error: String((e as Error).message || e),
-        latency_ms: Date.now() - startedAt,
-      })
-    }
-    return json(502, { runId, error: String((e as Error).message || e) }, cors)
+    rq.runId = await rowP
+    await recordFailure(rq, e)
+    return json(502, { runId: rq.runId, error: String((e as Error).message || e) }, cors)
   }
 }
 

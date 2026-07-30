@@ -137,8 +137,8 @@ export const answer: ActionDef<AnswerInput, AnswerOutput> = {
         `answer: the answer itself, two to five sentences. Open with the specific thing — the figure, the name, ` +
         `the date, the yes or no. Then only what is needed to use it. No preamble, no restating the question, ` +
         `no encouragement.\n` +
-        `facts: the concrete part, one row each, so it can be read at a glance. Label short, value specific ` +
-        `("$1,180–$1,420 round trip", "Air France AF65, 777-300ER"). Note is one line of what makes that row ` +
+        `facts: the concrete part, one row each, so it can be read at a glance. At most 8. Label short, value ` +
+        `specific ("$1,180–$1,420 round trip", "Air France AF65, 777-300ER"). Note is one line of what makes that row ` +
         `matter. Skip the row entirely rather than pad it.\n` +
         `asOf: when this is true as of, and how quickly it moves. Say it in their terms — "fares checked today; ` +
         `these move daily" beats an ISO date.\n` +

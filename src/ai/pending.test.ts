@@ -107,12 +107,32 @@ describe('taking over the watch', () => {
     vi.useRealTimers()
   })
 
-  it('passes on the reason when the agent failed', async () => {
+  it('passes on the reason when the agent failed, in the reader’s words', async () => {
+    // the row keeps the engine's own account of it; what comes back here is
+    // what goes on screen, and "output failed schema validation after repair
+    // retry" went on screen once already
     vi.useFakeTimers()
     reply = { data: { status: 'failed', output: null, error: 'rate limited' } }
     const p = awaitRun('r1')
     await vi.advanceTimersByTimeAsync(3000)
-    expect(await p).toEqual({ ok: false, why: 'rate limited' })
+    expect(await p).toEqual({ ok: false, why: 'the thinking engine is busy right now — give it a minute' })
+    vi.useRealTimers()
+  })
+
+  it('never hands the schema error to the person holding the phone', async () => {
+    vi.useFakeTimers()
+    reply = {
+      data: {
+        status: 'invalid_output',
+        output: null,
+        error: 'Output failed validation after a repair retry — steps: Array must contain at most 10 element(s)',
+      },
+    }
+    const p = awaitRun('r1')
+    await vi.advanceTimersByTimeAsync(3000)
+    const res = (await p) as { ok: false; why: string }
+    expect(res.why).not.toMatch(/schema|validation|Array/i)
+    expect(res.why).toMatch(/one more go/)
     vi.useRealTimers()
   })
 
