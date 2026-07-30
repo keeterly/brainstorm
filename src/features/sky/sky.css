@@ -1325,6 +1325,55 @@ body.sky-resting .sky-tidy { right: calc(14px + var(--rest-w, 96px) + 8px); }
   .skyb.working { animation: none; }
 }
 
+/*
+ * Thinking, drawn as a signal.
+ *
+ * A drop the agent has gone away to work on used to breathe its glow and
+ * nothing else, which says "something is happening" and not *what*. This is
+ * the Unknown Pleasures plot: stacked ridgelines, each one a pass, rising
+ * through the body of the drop while it is out there. It reads as a thing
+ * listening rather than a thing spinning, and it is the only animation in the
+ * app that means work is being done somewhere else.
+ *
+ * A repeating background rather than elements, because the drop rebuilds its
+ * own innerHTML on every paint and would throw children away.
+ * z-index -1 keeps it behind the drop's own words: .skyb isolates, so this
+ * lands between the glass and the text rather than over the top of it.
+ */
+.skyb.working::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='60' viewBox='0 0 100 60' preserveAspectRatio='none' fill='none' stroke='%23fff' stroke-width='1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath vector-effect='non-scaling-stroke' d='M0 14.0L3 14.0L6 14.0L9 14.0L12 14.0L15 14.0L18 14.0L21 13.9L24 13.6L27 12.3L30 9.9L33 7.5L36 6.6L39 6.2L42 4.5L45 1.3L48 -1.4L51 -1.9L54 0.2L57 3.2L60 5.6L63 7.2L66 9.6L69 12.2L72 13.5L75 13.9L78 14.0L81 14.0L84 14.0L87 14.0L90 14.0L93 14.0L96 14.0L99 14.0'/%3E%3Cpath vector-effect='non-scaling-stroke' d='M0 29.0L3 29.0L6 29.0L9 28.9L12 28.6L15 27.9L18 26.8L21 25.4L24 24.4L27 24.1L30 24.0L33 23.4L36 22.1L39 20.4L42 19.0L45 18.5L48 19.0L51 20.3L54 21.9L57 23.1L60 24.0L63 24.9L66 26.2L69 27.5L72 28.4L75 28.8L78 29.0L81 29.0L84 29.0L87 29.0L90 29.0L93 29.0L96 29.0L99 29.0'/%3E%3Cpath vector-effect='non-scaling-stroke' d='M0 44.0L3 44.0L6 44.0L9 44.0L12 44.0L15 44.0L18 44.0L21 44.0L24 44.0L27 44.0L30 44.0L33 43.9L36 43.4L39 41.5L42 38.8L45 37.7L48 37.1L51 34.5L54 31.3L57 30.7L60 33.2L63 36.2L66 38.0L69 40.5L72 43.0L75 43.9L78 44.0L81 44.0L84 44.0L87 44.0L90 44.0L93 44.0L96 44.0L99 44.0'/%3E%3Cpath vector-effect='non-scaling-stroke' d='M0 59.0L3 59.0L6 58.9L9 58.8L12 58.4L15 57.8L18 57.0L21 56.1L24 55.5L27 55.3L30 55.2L33 54.9L36 54.2L39 53.2L42 52.1L45 51.3L48 51.0L51 51.3L54 52.1L57 53.1L60 54.1L63 54.8L66 55.3L69 56.0L72 56.8L75 57.7L78 58.4L81 58.8L84 58.9L87 59.0L90 59.0L93 59.0L96 59.0L99 59.0'/%3E%3C/svg%3E");
+  /* One tile is four rows; the peaks are wide because the plot has to read as
+     a signal across the whole drop rather than a small mark in the middle of
+     it. Cropped to the drop's own circle by border-radius. */
+  background-size: 112% 56px;
+  background-position-x: -6%;
+  background-repeat: repeat-y;
+  opacity: 0.4;
+  /* the lines soften before the rim, so the plot sits *in* the glass rather
+     than being a texture printed on it */
+  -webkit-mask: radial-gradient(closest-side, #000 58%, rgba(0, 0, 0, 0.55) 84%, transparent 100%);
+  mask: radial-gradient(closest-side, #000 58%, rgba(0, 0, 0, 0.55) 84%, transparent 100%);
+  animation: sky-ridge 2.8s linear infinite, sky-ridge-breathe 2.1s ease-in-out infinite;
+}
+/* one row per cycle, so the stack scrolls without ever showing a join */
+@keyframes sky-ridge {
+  from { background-position-y: 0; }
+  to { background-position-y: -56px; }
+}
+@keyframes sky-ridge-breathe {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.66; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skyb.working::after { animation: none; opacity: 0.34; }
+}
+
 /* two drops sharing one surface give up their own edges to the neck */
 .skyb.fusing {
   border-color: transparent;

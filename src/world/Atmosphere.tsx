@@ -11,6 +11,25 @@ import { tickDaylight } from './daylight'
 // The ocean is drawn bigger than the window it shows through: wider on both
 // sides and deeper than the bottom edge, so however far it tilts to stay level
 // there is still water in every corner.
+/**
+ * The world's own background, in one place because two things paint it.
+ *
+ * The fixed layer draws it over the glass. The document canvas draws the same
+ * stack, at the same size, so the strip the glass cannot reach carries on from
+ * exactly where it stopped. Splitting the two would mean two gradients with
+ * their stops in different places meeting at a line, which is the seam this
+ * whole exercise is about.
+ */
+const WORLD_BG =
+  'radial-gradient(ellipse 150% 60% at 50% -10%, var(--sky-top, #0e1424) 0%, transparent 62%),' +
+  // the hour's glow sits just above the waterline, where a sunset actually is —
+  // pushed below it, the whole warmth was under water
+  'radial-gradient(ellipse 125% 48% at 50% 97%, var(--sky-horizon, rgba(28,74,116,0.34)), transparent 70%),' +
+  // the floor takes the hour too — a fixed blue here was quietly holding the
+  // bottom of every screen at midnight all day long
+  'linear-gradient(var(--sky-ground, #04060c) 0%, var(--sky-ground, #05070f) 52%, var(--ground-high, #070d18) 100%)'
+const WORLD_VIGNETTE = 'radial-gradient(ellipse at 50% 42%, transparent 52%, var(--sky-vignette, rgba(2, 3, 6, 0.6)) 100%)'
+
 const OVERDRAW_X = 0.3
 const canvasW = () => Math.round(window.innerWidth * (1 + OVERDRAW_X * 2))
 
@@ -47,18 +66,38 @@ function measureBleed() {
 }
 
 /**
- * The belt to that pair of braces.
+ * Painting the part of the screen the glass cannot reach.
  *
- * Whatever --bleed still fails to cover, iOS fills from the document canvas
- * and the theme colour, so both are handed the colour the ocean reaches at its
- * deepest — the worst case is then a strip that is too dark rather than a bar
- * of some colour nobody chose. The theme colour is not optional either: it is
- * what the system tints the status bar with.
+ * --bleed tells every fixed layer to carry on past the bottom of the viewport,
+ * and on an installed iPhone that turned out not to be enough: the flat bar
+ * was still there, which says those layers are clipped to the viewport and
+ * only the document canvas ever reaches the strip. So the canvas is given the
+ * world too.
+ *
+ * Not a colour. A colour is what was here before — the ocean at its deepest —
+ * and it could never have worked, because "deepest" is the bottom of the water
+ * canvas, a hundred and fifty pixels *below* the bottom of the screen. The bar
+ * was being painted the colour of water nobody can see, right next to water
+ * they can. And no single colour would do anyway: the bottom edge is a
+ * gradient under a vignette, and it is a different colour at every hour.
+ *
+ * So the canvas gets the same background stack the fixed layer has, sized to
+ * the same box — the viewport plus the bleed. Identical gradients over
+ * identical boxes, one clipped at the bottom edge and one carrying on past it,
+ * which makes the strip a continuation rather than a join. The flat colour
+ * stays underneath as the last resort, and as the theme colour, which is what
+ * the system tints the status bar with.
  */
 function paintBeyondTheGlass() {
   const s = tickDaylight()
   const floor = seaFloor(s.ground)
-  document.documentElement.style.backgroundColor = floor
+  const root = document.documentElement
+  const bleed = parseFloat(getComputedStyle(root).getPropertyValue('--bleed')) || 0
+  root.style.backgroundImage = `${WORLD_VIGNETTE},${WORLD_BG}`
+  root.style.backgroundSize = `100% ${Math.round(window.innerHeight + bleed)}px`
+  root.style.backgroundRepeat = 'no-repeat'
+  root.style.backgroundPosition = '0 0'
+  root.style.backgroundColor = floor
   const meta = document.querySelector('meta[name="theme-color"]')
   if (meta) meta.setAttribute('content', floor)
 }
@@ -99,7 +138,13 @@ export function Atmosphere() {
       document.documentElement.style.setProperty('--water-line-up', `${WATER_H - SURFACE}px`)
     }
     size()
-    window.addEventListener('resize', size)
+    // the canvas behind the glass is sized from the viewport, so it is repainted
+    // whenever the viewport is not the size it was
+    const onResize = () => {
+      size()
+      paintBeyondTheGlass()
+    }
+    window.addEventListener('resize', onResize)
 
     // the sky follows the clock — recomputed on a slow timer and whenever the
     // app comes back to the front, so an evening that arrives while it is in
@@ -140,7 +185,7 @@ export function Atmosphere() {
     raf = requestAnimationFrame(frame)
     return () => {
       cancelAnimationFrame(raf)
-      window.removeEventListener('resize', size)
+      window.removeEventListener('resize', onResize)
       clearInterval(clock)
       document.removeEventListener('visibilitychange', wake)
     }
@@ -156,14 +201,7 @@ export function Atmosphere() {
           // past the bottom edge of the glass, into the strip behind the home
           // indicator that a fixed inset:0 can never reach — see --bleed
           inset: '0 0 calc(-1 * var(--bleed)) 0',
-          background:
-            'radial-gradient(ellipse 150% 60% at 50% -10%, var(--sky-top, #0e1424) 0%, transparent 62%),' +
-            // the hour's glow sits just above the waterline, where a sunset
-            // actually is — pushed below it, the whole warmth was under water
-            'radial-gradient(ellipse 125% 48% at 50% 97%, var(--sky-horizon, rgba(28,74,116,0.34)), transparent 70%),' +
-            // the floor takes the hour too — a fixed blue here was quietly
-            // holding the bottom of every screen at midnight all day long
-            'linear-gradient(var(--sky-ground, #04060c) 0%, var(--sky-ground, #05070f) 52%, var(--ground-high, #070d18) 100%)',
+          background: WORLD_BG,
           transition: 'background 4s linear',
         }}
       />
@@ -216,8 +254,7 @@ export function Atmosphere() {
           // past the bottom edge of the glass, into the strip behind the home
           // indicator that a fixed inset:0 can never reach — see --bleed
           inset: '0 0 calc(-1 * var(--bleed)) 0',
-          background:
-            'radial-gradient(ellipse at 50% 42%, transparent 52%, var(--sky-vignette, rgba(2, 3, 6, 0.6)) 100%)',
+          background: WORLD_VIGNETTE,
           transition: 'background 4s linear',
         }}
       />
