@@ -141,8 +141,10 @@ export default function CurrentPage() {
     else setAskFailed(res.why ?? 'could not get out there just now')
   }
 
+  // 12vh was 102px of nothing above the only sentence on the page. The
+  // headline is bigger now and carries the calm on its own.
   return (
-    <div className="page" style={{ paddingTop: 'calc(var(--sat) + 12vh)' }}>
+    <div className="page" style={{ paddingTop: 'calc(var(--sat) + 7vh)' }}>
       {prepass.visible.length === 0 && (
         <>
           <h1 className="page-title">The current is still</h1>
@@ -172,15 +174,24 @@ export default function CurrentPage() {
           <div className="faint" style={{ fontSize: 'var(--fs-label)', marginBottom: 16 }}>
             This first
           </div>
+          {/* The one thing you are meant to be doing, at the size of the one
+              thing you are meant to be doing.
+              It was capped at 340px *and* balanced, and the two together drew a
+              narrow column down the middle of a screen with nothing else on it
+              — three short lines using two thirds of the width and the rest of
+              the glass empty. Balance is right for a headline sitting in a
+              column of other things and wrong for the only thing on the page;
+              `pretty` fills the measure and only rescues the last line. The
+              size scales with the glass, so a wider phone gets bigger words
+              rather than more air. */}
           <div
             style={{
-              fontSize: 24,
+              fontSize: 'clamp(25px, 7.2vw, 34px)',
               fontWeight: 300,
-              lineHeight: 1.45,
-              letterSpacing: '-0.01em',
-              maxWidth: 340,
+              lineHeight: 1.32,
+              letterSpacing: '-0.016em',
               margin: '0 auto',
-              textWrap: 'balance',
+              textWrap: 'pretty',
             }}
           >
             {primary.title || primary.raw_content}

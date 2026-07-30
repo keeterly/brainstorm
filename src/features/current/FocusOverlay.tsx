@@ -35,7 +35,10 @@ export function FocusOverlay({
         alignItems: 'center',
         justifyContent: 'center',
         gap: 20,
-        padding: 36,
+        /* 36 on every side made a 320px measure on a 393px phone before the
+           headline had said anything; the sides only need enough to keep the
+           words off the glass */
+        padding: '36px 20px',
         textAlign: 'center',
         background:
           'radial-gradient(ellipse 120% 60% at 50% -10%, var(--ground-high) 0%, transparent 60%), var(--ground)',
@@ -44,14 +47,15 @@ export function FocusOverlay({
       <div className="eyebrow" style={{ color: 'var(--water)' }}>
         Focus
       </div>
+      {/* the same reasoning as the Current's own headline: this is the only
+          thing on the screen, so it gets the screen */}
       <div
         style={{
-          fontSize: 25,
+          fontSize: 'clamp(25px, 7.2vw, 34px)',
           fontWeight: 300,
-          lineHeight: 1.45,
-          letterSpacing: '-0.01em',
-          maxWidth: 330,
-          textWrap: 'balance',
+          lineHeight: 1.32,
+          letterSpacing: '-0.016em',
+          textWrap: 'pretty',
         }}
       >
         {thought.title || thought.raw_content}

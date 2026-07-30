@@ -83,36 +83,83 @@ a {
 
 /* ---------- shared primitives ---------- */
 
-/* Buttons are made of the same water as everything else: a body with a
-   specular highlight, a lit underside, and mass. Flat rectangles read as a
-   different app bolted onto this one. */
+/*
+ * Buttons are made of the same glass as the drops.
+ *
+ * They were made of the *old* drop: an opaque body, a hard specular dot up in
+ * the corner, a bright crescent along the bottom like a floor reflection.
+ * Every one of those says a polished solid — a marble. The sky stopped being
+ * marbles a while ago and became glass, and these did not come with it, so the
+ * two most-pressed buttons in the app (Focus and Done, on the Current) were
+ * the last two objects still lit the old way, sitting on a world lit the new
+ * one.
+ *
+ * Glass is a lens: you see through it, light gathers along its edges instead
+ * of pooling in a spot, and the fill is only enough to catch the light. Fill
+ * it any harder and it is a pale slab that happens to be round. It is the same
+ * recipe as .skyb, so a button and a drop are one substance seen against
+ * different backgrounds.
+ */
 .btn {
+  position: relative;
+  isolation: isolate;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--sp-2);
   min-height: 46px;
   padding: 0 var(--sp-5);
-  border: 0.5px solid rgba(var(--accent-rgb), 0.22);
+  border: 0;
   border-radius: var(--r-full);
-  background:
-    radial-gradient(ellipse 16% 16% at 26% 24%, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.05) 60%, transparent 78%),
-    radial-gradient(ellipse 62% 40% at 50% 106%, var(--drop-glow, rgba(122, 215, 255, 0.2)), transparent 62%),
-    radial-gradient(circle at 42% 26%, var(--drop-body-hi, rgba(48, 59, 79, 0.9)), var(--drop-body-lo, rgba(21, 27, 38, 0.92)) 74%);
+  backdrop-filter: blur(14px) saturate(165%) brightness(1.45);
+  -webkit-backdrop-filter: blur(14px) saturate(165%) brightness(1.45);
+  background: linear-gradient(
+    rgba(255, 255, 255, 0.15),
+    rgba(255, 255, 255, 0.05) 48%,
+    rgba(255, 255, 255, 0.095)
+  );
   box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.12),
-    inset 0 -12px 22px rgba(var(--accent-rgb), 0.09),
-    0 8px 22px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+    /* the hard line where the light catches the top edge */
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    /* light bouncing up off the water into the underside */
+    inset 0 -1px 0 rgba(255, 255, 255, 0.15),
+    /* the thickness of the glass, seen through its own walls */
+    inset 0 0 0 0.5px rgba(var(--accent-rgb), 0.22),
+    /* it is floating, and it has weight */
+    0 10px 26px rgba(0, 0, 0, 0.38);
   font-size: var(--fs-body);
   font-weight: 600;
   -webkit-tap-highlight-color: transparent;
   transition:
     opacity var(--dur-fast) var(--ease-out),
-    border-color var(--dur-med) var(--ease-out),
     box-shadow var(--dur-med) var(--ease-out),
     transform 420ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+/* The rim refracts rather than outlines: bright on the lit side, the hour's
+   own colour on the shadow side, and only ever a hairline wide. This is what
+   makes an edge read as thickness instead of as a drawn line. */
+.btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.62) 0%,
+    rgba(255, 255, 255, 0.06) 32%,
+    rgba(255, 255, 255, 0) 56%,
+    rgba(var(--accent-rgb), 0.42) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
 }
 /* the dip a drop makes when it is pushed under and comes back up */
 .btn:active { transform: translateY(2px) scale(0.94, 1.05); }
@@ -127,27 +174,42 @@ a {
   opacity: 0.4;
   pointer-events: none;
 }
-/* the lit one: the hour's own light is inside it */
+/* The lit one: still glass, but the hour's own light is *in* the glass rather
+   than only along its edge — the way a saturated drop carries it. */
 .btn--primary {
-  border-color: rgba(var(--accent-rgb), 0.62);
-  background:
-    radial-gradient(ellipse 16% 16% at 26% 24%, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.08) 60%, transparent 78%),
-    radial-gradient(ellipse 70% 48% at 50% 104%, rgba(var(--accent-rgb), 0.5), transparent 66%),
-    radial-gradient(circle at 42% 26%, rgba(var(--accent-rgb), 0.34), rgba(var(--accent-rgb), 0.15) 74%);
+  background: linear-gradient(
+    rgba(var(--accent-rgb), 0.3),
+    rgba(var(--accent-rgb), 0.14) 50%,
+    rgba(var(--accent-rgb), 0.22)
+  );
   color: var(--ink);
   box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.24),
-    inset 0 -14px 26px rgba(var(--accent-rgb), 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 0 0 0.5px rgba(var(--accent-rgb), 0.55),
     0 0 26px rgba(var(--accent-rgb), 0.2),
-    0 8px 24px rgba(0, 0, 0, 0.42);
+    0 10px 26px rgba(0, 0, 0, 0.4);
 }
-.btn--accent {
-  border-color: rgba(var(--accent-rgb), 0.5);
-  color: var(--water);
+.btn--primary::before {
+  background: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.8) 0%,
+    rgba(255, 255, 255, 0.1) 32%,
+    rgba(var(--accent-rgb), 0.2) 56%,
+    rgba(var(--accent-rgb), 0.75) 100%
+  );
 }
-.btn--ghost {
-  border-color: rgba(255, 255, 255, 0.14);
-  font-weight: 500;
+.btn--accent { color: var(--water); }
+/* the quiet one: the same glass with the colour taken out of its rim */
+.btn--ghost { font-weight: 500; }
+.btn--ghost::before {
+  background: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(255, 255, 255, 0.05) 34%,
+    rgba(255, 255, 255, 0) 58%,
+    rgba(255, 255, 255, 0.18) 100%
+  );
 }
 /*
  * Everything you can touch is at least a thumb across.
@@ -190,9 +252,21 @@ a {
   transform: translate(-50%, -50%);
 }
 .btn--danger {
-  border-color: rgba(255, 105, 97, 0.4);
   color: var(--danger);
-  background: transparent;
+  background: linear-gradient(rgba(255, 105, 97, 0.12), rgba(255, 105, 97, 0.04) 50%, rgba(255, 105, 97, 0.08));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 0 0 0.5px rgba(255, 105, 97, 0.32),
+    0 10px 26px rgba(0, 0, 0, 0.34);
+}
+.btn--danger::before {
+  background: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(255, 255, 255, 0.05) 32%,
+    rgba(255, 105, 97, 0.1) 56%,
+    rgba(255, 105, 97, 0.55) 100%
+  );
 }
 
 .chip {
@@ -246,27 +320,68 @@ a {
  * would fall on a wide pane, and the body runs top to bottom rather than out
  * from a centre.
  */
+/*
+ * The body of it was paint, and paint is why this page read grey.
+ *
+ * --drop-body-hi/lo are the surface colour at 97% opacity — near enough to
+ * opaque that a card was its own flat object, and the hour's blue reached it
+ * only as a faint wash along the bottom. So the sky behind was deep blue, the
+ * cards laid over it were grey slabs, and nothing about them agreed with the
+ * world they were sitting in.
+ *
+ * A drop solves this by not having a body at all: nearly the whole effect is
+ * the blur of what is behind, brightened, with a fill only strong enough to
+ * catch the light. Do the same here and a card is the sky, held still and
+ * lifted — it cannot be the wrong colour, because its colour is the world's.
+ * Bigger blur and a touch less brightness than a drop, because this is a wide
+ * pane holding paragraphs rather than a small lens holding four words.
+ */
 .card {
   position: relative;
+  isolation: isolate;
   border-radius: var(--r-lg);
   padding: var(--sp-4);
-  background:
-    /* the light on its shoulder */
-    radial-gradient(ellipse 60% 42% at 14% 0%, rgba(255, 255, 255, 0.075), transparent 68%),
-    /* light bouncing up off what is underneath, in the hour's own colour */
-    radial-gradient(ellipse 90% 34% at 50% 108%, var(--drop-glow, rgba(122, 215, 255, 0.16)), transparent 66%),
-    /* and the body of it, lit from above like everything else here */
-    linear-gradient(var(--drop-body-hi, rgba(48, 59, 79, 0.72)), var(--drop-body-lo, rgba(21, 27, 38, 0.82)));
-  backdrop-filter: blur(20px) saturate(120%);
-  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  backdrop-filter: blur(24px) saturate(150%) brightness(1.28);
+  -webkit-backdrop-filter: blur(24px) saturate(150%) brightness(1.28);
+  background: linear-gradient(
+    rgba(255, 255, 255, 0.1),
+    rgba(255, 255, 255, 0.035) 46%,
+    rgba(255, 255, 255, 0.07)
+  );
   border: 0;
   box-shadow:
     /* the hard line where the light catches the top edge */
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    /* light bouncing up off what is underneath, into the underside */
+    inset 0 -1px 0 rgba(255, 255, 255, 0.1),
     /* the thickness of the glass, seen through its own walls */
-    inset 0 0 0 0.5px rgba(205, 228, 255, 0.13),
+    inset 0 0 0 0.5px rgba(var(--accent-rgb), 0.16),
     /* it is floating, and it has weight */
     0 14px 34px rgba(0, 0, 0, 0.34);
+}
+/* the same refracting rim every other piece of glass in the app has */
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.42) 0%,
+    rgba(255, 255, 255, 0.05) 30%,
+    rgba(255, 255, 255, 0) 58%,
+    rgba(var(--accent-rgb), 0.3) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
 }
 /*
  * Hand-blown, not moulded. A page of surfaces all rounded to exactly 18px is
