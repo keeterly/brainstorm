@@ -368,20 +368,69 @@ body.sky-held {
 
 /* no wordmark — the sky doesn't need to announce itself. Only the world's
    own quiet voice lives up here, and it fades when it has nothing to say. */
-.sky-head { position: fixed; z-index: 6; top: calc(var(--sat) + 18px); left: 0; right: 0; text-align: center; pointer-events: none; }
-.sky-head .hint {
-  font-size: 12px;
-  color: var(--ink-soft);
+/*
+ * Where the app speaks.
+ *
+ * This was a line of small grey type centred across the head of the sky, and
+ * for "returned to the ocean" that was exactly right — quiet, out of the way,
+ * gone in four seconds. Then the agent started answering questions, and the
+ * same line had to carry three sentences: it wrapped to four rows, lay across
+ * the bubbles, and ran underneath the cloud pill in the corner. Legible and
+ * calm, and not focused — the most considered thing the app had ever said,
+ * delivered as a watermark.
+ *
+ * So: its own piece of glass, at the bottom where the thumb already is, in the
+ * slot the recommendation uses. The recommendation steps aside while it is up,
+ * because the app suggesting something and the app telling you something are
+ * one voice and should never be in two places at once.
+ */
+.sky-voice {
+  position: fixed;
+  z-index: 6;
+  left: 14px;
+  right: 14px;
+  bottom: calc(var(--water-line-up, 86px) + 44px);
+  display: none;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 11px 15px 12px;
+  border-radius: 15px 17px 14px 16px / 16px 14px 17px 15px;
+  isolation: isolate;
+  backdrop-filter: blur(16px) saturate(160%) brightness(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(160%) brightness(1.3);
+  background: linear-gradient(rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04) 48%, rgba(255, 255, 255, 0.08));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 0 0 0.5px rgba(var(--accent-rgb), 0.2),
+    0 12px 30px rgba(0, 0, 0, 0.44);
+  pointer-events: none;
   opacity: 0;
-  transition: opacity 700ms ease;
-  text-wrap: balance;
-  /* Room on the right for the two notes that live in that corner. Centred
-     across the whole width, a long line ran straight underneath them —
-     two pieces of text at the same size on the same baseline, overlapping,
-     which reads as a mistake because it is one. */
-  padding: 0 18px;
-  margin-right: var(--head-clear, 0px);
-  transition-property: opacity, margin-right;
+  transform: translateY(6px);
+  transition: opacity 380ms ease, transform 380ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.sky-voice.show { display: flex; opacity: 1; transform: none; }
+/* what it is about, when it is about something in particular */
+.sky-voice .who {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(var(--accent-rgb), 0.8);
+}
+.sky-voice .lb {
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--ink);
+  font-weight: 400;
+  text-wrap: pretty;
+  /* Three lines is a paragraph you read; past that it is a document, and a
+     document belongs on the page the card sends you to. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /*
@@ -1002,9 +1051,31 @@ body.sky-held {
   font-weight: 600;
   border: none;
   cursor: pointer;
+  /* A two-word verb wrapping to two lines inside a pill is the row running out
+     of width, not the label being long: the note beside it can ellipsise, and
+     these cannot. */
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .sky-page .bot .done:active { transform: scale(0.96); }
 .sky-page .bot .done:disabled { opacity: 0.35; }
+/* The other way out of the writing page. Quieter than Done because Done is the
+   one that always works: this one costs a connection and a few seconds, and it
+   should not be the thing your thumb finds by habit. */
+.sky-page .bot .done.alt {
+  padding: 0 16px;
+  font-size: 13.5px;
+  font-weight: 550;
+  background: none;
+  color: var(--paper-ink, #3d4b5c);
+  box-shadow: inset 0 0 0 1px rgba(19, 26, 36, 0.22);
+}
+/* With two of them the row is tight, so the thing that can give, gives: the
+   note is the subject line and it already ellipsises. */
+.sky-page .bot:has(.done.alt:not([hidden])) .note { flex: 0 1 auto; }
+.sky-page .bot:has(.done.alt:not([hidden])) .done { padding: 0 20px; }
+.sky-page .bot .done.alt:active { background: rgba(19, 26, 36, 0.08); }
+.sky-page .bot .done[hidden] { display: none; }
 
 /* the path — rain resolves into a quiet page */
 .sky-page.path .pans { max-height: none; flex: 1; padding-top: 6px; }

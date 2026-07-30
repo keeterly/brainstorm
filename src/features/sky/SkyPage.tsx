@@ -44,9 +44,6 @@ export default function SkyPage() {
       </div>
       {/* the stage's own darkening, outside the stage — see .sky-vign */}
       <div className="sky-vign" aria-hidden="true" />
-      <header className="sky-head">
-        <div className="hint" data-sky="hint" />
-      </header>
       <div className="sky-tide" data-sky="tide" aria-hidden="true" />
       <div className="sky-sea-word" data-sky="seaword" aria-hidden="true" />
       <div className="sky-meter" data-sky="meter" aria-hidden="true" />
@@ -60,6 +57,11 @@ export default function SkyPage() {
       <button className="sky-tidy" data-sky="tidy" aria-label="Gather loose thoughts into pools">
         ✦ tidy
       </button>
+      {/* Where the agent speaks. See say()/hold(). */}
+      <div className="sky-voice" data-sky="voice" role="status">
+        <span className="who" data-sky="voiceWho" />
+        <span className="lb" data-sky="voiceLb" />
+      </div>
       {/* speaking is one tap: no page to open first, no button to find inside it */}
       <div className="sky-undo" data-sky="undo">
         <span className="lb" data-sky="undoLb" />
@@ -95,6 +97,12 @@ export default function SkyPage() {
             </button>
             <span className="note" data-sky="pageN" />
           </div>
+          {/* The second way out, and it only ever appears on the page that has
+              two. See the `say` mode: you choose what happens to what you
+              wrote after you have written it. */}
+          <button className="done alt" data-sky="pageD2" hidden>
+            Work it in
+          </button>
           <button className="done" data-sky="pageD">
             Done
           </button>
@@ -385,7 +393,9 @@ function mountSky(root: HTMLDivElement) {
   const stage = $('stage')
   const field = $('field')
   const links = root.querySelector('[data-sky="links"]') as unknown as SVGGElement
-  const hint = $('hint')
+  const voiceEl = $('voice')
+  const voiceWho = $('voiceWho')
+  const voiceLb = $('voiceLb')
   const meter = $('meter')
   const tide = $('tide')
   const goo = root.querySelector('[data-sky="goo"]') as unknown as SVGPathElement
@@ -407,6 +417,7 @@ function mountSky(root: HTMLDivElement) {
   const pageA = $('pageA')
   const pageN = $('pageN')
   const pageD = $('pageD')
+  const pageD2 = $('pageD2')
   const pageX = $('pageX')
   const pageMic = $('pageMic')
   const pagePic = $('pagePic')
@@ -1158,8 +1169,10 @@ function mountSky(root: HTMLDivElement) {
     return [...view.tls, o]
   }
 
-  /** How much of the top-right corner the sky's own two notes are using, so
-   *  the header's text can stop short of them instead of running underneath. */
+  /** How much of the top-right corner the sky's own two notes are using. The
+   *  header that used to have to dodge them is gone — the app speaks at the
+   *  bottom now — but the corner is still measured, because anything that ever
+   *  wants to sit up there needs to know. */
   function measureCorner() {
     const w =
       (restEl.classList.contains('show') ? restEl.offsetWidth + 8 : 0) +
@@ -1343,14 +1356,46 @@ function mountSky(root: HTMLDivElement) {
   /** Standing text: while something is genuinely still happening, or has just
    *  finished and has not been acknowledged. `say` must not wipe it. */
   let held: string | null = null
-  function say(msg: string) {
-    hint.textContent = msg
-    hint.style.opacity = '1'
+  let heldWho: string | null = null
+  /**
+   * Where the app speaks, and why it is no longer the top of the sky.
+   *
+   * It was a line of small grey type centred across the head of the screen,
+   * and for a four-word acknowledgement that was right: quiet, out of the way,
+   * gone in four seconds. Then the agent started answering questions, and the
+   * same line had to carry three sentences of an answer — so it wrapped across
+   * four rows, laid itself over the bubbles, and ran underneath the cloud pill
+   * in the corner. Legible and calm, and not focused: the most considered
+   * thing the app had ever said to you, delivered as a watermark.
+   *
+   * So it has its own surface, at the bottom where your thumb already is, made
+   * of the same glass as everything else — and it takes over the slot the
+   * recommendation uses, because the app saying something and the app
+   * suggesting something are the same voice and should never be two.
+   */
+  function paintVoice() {
+    const msg = voiceT ?? held
+    const who = voiceT ? voiceWhoT : heldWho
+    voiceEl.classList.toggle('show', !!msg)
+    voiceWho.textContent = who ?? ''
+    voiceWho.hidden = !who
+    voiceLb.textContent = msg ?? ''
+    // the recommendation and the agent share one place; whoever is speaking wins
+    paintNext()
+  }
+  let voiceT: string | null = null
+  let voiceWhoT: string | null = null
+  function say(msg: string, who?: string) {
+    voiceT = msg
+    voiceWhoT = who ?? null
+    paintVoice()
     if (sayT) clearTimeout(sayT)
     sayT = setTimeout(() => {
       // fall back to whatever is still going on rather than to silence
-      if (held) hint.textContent = held
-      else hint.style.opacity = '0'
+      sayT = null
+      voiceT = null
+      voiceWhoT = null
+      paintVoice()
     }, 4200)
   }
   /**
@@ -1361,13 +1406,16 @@ function mountSky(root: HTMLDivElement) {
    * minute; a line that vanishes after four seconds of that reads as the
    * button having done nothing at all.
    */
-  function hold(msg: string | null) {
+  function hold(msg: string | null, who?: string) {
     held = msg
-    if (msg) {
-      if (sayT) clearTimeout(sayT)
-      hint.textContent = msg
-      hint.style.opacity = '1'
-    } else if (!sayT) hint.style.opacity = '0'
+    heldWho = msg ? (who ?? null) : null
+    if (msg && sayT) {
+      clearTimeout(sayT)
+      sayT = null
+      voiceT = null
+      voiceWhoT = null
+    }
+    paintVoice()
   }
 
   /**
@@ -1696,7 +1744,11 @@ function mountSky(root: HTMLDivElement) {
    */
   let nextFor: string | null = null
   function paintNext() {
-    const hide = !!openPool || !!pageFor || !!moonsFor
+    // …and it steps aside for the app's own voice, which stands in the same
+    // place. Two things in one slot is a layout bug; the app suggesting
+    // something and the app telling you something are one voice, so whichever
+    // has something to say has it.
+    const hide = !!openPool || !!pageFor || !!moonsFor || voiceEl.classList.contains('show')
     let n = hide ? null : nextAction(S().thoughts, S().relationships, todayISO())
     // If the agent has been asked to choose, its pick wins here too. Current
     // honours it; the sky did not, so the two could name different things at
@@ -1743,7 +1795,7 @@ function mountSky(root: HTMLDivElement) {
   })
 
   // ---------- the light page ----------
-  type PageMode = 'capture' | 'grow' | 'edit' | 'path' | 'brief' | 'news' | 'group' | 'aside'
+  type PageMode = 'capture' | 'say' | 'edit' | 'path' | 'brief' | 'open' | 'aside'
   /** The brief ⚡ brought back for this thought, if it went out for one. */
   const briefOf = (id: string) => S().artifacts.find((a) => a.thought_id === id) ?? null
   let pageFor: { mode: PageMode; tl?: TL; ox: number; oy: number } | null = null
@@ -1837,17 +1889,20 @@ function mountSky(root: HTMLDivElement) {
     pageT.style.display = reading ? 'none' : ''
     page.classList.toggle('path', reading)
     page.classList.toggle('brief', mode === 'brief')
-    page.classList.toggle('group', mode === 'group' || mode === 'aside')
+    page.classList.toggle('group', mode === 'open' || mode === 'aside')
     pageD.textContent =
       mode === 'brief'
         ? 'Done reading'
         : mode === 'aside'
           ? 'Done'
-        : mode === 'news'
-          ? 'Work it in'
-          : mode === 'path'
-            ? (tl && isKept(tl.t) ? 'Keep it' : 'Keep this path')
-            : 'Done'
+          : mode === 'say'
+            ? 'Keep it'
+            : mode === 'path'
+              ? (tl && isKept(tl.t) ? 'Keep it' : 'Keep this path')
+              : 'Done'
+    // The agent's way out of the writing page. Not offered with nothing to
+    // send it, and not offered when there is no way to reach it.
+    pageD2.hidden = mode !== 'say' || S().offline
     if (mode === 'path' && tl) {
       pageQ.textContent = `The rain from “${trim(label(tl.t), 44)}”`
       const stale = isKept(tl.t) && !!ex(tl.t).planSig && ex(tl.t).planSig !== sigOf(tl)
@@ -1881,7 +1936,7 @@ function mountSky(root: HTMLDivElement) {
         a.setAttribute('target', '_blank')
         a.setAttribute('rel', 'noreferrer noopener')
       }
-    } else if (mode === 'group' && tl) {
+    } else if (mode === 'open' && tl) {
       // Everything you can do to a group, in the one place a group is a thing
       // rather than a container: its name, what is in it, what is done, what
       // you want to add, which of its contents belong together, and the two
@@ -1890,7 +1945,7 @@ function mountSky(root: HTMLDivElement) {
       // Nothing here has a Save. Every field commits when you leave it, because
       // the × sits an inch from the name box and a page that loses your typing
       // when you close it the obvious way is a page that does not work.
-      pageQ.textContent = 'This group'
+      pageQ.textContent = tl.kind === 'pool' ? 'This group' : 'This drop'
       pageT.value = label(tl.t)
       pageT.placeholder = 'Name it'
       nameFor = tl.t.id
@@ -1917,8 +1972,20 @@ function mountSky(root: HTMLDivElement) {
             : `${inside.length} inside`
       }
       tally()
+      // Everything this thing holds, on the one page it has.
+      //
+      // It used to be three: a group page here, the brief behind its own moon,
+      // the photo behind another. All three were "open what this holds", and
+      // three buttons for one destination is how a row of actions gets to six.
+      // Each section appears only when there is something in it, so a bare
+      // drop still opens onto a name, a place to add, and a way to put it away.
+      const answers = answersOf(tl.t)
+      const shot = fullOf(tl.t)
+      const hasBrief = !!briefOf(tl.t.id)
+      const kin = kinOf(tl)
       pageA.style.display = 'block'
       pageA.innerHTML =
+        (shot ? `<button class="shot" aria-label="See the photo full screen"><img alt="" /></button>` : '') +
         (inside.length
           ? `<div class="lab head"><span>what is inside</span>` +
             `<button class="ctl sel">Select</button></div>` +
@@ -1932,14 +1999,46 @@ function mountSky(root: HTMLDivElement) {
               )
               .join('')
           : '') +
-        `<div class="row add"><input class="t" placeholder="Add something to this group…" enterkeyhint="done" aria-label="Add something to this group" /></div>` +
+        `<div class="row add"><input class="t" placeholder="${
+          inside.length || tl.kind === 'pool' ? 'Add something to this group…' : 'Add something under this…'
+        }" enterkeyhint="done" aria-label="Add something to this" /></div>` +
         `<div class="picked" hidden><button class="ctl d go">Group these</button>` +
         `<button class="ctl d out">Take these out</button>` +
         `<button class="ctl d bad away">Put these away</button></div>` +
+        (answers.length
+          ? `<div class="lab">what it has absorbed</div>` + answers.map(() => `<div class="a"></div>`).join('')
+          : '') +
         `<div class="danger">` +
-        `<button class="ctl d" data-act="ungroup">Ungroup — keep what is inside</button>` +
-        `<button class="ctl d bad" data-act="bin">Put the whole group away</button>` +
+        (hasBrief ? `<button class="ctl d" data-act="brief">Read what it brought back</button>` : '') +
+        (kin.length ? `<button class="ctl d" data-act="gather">Gather what is like this</button>` : '') +
+        (inside.length ? `<button class="ctl d" data-act="ungroup">Ungroup — keep what is inside</button>` : '') +
+        `<button class="ctl d bad" data-act="bin">${
+          inside.length ? 'Put the whole group away' : 'Put this away'
+        }</button>` +
         `</div>`
+      // the photo, and the two ways out that are journeys rather than deletions
+      const shotBtn = pageA.querySelector('.shot')
+      if (shotBtn && shot) {
+        const im = shotBtn.querySelector('img') as HTMLImageElement
+        im.src = imgOf(tl.t) as string
+        shotBtn.addEventListener('click', (e) => {
+          e.stopPropagation()
+          openPhoto(shot, label(tl.t))
+        })
+      }
+      ;[...pageA.querySelectorAll('.a')].forEach((el, i) => ((el as HTMLElement).textContent = answers[i]))
+      const briefBtn = pageA.querySelector('[data-act="brief"]')
+      briefBtn?.addEventListener('click', (e) => {
+        e.stopPropagation()
+        closePage(true)
+        setTimeout(() => openPage('brief', tl, ox, oy), reduced ? 0 : 120)
+      })
+      const gatherBtn = pageA.querySelector('[data-act="gather"]')
+      gatherBtn?.addEventListener('click', (e) => {
+        e.stopPropagation()
+        closePage(true)
+        startPull(tl, true)
+      })
 
       // Two things a round control on the left of a row can mean, and they are
       // not the same thing: "this is finished" and "I have chosen this one".
@@ -2024,7 +2123,7 @@ function mountSky(root: HTMLDivElement) {
           commit()
           landUndo(takeOut(m.id))
           // the page is showing a list that just changed
-          openPage('group', tl, ox, oy)
+          openPage('open', tl, ox, oy)
         })
       })
 
@@ -2037,7 +2136,7 @@ function mountSky(root: HTMLDivElement) {
         // emptied, so closing the page does not add it a second time
         addField.value = ''
         landUndo(u)
-        openPage('group', tl, ox, oy)
+        openPage('open', tl, ox, oy)
         // and the caret stays where you were typing, ready for the next one
         ;(pageA.querySelector('.row.add .t') as HTMLInputElement)?.focus()
       }
@@ -2082,7 +2181,7 @@ function mountSky(root: HTMLDivElement) {
           redrawGroupPage()
           say('back the way it was')
         })
-        openPage('group', tl, ox, oy)
+        openPage('open', tl, ox, oy)
       }
       takeBtn.addEventListener('click', bulk(takeOut, 'loose again'))
       // Running ⚡ on a goal twice fills it with near-duplicates — six pairs in
@@ -2143,29 +2242,35 @@ function mountSky(root: HTMLDivElement) {
         say(`${rest.length + away.length} back in the sky`)
         fitWhenSettled()
       })
-    } else if (mode === 'news' && tl) {
-      // The map can be told things. Everything else here only adds; this is the
-      // one place you can say "it turned out otherwise" and have the shape of
-      // what you think move rather than just grow.
-      pendingImage = null
-      pageQ.textContent = 'What did you find out?'
-      pageT.value = ''
-      pageT.placeholder =
-        tl.kind === 'pool'
-          ? 'Tell it what changed, and it will move what is inside…'
-          : 'Tell it what changed…'
-      pageN.textContent = trim(label(tl.t), 46)
     } else if (mode === 'capture') {
       pendingImage = null
       pageQ.textContent = 'What’s on your mind?'
       pageT.value = ''
       pageT.placeholder = 'Let it storm.'
       pageN.textContent = '✦ organizes · or a line, a drop'
-    } else if (mode === 'grow' && tl) {
+    } else if (mode === 'say' && tl) {
+      /*
+       * One page for putting words into a thing.
+       *
+       * There were two, and the line between them was mine rather than yours:
+       * `grow` kept what you wrote inside the drop, `tell it` handed it to the
+       * agent to move the map around. Both are "I want to add to this", and
+       * both made you pick which one you meant *before* you had written a
+       * word — which is the wrong order, because you find out what you have
+       * said by saying it.
+       *
+       * So: write first. The two ways out are at the bottom, and choosing
+       * between them is a decision about the sentence in front of you rather
+       * than a guess about the sentence you are about to write.
+       */
+      pendingImage = null
       pageQ.textContent = QUESTIONS[answersOf(tl.t).length] || 'What else wants to be said?'
       pageT.value = ''
-      pageT.placeholder = 'Answer with as much or as little as you have…'
-      pageN.textContent = trim(label(tl.t), 46)
+      pageT.placeholder = 'Anything at all — what you know, what changed, what you found out…'
+      // The subject is the one thing you cannot have forgotten — you tapped it
+      // a second ago — and with two buttons in the row it was being ellipsised
+      // down to four characters. The room goes to the verbs.
+      pageN.textContent = ''
     } else if (tl) {
       pageQ.textContent = 'Inside this drop'
       pageT.value = tl.t.raw_content
@@ -2197,9 +2302,9 @@ function mountSky(root: HTMLDivElement) {
       ;[...pageA.querySelectorAll('.a')].forEach((el, i) => ((el as HTMLElement).textContent = answers[i]))
       wireDanger(pageA, tl)
     }
-    pageMic.classList.toggle('show', speechOK && (mode === 'capture' || mode === 'grow' || mode === 'news'))
+    pageMic.classList.toggle('show', speechOK && (mode === 'capture' || mode === 'say'))
     pageMic.classList.remove('live')
-    pagePic.classList.toggle('show', mode === 'capture' || mode === 'news')
+    pagePic.classList.toggle('show', mode === 'capture' || mode === 'say')
     pageAbsorb.classList.toggle('show', mode === 'capture' && !S().offline)
     pageLater.classList.toggle('show', mode === 'edit')
     page.classList.add('show')
@@ -2326,24 +2431,29 @@ function mountSky(root: HTMLDivElement) {
             ? `the storm settles — ${drops} drops in the sky`
             : 'it’s yours — drag it, grow it, pool it',
       )
-    } else if (pf.mode === 'grow' && pf.tl) {
-      const ans = v.trim()
-      if (!ans) return
-      const t = pf.tl.t
-      patchExtra(t, { answers: [...answersOf(t), ans], plan: null, planSig: null })
-      absorbAnim(t.id)
-      say(answersOf(t).length === 0 ? 'saturated — it’s ready to rain' : 'absorbed — the path grows richer')
-    } else if (pf.mode === 'news' && pf.tl) {
+    } else if (pf.mode === 'say' && pf.tl) {
+      // Which of the two things happens to what you wrote was decided by the
+      // button you left through — `handOver` is set by "Work it in" and by
+      // nothing else.
       const txt = v.trim()
       const img = pendingImage
-      if (!txt && !img) return
-      void runReshape(pf.tl, txt, img, micUsed)
-      micUsed = false
-      pendingImage = null
+      if (handOver) {
+        handOver = false
+        if (!txt && !img) return
+        void runReshape(pf.tl, txt, img, micUsed)
+        micUsed = false
+        pendingImage = null
+        return
+      }
+      if (!txt) return
+      const t = pf.tl.t
+      patchExtra(t, { answers: [...answersOf(t), txt], plan: null, planSig: null })
+      absorbAnim(t.id)
+      say(answersOf(t).length === 0 ? 'saturated — it’s ready to rain' : 'absorbed — the path grows richer')
     } else if (pf.mode === 'path' && pf.tl) {
       patchExtra(pf.tl.t, { kept: true })
       say('the path is kept — it will wait for you')
-    } else if (pf.mode === 'group' && pf.tl) {
+    } else if (pf.mode === 'open' && pf.tl) {
       landUndo(rename(pf.tl.t.id, v))
     } else if (pf.tl) {
       const txt = v.trim()
@@ -2436,9 +2546,9 @@ function mountSky(root: HTMLDivElement) {
    */
   function redrawGroupPage() {
     const pf = pageFor
-    if (pf?.mode !== 'group' || !pf.tl) return
+    if (pf?.mode !== 'open' || !pf.tl) return
     const tl = view.byId.get(pf.tl.t.id)
-    if (tl) openPage('group', tl, pf.ox, pf.oy)
+    if (tl) openPage('open', tl, pf.ox, pf.oy)
   }
 
   /**
@@ -2451,6 +2561,11 @@ function mountSky(root: HTMLDivElement) {
   function wireDanger(host: HTMLElement, tl: TL) {
     for (const el of [...host.querySelectorAll('.d')] as HTMLButtonElement[]) {
       const act = el.dataset.act
+      // The two that take something apart, and only those. Reading a brief and
+      // gathering what is like this share the row and the styling, and asking
+      // "Sure?" before letting you read something is how a confirmation stops
+      // meaning anything.
+      if (act !== 'bin' && act !== 'ungroup') continue
       const said = el.textContent ?? ''
       let armed = false
       const disarm = () => {
@@ -2486,6 +2601,10 @@ function mountSky(root: HTMLDivElement) {
     }
     closePage(true)
   })
+  pageD2.addEventListener('click', () => {
+    handOver = true
+    closePage(true)
+  })
   pageX.addEventListener('click', () => closePage(false))
   function absorbAnim(id: string) {
     const p = posOf(id)
@@ -2510,6 +2629,8 @@ function mountSky(root: HTMLDivElement) {
   const speechOK = !!SRCls
   let rec: SpeechRecognitionLike | null = null
   let micUsed = false
+  /** Set only by the writing page's second button: give this to the agent. */
+  let handOver = false
   // the stored thumbnail is far too small to read text from, so a capture also
   // keeps a legible copy in memory for as long as the page is open
   let pendingImage: { mediaType: string; dataB64: string } | null = null
@@ -2694,94 +2815,67 @@ function mountSky(root: HTMLDivElement) {
     const p = posOf(tl.t.id)
     // an opened pool has already been framed by the camera; leave it where it is
     if (openPool !== tl.t.id) p.y = Math.max(p.y, radiusOf(tl) + 170)
+    /*
+     * Three. Always the same three, always in this order.
+     *
+     * There were six, and which six depended on what you had tapped, so the
+     * row was never twice in the same shape and nothing about it could be
+     * learned. Worse, it was six because it had grown one button per feature
+     * rather than one per intention, and three separate pairs of them were
+     * saying the same thing:
+     *
+     *   the brief · the group · the photo   — three ways to say "open what
+     *     this holds", which is one destination and should be one button.
+     *   grow · tell it                      — both "put words into this". The
+     *     only difference was whether they went to the agent, which is my
+     *     concern and not yours, and it made you choose before you had
+     *     written a word.
+     *   gather                              — the same act as ✦ tidy, which
+     *     is already standing in the sky. It moves in with the other
+     *     organising verbs, on the page where organising happens.
+     *
+     * What is left is the three things you can actually intend: look at it,
+     * add to it, and get on with it.
+     */
     const acts: { icon: string; lb: string; dim?: boolean; run: () => void }[] = []
-    // First, because on a drop that is a photograph it is the only thing you
-    // are likely to have come for. Tapping the bubble brings the row up; this
-    // is the one on the row that gives you the picture.
-    const shot = fullOf(tl.t)
-    if (shot) {
-      acts.push({
-        icon: 'photo',
-        lb: 'the photo',
-        run: () => {
-          closeMoons()
-          openPhoto(shot, label(tl.t))
-        },
-      })
-    }
-    if (tl.kind === 'drop' && !isKept(tl.t)) {
-      acts.push({
-        icon: 'grow',
-        lb: isRipe(tl.t) ? 'deepen' : 'grow',
-        run: () => {
-          closeMoons()
-          openPage('grow', tl, toScreenX(p.x), toScreenY(p.y))
-        },
-      })
-    }
-    // Tell it something. The map is not only somewhere thinking goes — it is
-    // somewhere thinking changes, and until now nothing here could say that
-    // what you wrote last week has since turned out otherwise.
+    const asking = tl.kind === 'drop' && isQuestion(label(tl.t))
+    const ready = isKept(tl.t) || isRipe(tl.t) || !!briefOf(tl.t.id)
+    const canRain = tl.kind === 'drop' || tl.members.length >= 1
+
+    // 1. Everything this thing holds, in one place.
     acts.push({
-      icon: 'tell',
-      lb: 'tell it',
-      dim: S().offline,
+      icon: 'list',
+      lb: 'open',
       run: () => {
         closeMoons()
-        openPage('news', tl, toScreenX(p.x), toScreenY(p.y))
+        openPage('open', tl, toScreenX(p.x), toScreenY(p.y))
       },
     })
-    // what it brought back last time, kept and readable
-    if (briefOf(tl.t.id)) {
-      acts.push({
-        icon: 'brief',
-        lb: 'the brief',
-        run: () => {
-          closeMoons()
-          openPage('brief', tl, toScreenX(p.x), toScreenY(p.y))
-        },
-      })
-    }
-    // Hand it to the agent and let it go and find out. What "find out" means
-    // depends on what you pointed at: a question wants the number, and every
-    // other thing wants the way through. One button, because it is the same
-    // gesture either way — and the row does not need a seventh moon to say
-    // which kind of thing this is when the thing itself already says so.
-    const asking = tl.kind === 'drop' && isQuestion(label(tl.t))
+
+    // 2. Words into it. What happens to them is decided on the page, after
+    //    they exist.
     acts.push({
-      icon: asking ? 'ask' : 'work',
-      lb: asking ? 'answer it' : 'work it',
-      dim: S().offline,
+      icon: 'tell',
+      lb: 'say',
+      run: () => {
+        closeMoons()
+        openPage('say', tl, toScreenX(p.x), toScreenY(p.y))
+      },
+    })
+
+    // 3. Get on with it — and what that means is read off the thing rather
+    //    than asked of you. A question wants an answer. Something that has
+    //    already been worked out wants to become work, and that costs nothing
+    //    and needs no connection. Anything else has to be worked out first.
+    acts.push({
+      icon: asking ? 'ask' : ready && canRain ? 'rain' : 'work',
+      lb: asking ? 'answer it' : ready && canRain ? (isKept(tl.t) ? 'path' : 'rain') : 'work it',
+      dim: (asking || !ready) && S().offline,
       run: () => {
         closeMoons()
         if (asking) void runAnswer(tl)
+        else if (ready && canRain) rain(tl)
         else void runDeepen(tl)
-      },
-    })
-    // A group's own page. It was reachable only by tapping the group a second
-    // time — a gesture with nothing on screen to suggest it, which on a phone
-    // needs two presses to land inside twenty pixels of each other and often
-    // does not. The shortcut still works; this is the way you can see.
-    if (tl.kind === 'pool') {
-      acts.push({
-        icon: 'list',
-        lb: 'the group',
-        run: () => {
-          closeMoons()
-          openPage('group', tl, toScreenX(p.x), toScreenY(p.y))
-        },
-      })
-    }
-    const kin = kinOf(tl)
-    acts.push({ icon: 'gather', lb: 'gather', dim: kin.length === 0, run: () => startPull(tl, true) })
-    const canRain = tl.kind === 'drop' || tl.members.length >= 1
-    acts.push({
-      icon: 'rain',
-      lb: isKept(tl.t) ? 'path' : 'rain',
-      dim: !canRain,
-      run: () => {
-        closeMoons()
-        rain(tl)
       },
     })
     acts.forEach((a, i) => {
@@ -2908,7 +3002,7 @@ function mountSky(root: HTMLDivElement) {
     const id = tl.t.id
     working = id
     els.get(id)?.classList.add('working')
-    hold('working it in…')
+    hold('working it in…', trim(label(tl.t), 34))
     const res = await reshapeThought(id, news || 'See the attached picture.', {
       image: img ? { mediaType: img.mediaType, dataB64: img.dataB64 } : undefined,
       spoken: spoken || undefined,
@@ -2916,7 +3010,7 @@ function mountSky(root: HTMLDivElement) {
     working = null
     els.get(id)?.classList.remove('working')
     if (res.kind === 'failed') {
-      hold(res.why ?? 'could not work that in just now')
+      hold(res.why ?? 'could not work that in just now', trim(label(tl.t), 34))
       offerAction('nothing was changed', 'try again', () => {
         hold(null)
         void runReshape(tl, news, img, spoken)
@@ -2947,7 +3041,7 @@ function mountSky(root: HTMLDivElement) {
     rebuild()
     paintAll()
     haptics.join()
-    hold(res.change.note)
+    hold(res.change.note, trim(label(tl.t), 34))
     record(`${reshapeTally(res.change) || 'the map moved'} — you told it something`, trim(label(tl.t), 40))
     offerAction(reshapeTally(res.change) || 'the map moved', 'put it back', () => {
       res.change.undo()
@@ -3025,7 +3119,7 @@ function mountSky(root: HTMLDivElement) {
     rebuild()
     paintAll()
     haptics.join()
-    hold(whileAway ? `while you were away — ${res.note || 'it finished'}` : res.note)
+    hold(whileAway ? `while you were away — ${res.note || 'it finished'}` : res.note, trim(label(tl.t), 34))
     record(`⚡ came back with ${res.added} step${res.added === 1 ? '' : 's'}`, trim(label(tl.t), 40))
     if (briefOf(tl.t.id)) {
       offerAction(trim(label(tl.t), 30), 'read it', () => {
@@ -3052,7 +3146,7 @@ function mountSky(root: HTMLDivElement) {
     let sizing: Sizing = { ...fullDepth(4), why: 'sizing it up' }
     const tick = () => {
       if (working !== tl.t.id) return
-      hold(waitingWord(sizing, Math.round((Date.now() - began) / 1000)))
+      hold(waitingWord(sizing, Math.round((Date.now() - began) / 1000)), trim(label(tl.t), 34))
     }
     tick()
     const patience = setInterval(tick, 1000)
@@ -3075,7 +3169,7 @@ function mountSky(root: HTMLDivElement) {
     if (res.kind === 'failed') {
       // a minute of waiting deserves better than four seconds of apology, and
       // an offer to try again rather than hunting for the button
-      hold(res.why ?? 'could not get out there just now')
+      hold(res.why ?? 'could not get out there just now', trim(label(tl.t), 34))
       offerAction('tap to try again', 'again', () => {
         hold(null)
         void runDeepen(tl)
@@ -3104,7 +3198,7 @@ function mountSky(root: HTMLDivElement) {
       res.added ? `${res.added} step${res.added === 1 ? '' : 's'}` : '',
       found ? `${found} thing${found === 1 ? '' : 's'} found` : '',
     ].filter(Boolean)
-    hold(res.note || parts.join(' · ') || 'back from finding out')
+    hold(res.note || parts.join(' · ') || 'back from finding out', trim(label(tl.t), 34))
     record(`⚡ ${parts.join(' · ') || 'came back'}`, trim(label(tl.t), 40))
     if (briefOf(tl.t.id)) {
       offerAction(parts.join(' · ') || 'it wrote something down', 'read it', () => {
@@ -3137,7 +3231,7 @@ function mountSky(root: HTMLDivElement) {
     let sizing: Sizing = { ...fullDepth(3), why: 'sizing it up' }
     const tick = () => {
       if (working !== tl.t.id) return
-      hold(waitingWord(sizing, Math.round((Date.now() - began) / 1000)))
+      hold(waitingWord(sizing, Math.round((Date.now() - began) / 1000)), trim(label(tl.t), 34))
     }
     tick()
     const patience = setInterval(tick, 1000)
@@ -3158,7 +3252,7 @@ function mountSky(root: HTMLDivElement) {
     els.get(tl.t.id)?.classList.remove('working')
     if (dead) return
     if (res.kind === 'failed') {
-      hold(res.why ?? 'could not get out there just now')
+      hold(res.why ?? 'could not get out there just now', trim(label(tl.t), 34))
       offerAction('tap to try again', 'again', () => {
         hold(null)
         void runAnswer(tl)
@@ -3197,7 +3291,7 @@ function mountSky(root: HTMLDivElement) {
     // are not — the phone was locked, and a notification is what told you — the
     // sky does not rearrange itself behind your back; it offers.
     if (whileAway || pageFor) {
-      hold(whileAway ? `while you were away — ${res.line}` : res.line)
+      hold(whileAway ? `while you were away — ${res.line}` : res.line, trim(label(tl.t), 34))
       offerAction(trim(res.line, 46), 'read it', () => {
         hold(null)
         const q = posOf(tl.t.id)
@@ -3699,7 +3793,6 @@ function mountSky(root: HTMLDivElement) {
     if (touches.has(e.pointerId)) onCancel(e)
   })
   function onTap(id: string, isMember: boolean) {
-    hint.style.opacity = '0'
     const tl = view.byId.get(id)
     if (isMember) {
       // a group inside a group opens like any other: you go in one more level
@@ -3765,7 +3858,7 @@ function mountSky(root: HTMLDivElement) {
         // emptied or thrown away from the only screen it appears on.
         if (moonsFor === tl.t.id) {
           closeMoons()
-          openPage('group', tl, toScreenX(p.x), toScreenY(p.y))
+          openPage('open', tl, toScreenX(p.x), toScreenY(p.y))
         } else showMoons(tl)
       } else {
         clearAll()
