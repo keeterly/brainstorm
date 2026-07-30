@@ -1,5 +1,6 @@
-// Memory — everything the water keeps: the ocean of finished work, the
-// editable facts the AI knows about you, and the app's few quiet controls.
+// Memory — everything the water keeps: what the app has done to your thinking,
+// the ocean of finished work, the editable facts the AI knows about you, and
+// the app's few quiet controls.
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
@@ -8,6 +9,7 @@ import { useAction } from '@/ai/useAction'
 import type { DistillOutput } from '@shared/ai/actions/distill-memory'
 import { exportMarkdown } from '@/domain/export-markdown'
 import { clearSnapshot } from '@/lib/idb'
+import { clearTrail, readTrail, trailWhen } from '@/lib/trail'
 import {
   available as passkeyAvailable,
   enroll as enrollPasskey,
@@ -158,6 +160,8 @@ export default function MemoryPage() {
         Memory
       </div>
       <h1 className="page-title">What the water keeps</h1>
+
+      <WhatItDid />
 
       <section className="card" style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>Known about you</h2>
@@ -395,5 +399,64 @@ function MemoryRow({
         ×
       </button>
     </div>
+  )
+}
+
+/**
+ * What the app has done to your thinking lately.
+ *
+ * Everything in the sky announces itself once and vanishes: a pool formed, six
+ * things gathered, the map moved, the agent came back. An app that reorganises
+ * your thinking on your behalf owes you a record of having done so — otherwise
+ * you come back to a sky that has changed and there is nobody to ask.
+ *
+ * Local to this device, because it is a record of what you were shown rather
+ * than data about you, and it goes when you clear it.
+ */
+function WhatItDid() {
+  const [trail, setTrail] = useState(() => readTrail())
+  if (!trail.length) return null
+  return (
+    <section className="card" style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+        <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>What it did</h2>
+        <button
+          className="btn btn--ghost"
+          style={{ fontSize: 'var(--fs-label)', padding: '2px 8px' }}
+          onClick={() => {
+            clearTrail()
+            setTrail([])
+          }}
+        >
+          Clear
+        </button>
+      </div>
+      <p className="muted" style={{ fontSize: 'var(--fs-label)', marginBottom: 10 }}>
+        Changes it made to your sky, on this device.
+      </p>
+      <div style={{ display: 'grid', gap: 2 }}>
+        {trail.map((e, i) => (
+          <div
+            key={`${e.at}-${i}`}
+            style={{
+              display: 'flex',
+              alignItems: 'baseline',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '7px 0',
+              borderTop: i ? '0.5px solid var(--line)' : 'none',
+            }}
+          >
+            <span style={{ fontSize: 'var(--fs-sm)', minWidth: 0 }}>
+              {e.what}
+              {e.subject ? <span className="muted"> · {e.subject}</span> : null}
+            </span>
+            <span className="muted" style={{ fontSize: 'var(--fs-label)', whiteSpace: 'nowrap' }}>
+              {trailWhen(e.at)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }

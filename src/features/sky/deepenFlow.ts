@@ -9,6 +9,7 @@ import { useGraph } from '@/store/graph'
 import { runAction } from '@/ai/client'
 import type { DeepenOutput } from '@shared/ai/actions/deepen'
 import type { PromptImage } from '@shared/ai/types'
+import { markApplied } from '@/ai/pending'
 
 export type DeepenResult =
   | { kind: 'deepened'; note: string; added: number; output: DeepenOutput }
@@ -33,7 +34,7 @@ export async function deepenThought(
     .slice(0, 40)
 
   try {
-    const { output } = await runAction<DeepenOutput>('deepen', {
+    const { output, runId } = await runAction<DeepenOutput>('deepen', {
       subject: {
         id: subject.id,
         title: subject.title || subject.raw_content.slice(0, 300),
@@ -46,56 +47,75 @@ export async function deepenThought(
       image: opts.image,
     })
 
-    // a thing with work under it is a goal, whatever it started life as
-    if (subject.type !== 'goal') s.updateThought(subject.id, { type: 'goal' })
-
-    const made = new Map<string, string>()
-    for (const step of output.steps) {
-      const t = s.addThought({
-        raw_content: step.title,
-        title: step.title,
-        summary: step.why || null,
-        type: 'action',
-        effort: step.effort,
-      })
-      made.set(step.tempId, t.id)
-      s.addRelationship(t.id, subject.id, 'part_of', 'ai')
-    }
-    // order only where it genuinely matters
-    for (const step of output.steps) {
-      const from = made.get(step.tempId)
-      if (!from) continue
-      for (const dep of step.dependsOn) {
-        const to = made.get(dep)
-        if (to && to !== from) s.addRelationship(from, to, 'depends_on', 'ai')
-      }
-    }
-
-    if (output.found.length || output.sources.length) {
-      s.addArtifact({
-        id: crypto.randomUUID(),
-        thought_id: subject.id,
-        title: output.read,
-        content_md: briefMarkdown(output),
-        sources: output.sources,
-        agent_run_id: null,
-      })
-    }
-
-    // it learns you — but only things it does not already know
-    const known = new Set(s.memories.map((m) => m.content.trim().toLowerCase()))
-    for (const fact of output.learned) {
-      const key = fact.trim().toLowerCase()
-      if (!key || known.has(key)) continue
-      known.add(key)
-      s.addMemory(fact, 'distilled')
-    }
-
-    return { kind: 'deepened', note: output.note, added: output.steps.length, output }
+    return applyDeepen(subjectId, output, runId)
   } catch (e) {
     const why = (e as Error)?.message
     return { kind: 'failed', why: why && why.length < 90 ? why.toLowerCase() : undefined }
   }
+}
+
+/**
+ * Fold a finished run into the graph.
+ *
+ * Separate from the call that produced it, because the call is not the only
+ * way a result arrives. A background run outlives the page that started it, so
+ * when the app comes back it finds what finished while nobody was watching and
+ * lands it here — the same steps, the same brief, the same facts learned,
+ * whether you sat and waited or locked your phone and forgot about it.
+ */
+export function applyDeepen(subjectId: string, output: DeepenOutput, runId: string | null): DeepenResult {
+  const s = useGraph.getState()
+  const subject = s.thoughts.find((t) => t.id === subjectId)
+  if (!subject) return { kind: 'failed' }
+
+  // a thing with work under it is a goal, whatever it started life as
+  if (subject.type !== 'goal') s.updateThought(subject.id, { type: 'goal' })
+
+  const made = new Map<string, string>()
+  for (const step of output.steps) {
+    const t = s.addThought({
+      raw_content: step.title,
+      title: step.title,
+      summary: step.why || null,
+      type: 'action',
+      effort: step.effort,
+    })
+    made.set(step.tempId, t.id)
+    s.addRelationship(t.id, subject.id, 'part_of', 'ai', runId)
+  }
+  // order only where it genuinely matters
+  for (const step of output.steps) {
+    const from = made.get(step.tempId)
+    if (!from) continue
+    for (const dep of step.dependsOn) {
+      const to = made.get(dep)
+      if (to && to !== from) s.addRelationship(from, to, 'depends_on', 'ai', runId)
+    }
+  }
+
+  if (output.found.length || output.sources.length) {
+    s.addArtifact({
+      id: crypto.randomUUID(),
+      thought_id: subject.id,
+      title: output.read,
+      content_md: briefMarkdown(output),
+      sources: output.sources,
+      agent_run_id: runId,
+    })
+  }
+
+  // it learns you — but only things it does not already know
+  const known = new Set(s.memories.map((m) => m.content.trim().toLowerCase()))
+  for (const fact of output.learned) {
+    const key = fact.trim().toLowerCase()
+    if (!key || known.has(key)) continue
+    known.add(key)
+    s.addMemory(fact, 'distilled')
+  }
+
+  // claimed: whoever comes back for it next will not land it a second time
+  if (runId) void markApplied(runId)
+  return { kind: 'deepened', note: output.note, added: output.steps.length, output }
 }
 
 /** The brief, kept as something a person can read later. */

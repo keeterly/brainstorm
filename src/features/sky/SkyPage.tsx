@@ -11,11 +11,14 @@ import { nameThePool, organizeText, tidySky } from './absorbFlow'
 import { seaLineAt, waterlineY } from '@/world/water'
 import { KIN_EVIDENCE, KIN_POOL, KIN_THREAD, type Kinship, kinship } from '@/domain/kinship'
 import { humanDate } from '@/domain/human-date'
+import { nextAction } from '@/domain/next-action'
 import { armUpright, stepUpright, worldTilt } from '@/world/upright'
-import { deepenThought } from './deepenFlow'
+import { applyDeepen, deepenThought } from './deepenFlow'
+import { awaitRun, markApplied, pendingRuns, subjectOf } from '@/ai/pending'
 import { reshapeTally, reshapeThought } from './reshapeFlow'
 import { haptics } from '@/lib/haptics'
-import { echoRing, wabiBlob, wabiSeed } from '@/world/echo'
+import { noteTrail } from '@/lib/trail'
+import { echoRing, wabiBlob, wabiPill, wabiSeed } from '@/world/echo'
 import { type Body, card, contact, disc, oilPath, pull } from '@/world/shape'
 import type { Thought } from '@/domain/types'
 import './sky.css'
@@ -43,6 +46,10 @@ export default function SkyPage() {
       <div className="sky-meter" data-sky="meter" aria-hidden="true" />
       <button className="sky-rest" data-sky="rest" aria-label="Resting thoughts">
         ☁
+      </button>
+      <button className="sky-next" data-sky="next" aria-label="What to do next">
+        <span className="lb" data-sky="nextLb" />
+        <span className="why" data-sky="nextWhy" />
       </button>
       <button className="sky-tidy" data-sky="tidy" aria-label="Gather loose thoughts into pools">
         ✦ tidy
@@ -377,6 +384,10 @@ function mountSky(root: HTMLDivElement) {
   const seaWord = $('seaword')
   const restEl = $('rest')
   const tidyEl = $('tidy')
+  const nextEl = $('next')
+  const nextLb = $('nextLb')
+  const nextWhy = $('nextWhy')
+  nextEl.style.setProperty('--next-blob', wabiPill('sky-next', 15, 5))
   const undoEl = $('undo')
   const undoLb = $('undoLb')
   const undoGo = $('undoGo')
@@ -484,6 +495,12 @@ function mountSky(root: HTMLDivElement) {
     const b = contentBox()
     if (!b) return false
     return (b.x1 - b.x0) * cam.k > W + 12 || (b.y1 - b.y0) * cam.k > waterlineY() - 94
+  }
+  /** Bring one thing to the middle of the glass, without changing how close
+   *  you are standing — a recommendation should not re-frame your whole sky. */
+  function focusOn(p: { x: number; y: number }) {
+    const k = cam.k
+    camTarget = { k, x: W / 2 - p.x * k, y: (76 + (waterlineY() - 150)) / 2 - p.y * k }
   }
   /** Frame everything, with a little air. */
   function fitAll(animate = true) {
@@ -1106,6 +1123,7 @@ function mountSky(root: HTMLDivElement) {
     // first-run invite
     inviteEl.style.display = view.tls.length === 0 ? '' : 'none'
     measureShapes()
+    paintNext()
   }
 
   // the question bubble — pure invitation, not a stored thought
@@ -1159,6 +1177,17 @@ function mountSky(root: HTMLDivElement) {
       hint.textContent = msg
       hint.style.opacity = '1'
     } else if (!sayT) hint.style.opacity = '0'
+  }
+
+  /**
+   * Something happened to your thinking, and here is the record of it.
+   *
+   * Only outcomes. "Working it in…" and "still out there · 40s" are the app
+   * talking about itself; a log of those is a transcript, and a transcript is
+   * not what you want when you come back tomorrow to a sky that has moved.
+   */
+  function record(what: string, subject?: string) {
+    noteTrail(what, subject)
   }
 
   // ---------- undo / ocean / clouds ----------
@@ -1260,6 +1289,7 @@ function mountSky(root: HTMLDivElement) {
       if (res.made) bits.push(`${res.made} new pool${res.made === 1 ? '' : 's'}`)
       if (res.joined) bits.push(`${res.joined} gathered`)
       say(res.note || bits.join(' · '))
+      record(`tidied the sky — ${bits.join(' · ') || 'nothing moved'}`)
       if (res.focus) setTimeout(() => say(`worth your attention: ${res.focus}`), 4400)
     } else say(res.kind === 'failed' ? 'could not tidy just now' : 'nothing obvious to gather')
   })
@@ -1354,6 +1384,7 @@ function mountSky(root: HTMLDivElement) {
       const texts = [a, b].flatMap((tl) => (tl.kind === 'pool' ? tl.members.map(label) : [label(tl.t)]))
       nameThePool(g.id, texts)
       say(parent ? `a group inside — “${name}”` : `pooled — “${name}”`)
+      record(parent ? `a group inside — “${name}”` : `pooled — “${name}”`)
     }
     splash(at.x)
     haptics.join()
@@ -1442,8 +1473,55 @@ function mountSky(root: HTMLDivElement) {
       if (merged) bits.push(`${merged + 1} became one`)
       if (threaded) bits.push(`${threaded} now share a thread`)
       say(bits.join(' · '))
+      record(`gathered — ${bits.join(' · ')}`, host ? trim(label(host.t), 40) : undefined)
     } else say('they drift near — but nothing binds yet')
   }
+
+  /**
+   * The one thing to do next, said quietly and permanently.
+   *
+   * The loop this app describes ends at "here is what to do next, and why",
+   * and it never did — it handed you a sky full of steps and left you to pick,
+   * which is the part you opened it to avoid. Worked out from the graph rather
+   * than asked of a model, so it is instant, works offline, and the reason is
+   * one you can check and disagree with.
+   *
+   * Hidden while you are inside something: it is a thing to notice on the way
+   * past, never a thing in the way.
+   */
+  let nextFor: string | null = null
+  function paintNext() {
+    const hide = !!openPool || !!pageFor || !!moonsFor
+    const n = hide ? null : nextAction(S().thoughts, S().relationships, todayISO())
+    nextFor = n?.thought.id ?? null
+    nextEl.classList.toggle('show', !!n)
+    if (!n) return
+    nextLb.textContent = trim(label(n.thought), 40)
+    nextWhy.textContent = n.why
+  }
+  nextEl.addEventListener('click', () => {
+    if (!nextFor) return
+    const tl = view.byId.get(nextFor)
+    // it may be inside a pool: go to the pool, and the thing is in the ring
+    const parent = view.parentOf.get(nextFor)
+    if (parent && view.byId.has(parent)) {
+      openPool = parent
+      peek = nextFor
+      const g = view.byId.get(parent) as TL
+      const mp = pos.get(nextFor)
+      const gp = posOf(parent)
+      if (mp) peekAt = { a: Math.atan2(mp.y - gp.y, mp.x - gp.x) - ringSpin(), r: Math.hypot(mp.x - gp.x, mp.y - gp.y) }
+      peekSettle = 96
+      frameOpen(g)
+      paintAll()
+      haptics.grab()
+      return
+    }
+    if (!tl) return
+    const p = posOf(nextFor)
+    focusOn(p)
+    showMoons(tl)
+  })
 
   // ---------- the light page ----------
   type PageMode = 'capture' | 'grow' | 'edit' | 'path' | 'brief' | 'news'
@@ -2111,6 +2189,7 @@ function mountSky(root: HTMLDivElement) {
     paintAll()
     haptics.join()
     hold(res.change.note)
+    record(`${reshapeTally(res.change) || 'the map moved'} — you told it something`, trim(label(tl.t), 40))
     offerAction(reshapeTally(res.change) || 'the map moved', 'put it back', () => {
       res.change.undo()
       rebuild()
@@ -2118,6 +2197,72 @@ function mountSky(root: HTMLDivElement) {
       say('back the way it was')
     })
     fitWhenSettled()
+  }
+
+  /**
+   * Pick up whatever the agent still owes you.
+   *
+   * Runs outlive the page that started them. Coming back to a sky that is
+   * exactly as you left it — when a minute of research finished twenty seconds
+   * after you locked the phone — is the difference between ⚡ being something
+   * you trust and something you babysit.
+   */
+  async function collectOwed() {
+    if (S().offline || !S().userId) return
+    let runs: Awaited<ReturnType<typeof pendingRuns>>
+    try {
+      runs = await pendingRuns()
+    } catch {
+      return
+    }
+    for (const run of runs) {
+      if (dead) return
+      if (run.action !== 'deepen') continue
+      const id = subjectOf(run)
+      const tl = id ? view.byId.get(id) : null
+      if (!id || !tl) {
+        // the thought it was about is gone; nothing to land it on
+        void markApplied(run.id)
+        continue
+      }
+      if (run.status === 'running') {
+        // still out there. Take over the watch, and show it as out.
+        working = id
+        els.get(id)?.classList.add('working')
+        hold('still out there — picking up where it left off')
+        const res = await awaitRun(run.id, { startedAt: run.createdAt })
+        if (dead) return
+        working = null
+        els.get(id)?.classList.remove('working')
+        if (!res.ok) {
+          void markApplied(run.id)
+          hold(null)
+          say(res.why)
+          continue
+        }
+        landDeepen(tl, run.id, res.output, true)
+      } else if (run.status === 'succeeded') {
+        landDeepen(tl, run.id, run.output, true)
+      }
+    }
+  }
+  /** Fold a finished run into the sky, and say so. */
+  function landDeepen(tl: TL, runId: string, output: unknown, whileAway: boolean) {
+    const res = applyDeepen(tl.t.id, output as Parameters<typeof applyDeepen>[1], runId)
+    void markApplied(runId)
+    if (res.kind !== 'deepened') return
+    rebuild()
+    paintAll()
+    haptics.join()
+    hold(whileAway ? `while you were away — ${res.note || 'it finished'}` : res.note)
+    record(`⚡ came back with ${res.added} step${res.added === 1 ? '' : 's'}`, trim(label(tl.t), 40))
+    if (briefOf(tl.t.id)) {
+      offerAction(trim(label(tl.t), 30), 'read it', () => {
+        hold(null)
+        const q = posOf(tl.t.id)
+        openPage('brief', tl, toScreenX(q.x), toScreenY(q.y))
+      })
+    }
   }
 
   async function runDeepen(tl: TL) {
@@ -2179,6 +2324,7 @@ function mountSky(root: HTMLDivElement) {
       found ? `${found} thing${found === 1 ? '' : 's'} found` : '',
     ].filter(Boolean)
     hold(res.note || parts.join(' · ') || 'back from finding out')
+    record(`⚡ ${parts.join(' · ') || 'came back'}`, trim(label(tl.t), 40))
     if (briefOf(tl.t.id)) {
       offerAction(parts.join(' · ') || 'it wrote something down', 'read it', () => {
         hold(null)
@@ -3222,6 +3368,8 @@ function mountSky(root: HTMLDivElement) {
   raf = requestAnimationFrame(step)
   const n = view.tls.length
   if (n > 0) say(view.tls.some((tl) => tl.kind === 'drop' && isRipe(tl.t)) ? 'something is saturated' : n >= 8 ? 'a storm is brewing — hold a drop to gather it' : 'welcome back')
+  // and anything the agent finished while this page did not exist
+  void collectOwed()
 
   return () => {
     dead = true
