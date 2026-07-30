@@ -355,6 +355,28 @@ body.sky-held {
 .sky-page .pans .lab { font-size: 9.5px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--paper-soft, #8fa3b6); margin-bottom: 6px; }
 .sky-page .pans .a { font-size: 13.5px; line-height: 1.5; color: var(--paper-ink, #3d4b5c); padding: 7px 0; border-top: 0.5px solid rgba(19, 26, 36, 0.08); }
 .sky-page .pans img { max-width: 120px; border-radius: 12px; display: block; margin-bottom: 8px; }
+/* A brief is longer than a plan and is the thing you waited a minute for, so
+   it gets the room to be read rather than a quarter of the page. */
+.sky-page.brief .pans { max-height: 58dvh; }
+/* Where it came from. The sources are half the value of a brief — an answer
+   you cannot check is a rumour — so they are targets, not footnotes. */
+.sky-page .pans .src {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 9px 0;
+  border-top: 0.5px solid rgba(19, 26, 36, 0.08);
+  text-decoration: none;
+  color: var(--paper-ink, #3d4b5c);
+}
+.sky-page .pans .src .t { font-size: 13.5px; line-height: 1.45; flex: 1; min-width: 0; }
+.sky-page .pans .src .h {
+  font-size: 10.5px;
+  color: var(--paper-soft, #8fa3b6);
+  white-space: nowrap;
+}
+.sky-page .pans .src:active { opacity: 0.55; }
+.sky-page .pans b { font-weight: 600; color: var(--paper-ink, #3d4b5c); }
 .sky-page .bot {
   display: flex;
   justify-content: space-between;

@@ -79,8 +79,12 @@ export const deepen: ActionDef<DeepenInput, DeepenOutput> = {
   version: 1,
   modelTier: 'smart',
   maxTokens: 8000,
-  searchMaxUses: 6,
-  // measured at 51s against the live model: far past any request timeout
+  // Four, not six. Measured at 51s end to end with six, and the last two
+  // searches were mostly re-reading the same pages under a reworded query —
+  // the brief did not get better, the wait did get worse.
+  searchMaxUses: 4,
+  // still far past any request timeout, so it runs as a background job and the
+  // client polls for it
   background: true,
   inputSchema: Input,
   outputSchema: Output,

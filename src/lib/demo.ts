@@ -71,7 +71,42 @@ export const DEMO_SEED = {
   ],
   roadmaps: [],
   memories: [mem('me1', 'Two-person team based in Los Angeles'), mem('me2', 'Works best in the morning')],
-  artifacts: [],
+  // What ⚡ brings back. The demo used to show every part of the app except the
+  // one that does the most work.
+  artifacts: [
+    {
+      id: 'ar1',
+      user_id: 'demo',
+      thought_id: 'c1',
+      title: 'Shooting a lookbook on expired film',
+      content_md: [
+        '# Shooting a lookbook on expired film',
+        '',
+        '## What I found',
+        '- **Expired stock shifts colour before it loses speed** — the cast arrives years before the grain does',
+        '- **Rate it a stop slower for each decade past its date** — under-exposure is what kills a frame, not age',
+        '- **Labs will push it, but ask first** — a few refuse anything they cannot predict',
+        '',
+        '## The way through',
+        '1. **Buy two rolls from the same batch** — one to test, one to shoot, so what you learn still applies',
+        '2. **Shoot the test in the light you will use** — expired stock reacts to the light, not to the meter',
+        '3. **Book the lab before the shoot** — turnaround on hand-processed rolls is the thing that slips',
+        '',
+        '## Where this goes wrong',
+        '- Mixing batches, so the test tells you nothing about the shoot',
+        '- Heat-stored film: the cast is unpredictable rather than warm',
+        '',
+        '## Sources',
+        '- [Film Photography Project — shooting expired film](https://filmphotographyproject.com/expired-film)',
+      ].join('\n'),
+      sources: [
+        { title: 'Shooting expired film', url: 'https://filmphotographyproject.com/expired-film' },
+        { title: '', url: 'https://www.lomography.com/magazine/expired-film-guide' },
+      ],
+      agent_run_id: null,
+      created_at: days(2),
+    },
+  ],
   profile: {
     id: 'demo',
     display_name: 'demo',

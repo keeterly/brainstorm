@@ -9,6 +9,8 @@ import { runAction } from '@/ai/client'
 import type { ClassifyOutput } from '@shared/ai/actions/classify-thought'
 import { nameThePool, organizeText, tidySky } from './absorbFlow'
 import { seaLineAt, waterlineY } from '@/world/water'
+import { KIN_EVIDENCE, KIN_POOL, KIN_THREAD, type Kinship, kinship } from '@/domain/kinship'
+import { humanDate } from '@/domain/human-date'
 import { armUpright, stepUpright, worldTilt } from '@/world/upright'
 import { deepenThought } from './deepenFlow'
 import { haptics } from '@/lib/haptics'
@@ -99,6 +101,76 @@ export default function SkyPage() {
   )
 }
 
+/**
+ * The brief, as something you can read on a phone.
+ *
+ * The agent writes markdown, and a brief is a small and entirely predictable
+ * subset of it: headings, bullets, a numbered list, bold leads. Rendering it
+ * with a markdown library would be a dependency and a licence to inject; this
+ * walks the lines it actually writes and escapes everything else, so nothing
+ * that came back off the open web can put markup into the page.
+ */
+export function briefHtml(md: string, sources: { title: string; url: string }[]): string {
+  const esc = (t: string) =>
+    t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  // **lead** — the rest, which is the one bit of inline markup it uses
+  const inline = (t: string) => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+  const out: string[] = []
+  let n = 0
+  let inSources = false
+  for (const raw of md.split('\n')) {
+    const line = raw.trim()
+    if (!line) continue
+    if (inSources && !line.startsWith('#')) continue
+    if (line.startsWith('## ')) {
+      // the sources are rebuilt below from the real list, with links and hosts,
+      // so the agent's own plain-text version of them is skipped entirely
+      if (/^sources$/i.test(line.slice(3).trim())) {
+        inSources = true
+        continue
+      }
+      inSources = false
+      out.push(`<div class="lab">${inline(line.slice(3))}</div>`)
+      n = 0
+    } else if (line.startsWith('# ')) {
+      continue // the title is already the page's own heading
+    } else if (line.startsWith('- ')) {
+      // a source list is rendered from the sources array instead, with links
+      if (/^- \[.+\]\(.+\)$/.test(line)) continue
+      out.push(`<div class="a">${inline(line.slice(2))}</div>`)
+    } else if (/^\d+\.\s/.test(line)) {
+      n++
+      out.push(
+        `<div class="step${n === 1 ? ' first' : ''}"><div class="k">${n}</div>` +
+          `<div class="v">${inline(line.replace(/^\d+\.\s*/, ''))}</div></div>`,
+      )
+    } else {
+      out.push(`<div class="a">${inline(line)}</div>`)
+    }
+  }
+  if (sources.length) {
+    out.push(`<div class="lab">where this came from</div>`)
+    for (const s of sources) {
+      let host = ''
+      try {
+        host = new URL(s.url).hostname.replace(/^www\./, '')
+      } catch {
+        host = ''
+      }
+      // only ever http(s): a brief comes off the open web and a url is the one
+      // thing in it that the page hands back to the operating system
+      if (!/^https?:\/\//i.test(s.url)) continue
+      const name = s.title.trim()
+      out.push(
+        `<a class="src" href="${esc(s.url)}"><span class="t">${esc(name || host || s.url)}</span>` +
+          (host && name ? `<span class="h">${esc(host)}</span>` : '') +
+          `</a>`,
+      )
+    }
+  }
+  return out.join('') || `<div class="a">Nothing was written down.</div>`
+}
+
 // one drawn family for every tool, so nothing is a stray emoji
 function Ico({ d }: { d: string }) {
   return (
@@ -144,7 +216,6 @@ const QUESTIONS = [
   'Who is it really for?',
 ]
 const STOP = new Set(['what', 'when', 'where', 'which', 'would', 'could', 'should', 'about', 'with', 'this', 'that', 'than', 'then', 'like', 'look', 'from', 'have', 'over', 'into', 'your', 'their', 'there', 'they', 'want', 'need', 'make', 'build', 'helps', 'really', 'thing', 'something', 'anything'])
-const STRONG = 2
 
 // the same drawn family as the page tools — no stray emoji in the sky
 const MOON_ICONS: Record<string, string> = {
@@ -153,6 +224,8 @@ const MOON_ICONS: Record<string, string> = {
   rain: 'M7.6 13.6a3.7 3.7 0 0 1-.44-7.37 4.95 4.95 0 0 1 9.5-1.06 3.36 3.36 0 0 1 .3 6.67 3.6 3.6 0 0 1-.53.03H7.6M8.4 16.4l-1 3M13 16.4l-1 3M17.6 16.4l-1 3',
   // the bolt from the first Brainstorm: hand it over and it goes to work
   work: 'M13.2 2.8 5.4 13.1a.5.5 0 0 0 .4.8h4.3l-1.3 7.3 7.8-10.3a.5.5 0 0 0-.4-.8h-4.3l1.3-7.3Z',
+  // what it brought back: pages, with something written on them
+  brief: 'M6.2 3.6h8.1l3.5 3.5v13.3H6.2zM14.3 3.6v3.5h3.5M9 12.2h6M9 15.6h4.2',
 }
 function moonSvg(key: string) {
   return (
@@ -592,48 +665,63 @@ function mountSky(root: HTMLDivElement) {
     s = String(s).replace(/\s+/g, ' ').trim()
     return s.length > n ? s.slice(0, n - 1) + '…' : s
   }
-  const wordCache = new Map<string, Set<string>>()
-  let wordV = -1
-  function tlWords(tl: TL): Set<string> {
-    if (wordV !== ver) {
-      wordCache.clear()
-      wordV = ver
-    }
-    const hit = wordCache.get(tl.t.id)
-    if (hit) return hit
-    let w: Set<string>
-    if (tl.kind === 'drop') w = words(label(tl.t) + ' ' + answersOf(tl.t).join(' '))
-    else {
-      w = words(label(tl.t))
-      for (const m of tl.members) for (const x of words(label(m))) w.add(x)
-    }
-    wordCache.set(tl.t.id, w)
-    return w
-  }
-  function kinOf(tl: TL) {
-    const mine = tlWords(tl)
-    const out: { tl: TL; shared: number }[] = []
-    for (const other of view.tls) {
-      if (other.t.id === tl.t.id) continue
-      let shared = 0
-      for (const w of tlWords(other)) if (mine.has(w)) shared++
-      if (shared > 0) out.push({ tl: other, shared })
-    }
-    return out.sort((a, b) => b.shared - a.shared)
-  }
-  let kinCache: { v: number; pairs: { a: TL; b: TL; shared: number }[] } = { v: -1, pairs: [] }
-  function allKinPairs() {
-    if (kinCache.v === ver) return kinCache.pairs
-    const pairs: { a: TL; b: TL; shared: number }[] = []
-    for (let i = 0; i < view.tls.length; i++) {
-      const wi = tlWords(view.tls[i])
-      for (let j = i + 1; j < view.tls.length; j++) {
-        let shared = 0
-        for (const w of tlWords(view.tls[j])) if (wi.has(w)) shared++
-        if (shared > 0) pairs.push({ a: view.tls[i], b: view.tls[j], shared })
+  /**
+   * How alike everything on stage is, worked out across the whole sky at once
+   * because how much a word is worth depends on how many thoughts use it.
+   * Rebuilt when the sky changes, not per question.
+   */
+  let kinIx: { v: number; k: Kinship } = { v: -1, k: kinship([]) }
+  function kin(): Kinship {
+    if (kinIx.v !== ver) {
+      kinIx = {
+        v: ver,
+        k: kinship(
+          view.tls.map((tl) => ({
+            id: tl.t.id,
+            title: label(tl.t) + (tl.kind === 'drop' ? ' ' + answersOf(tl.t).join(' ') : ''),
+            inside: tl.kind === 'pool' ? tl.members.map((m) => label(m)) : undefined,
+          })),
+        ),
       }
     }
-    kinCache = { v: ver, pairs: pairs.sort((a, b) => b.shared - a.shared).slice(0, 12) }
+    return kinIx.k
+  }
+  /**
+   * What a thought could reasonably be gathered with, closest first.
+   *
+   * `pool` is the ones it would actually go inside — which asks how much of
+   * this thought the other one already accounts for, not how alike the two
+   * are. A group is never much "like" one thing inside it, and asking that
+   * question was half of why gather kept pulling in the wrong things.
+   */
+  function kinOf(tl: TL) {
+    const k = kin()
+    return k
+      .nearest(tl.t.id, KIN_THREAD)
+      .map((n) => {
+        const byId = view.tls.find((x) => x.t.id === n.id)
+        return byId
+          ? {
+              tl: byId,
+              score: n.score,
+              pool: k.belongs(tl.t.id, n.id) >= KIN_POOL && k.evidence(tl.t.id, n.id) >= KIN_EVIDENCE,
+            }
+          : null
+      })
+      .filter((x): x is { tl: TL; score: number; pool: boolean } => !!x)
+  }
+  let kinCache: { v: number; pairs: { a: TL; b: TL; score: number }[] } = { v: -1, pairs: [] }
+  function allKinPairs() {
+    if (kinCache.v === ver) return kinCache.pairs
+    const k = kin()
+    const pairs: { a: TL; b: TL; score: number }[] = []
+    for (let i = 0; i < view.tls.length; i++) {
+      for (let j = i + 1; j < view.tls.length; j++) {
+        const score = k.score(view.tls[i].t.id, view.tls[j].t.id)
+        if (score >= KIN_THREAD) pairs.push({ a: view.tls[i], b: view.tls[j], score })
+      }
+    }
+    kinCache = { v: ver, pairs: pairs.sort((a, b) => b.score - a.score).slice(0, 12) }
     return kinCache.pairs
   }
   function hasThread(a: string, b: string) {
@@ -887,11 +975,17 @@ function mountSky(root: HTMLDivElement) {
     const dots = answersOf(t).length
       ? `<div class="dots">${'<i></i>'.repeat(Math.min(3, answersOf(t).length))}</div>`
       : ''
-    const st = isRipe(t)
-      ? `<div class="state blue">saturated</div>`
-      : isKept(t)
-        ? `<div class="state">has a path</div>`
-        : dots
+    // A thought the agent went out for wears that permanently. It was the one
+    // thing ⚡ did not leave behind: a minute of real research, and nothing in
+    // the sky to say it had ever happened.
+    const brief = briefOf(t.id)
+    const st = brief
+      ? `<div class="state blue">a brief${brief.sources.length ? ` · ${brief.sources.length} sources` : ''}</div>`
+      : isRipe(t)
+        ? `<div class="state blue">saturated</div>`
+        : isKept(t)
+          ? `<div class="state">has a path</div>`
+          : dots
     const photo = imgOf(t) ? `<div class="photo"></div>` : ''
     el.innerHTML = (isRipe(t) ? `<div class="ring"></div>` : '') + photo + `<div class="t"></div>${r < 50 ? '' : st}`
     const ph = el.querySelector('.photo') as HTMLDivElement | null
@@ -926,17 +1020,20 @@ function mountSky(root: HTMLDivElement) {
         el.style.width = el.style.height = r * 2 + 'px'
         const shifted = isKept(tl.t) && !!ex(tl.t).planSig && ex(tl.t).planSig !== sigOf(tl)
         const open = openPool === tl.t.id
+        const pb = briefOf(tl.t.id)
         const st = open
           ? ''
           : shifted
             ? 'the sky shifted'
-            : isKept(tl.t)
-              ? 'has a path'
-              : `${tl.members.length} inside`
+            : pb
+              ? `a brief · ${tl.members.length} inside`
+              : isKept(tl.t)
+                ? 'has a path'
+                : `${tl.members.length} inside`
         const next = tl.members[0]
         const peek = !open && next ? `<div class="peek"></div>` : ''
         el.innerHTML =
-          `<div class="t" style="font-weight:600"></div>` + peek + (st ? `<div class="state ${shifted ? 'blue' : ''}"></div>` : '')
+          `<div class="t" style="font-weight:600"></div>` + peek + (st ? `<div class="state ${shifted || pb ? 'blue' : ''}"></div>` : '')
         const nameEl = el.querySelector('.t') as HTMLDivElement
         nameEl.style.fontSize = Math.round(Math.max(12, Math.min(18, 7 + r * 0.1)) * 10) / 10 + 'px'
         nameEl.textContent = label(tl.t)
@@ -1031,24 +1128,57 @@ function mountSky(root: HTMLDivElement) {
     }
   }
   let sayT: ReturnType<typeof setTimeout> | null = null
+  /** Standing text: while something is genuinely still happening, or has just
+   *  finished and has not been acknowledged. `say` must not wipe it. */
+  let held: string | null = null
   function say(msg: string) {
     hint.textContent = msg
     hint.style.opacity = '1'
     if (sayT) clearTimeout(sayT)
     sayT = setTimeout(() => {
-      hint.style.opacity = '0'
+      // fall back to whatever is still going on rather than to silence
+      if (held) hint.textContent = held
+      else hint.style.opacity = '0'
     }, 4200)
+  }
+  /**
+   * Say something and keep saying it.
+   *
+   * A four-second message is right for "returned to the ocean" and wrong for
+   * anything you might have walked away from. ⚡ is out for the best part of a
+   * minute; a line that vanishes after four seconds of that reads as the
+   * button having done nothing at all.
+   */
+  function hold(msg: string | null) {
+    held = msg
+    if (msg) {
+      if (sayT) clearTimeout(sayT)
+      hint.textContent = msg
+      hint.style.opacity = '1'
+    } else if (!sayT) hint.style.opacity = '0'
   }
 
   // ---------- undo / ocean / clouds ----------
   let undoFn: (() => void) | null = null
   let undoT: ReturnType<typeof setTimeout> | null = null
   function offerUndo(lb: string, fn: () => void) {
+    offerAction(lb, 'bring it back', fn, 6000)
+  }
+  /**
+   * The bar at the foot of the sky: something happened, and here is the one
+   * thing you might want to do about it.
+   *
+   * With no `ms` it stays. Undo has to expire — an offer to reverse something
+   * you did ten minutes ago is noise — but a result you waited a minute for
+   * must not, because the waiting is exactly when you put the phone down.
+   */
+  function offerAction(lb: string, go: string, fn: () => void, ms?: number) {
     undoLb.textContent = lb
+    undoGo.textContent = go
     undoFn = fn
     undoEl.classList.add('show')
     if (undoT) clearTimeout(undoT)
-    undoT = setTimeout(() => hideUndo(), 6000)
+    undoT = ms ? setTimeout(() => hideUndo(), ms) : null
   }
   function hideUndo() {
     undoEl.classList.remove('show')
@@ -1058,6 +1188,7 @@ function mountSky(root: HTMLDivElement) {
     if (!undoFn) return
     const f = undoFn
     hideUndo()
+    hold(null)
     f()
   })
 
@@ -1237,7 +1368,7 @@ function mountSky(root: HTMLDivElement) {
   function startPull(tl: TL, auto: boolean) {
     const kin = kinOf(tl)
       .slice(0, 6)
-      .filter((k) => k.shared >= STRONG || !hasThread(tl.t.id, k.tl.t.id))
+      .filter((k) => k.pool || !hasThread(tl.t.id, k.tl.t.id))
     if (!kin.length) {
       say('nothing like-minded nearby yet')
       return
@@ -1258,7 +1389,7 @@ function mountSky(root: HTMLDivElement) {
     const kin = kinOf(host)
     let settled = true
     for (const k of kin.slice(0, 6)) {
-      const strong = k.shared >= STRONG
+      const strong = k.pool
       if (!strong && hasThread(host.t.id, k.tl.t.id)) continue
       const hp = posOf(host.t.id)
       const kp = posOf(k.tl.t.id)
@@ -1291,7 +1422,7 @@ function mountSky(root: HTMLDivElement) {
       if (!host) break
       const cur = view.byId.get(k.tl.t.id)
       if (!cur) continue
-      if (k.shared >= STRONG) {
+      if (k.pool) {
         const hp = posOf(host.t.id)
         poolTogether(host, cur, { x: hp.x, y: hp.y })
         rebuild()
@@ -1312,7 +1443,9 @@ function mountSky(root: HTMLDivElement) {
   }
 
   // ---------- the light page ----------
-  type PageMode = 'capture' | 'grow' | 'edit' | 'path'
+  type PageMode = 'capture' | 'grow' | 'edit' | 'path' | 'brief'
+  /** The brief ⚡ brought back for this thought, if it went out for one. */
+  const briefOf = (id: string) => S().artifacts.find((a) => a.thought_id === id) ?? null
   let pageFor: { mode: PageMode; tl?: TL; ox: number; oy: number } | null = null
   function planOf(tl: TL): Step[] {
     if (tl.kind === 'drop') {
@@ -1371,9 +1504,12 @@ function mountSky(root: HTMLDivElement) {
     pageFor = { mode, tl, ox, oy }
     pageA.style.display = 'none'
     pageA.innerHTML = ''
-    pageT.style.display = mode === 'path' ? 'none' : ''
-    page.classList.toggle('path', mode === 'path')
-    pageD.textContent = mode === 'path' ? (tl && isKept(tl.t) ? 'Keep it' : 'Keep this path') : 'Done'
+    const reading = mode === 'path' || mode === 'brief'
+    pageT.style.display = reading ? 'none' : ''
+    page.classList.toggle('path', reading)
+    page.classList.toggle('brief', mode === 'brief')
+    pageD.textContent =
+      mode === 'brief' ? 'Done reading' : mode === 'path' ? (tl && isKept(tl.t) ? 'Keep it' : 'Keep this path') : 'Done'
     if (mode === 'path' && tl) {
       pageQ.textContent = `The rain from “${trim(label(tl.t), 44)}”`
       const stale = isKept(tl.t) && !!ex(tl.t).planSig && ex(tl.t).planSig !== sigOf(tl)
@@ -1392,6 +1528,21 @@ function mountSky(root: HTMLDivElement) {
         ;(el.querySelector('.d') as HTMLElement).textContent = plan[i].detail
         el.style.transitionDelay = reduced ? '0ms' : 180 + i * 90 + 'ms'
       })
+    } else if (mode === 'brief' && tl) {
+      // What ⚡ actually came back with. It ran for the best part of a minute
+      // and wrote all of this down; before, the only trace of it was four
+      // seconds of text at the top of the sky and then nothing.
+      const art = briefOf(tl.t.id)
+      pageQ.textContent = art?.title || 'What came back'
+      const when = art ? humanDate(art.created_at.slice(0, 10), todayISO()) : ''
+      pageN.textContent = when ? `found ${when}` : ''
+      pageA.style.display = 'block'
+      pageA.innerHTML = briefHtml(art?.content_md ?? '', art?.sources ?? [])
+      // sources are the point of a brief — they open, and they open out
+      for (const a of [...pageA.querySelectorAll('a')]) {
+        a.setAttribute('target', '_blank')
+        a.setAttribute('rel', 'noreferrer noopener')
+      }
     } else if (mode === 'capture') {
       pendingImage = null
       pageQ.textContent = 'What’s on your mind?'
@@ -1442,7 +1593,7 @@ function mountSky(root: HTMLDivElement) {
         page.classList.add('on')
       }),
     )
-    if (mode !== 'path') setTimeout(() => pageT.focus(), reduced ? 0 : 260)
+    if (!reading) setTimeout(() => pageT.focus(), reduced ? 0 : 260)
   }
   function classifyQuiet(t: Thought) {
     if (S().offline) return
@@ -1752,6 +1903,17 @@ function mountSky(root: HTMLDivElement) {
         },
       })
     }
+    // what it brought back last time, kept and readable
+    if (briefOf(tl.t.id)) {
+      acts.push({
+        icon: 'brief',
+        lb: 'the brief',
+        run: () => {
+          closeMoons()
+          openPage('brief', tl, toScreenX(p.x), toScreenY(p.y))
+        },
+      })
+    }
     // ⚡ — hand it to the agent and let it go and find out
     acts.push({
       icon: 'work',
@@ -1862,12 +2024,17 @@ function mountSky(root: HTMLDivElement) {
     const el = els.get(tl.t.id)
     el?.classList.add('working')
     // It really is gone for a minute: the research runs as a background job
-    // because it does not fit inside a request. Say so, and keep saying so —
-    // a glowing drop and silence reads as nothing happening.
-    say('out finding out — this takes a minute')
-    const patience = setInterval(() => {
-      if (working === tl.t.id) say('still out there…')
-    }, 22000)
+    // because it does not fit inside a request. So the notice stands for the
+    // whole of that, and counts, rather than blinking once and leaving a
+    // glowing drop and silence — which reads as nothing happening.
+    const began = Date.now()
+    const tick = () => {
+      if (working !== tl.t.id) return
+      const s = Math.round((Date.now() - began) / 1000)
+      hold(s < 12 ? 'out finding out — this takes a minute' : `still out there · ${s}s`)
+    }
+    tick()
+    const patience = setInterval(tick, 3000)
     // if the drop is a picture, the picture is the thing being asked about
     const img = ex(tl.t).img as string | undefined
     const b64 = img?.includes(',') ? img.split(',')[1] : undefined
@@ -1878,7 +2045,13 @@ function mountSky(root: HTMLDivElement) {
     working = null
     els.get(tl.t.id)?.classList.remove('working')
     if (res.kind === 'failed') {
-      say(res.why ?? 'could not get out there just now')
+      // a minute of waiting deserves better than four seconds of apology, and
+      // an offer to try again rather than hunting for the button
+      hold(res.why ?? 'could not get out there just now')
+      offerAction('tap to try again', 'again', () => {
+        hold(null)
+        void runDeepen(tl)
+      })
       return
     }
     // the new steps arrive around the thing they belong to
@@ -1894,7 +2067,23 @@ function mountSky(root: HTMLDivElement) {
     rebuild()
     paintAll()
     haptics.join()
-    say(res.note || `${res.added} steps — tap to open`)
+    // It waits for you. You may well have put the phone down — that is the
+    // whole point of it running in the background — and coming back to a sky
+    // that silently has more in it than it did is not the same as being told
+    // what happened and being handed what it wrote.
+    const found = res.output.found.length
+    const parts = [
+      res.added ? `${res.added} step${res.added === 1 ? '' : 's'}` : '',
+      found ? `${found} thing${found === 1 ? '' : 's'} found` : '',
+    ].filter(Boolean)
+    hold(res.note || parts.join(' · ') || 'back from finding out')
+    if (briefOf(tl.t.id)) {
+      offerAction(parts.join(' · ') || 'it wrote something down', 'read it', () => {
+        hold(null)
+        const q = posOf(tl.t.id)
+        openPage('brief', tl, toScreenX(q.x), toScreenY(q.y))
+      })
+    }
     fitWhenSettled()
   }
 
@@ -2570,7 +2759,9 @@ function mountSky(root: HTMLDivElement) {
         const bonded = hasThread(pair.a.t.id, pair.b.t.id)
         const rest = radiusOf(pair.a) + radiusOf(pair.b) + (bonded ? 44 : 70)
         if (dist > rest) {
-          const pull = Math.min(0.4, (dist - rest) * 0.0012 * (pair.shared + (bonded ? 2 : 0)))
+          // score runs 0…1 where the old shared-word count ran 1…4, so it is
+          // scaled back up to the same range of pull
+          const pull = Math.min(0.4, (dist - rest) * 0.0012 * (1 + pair.score * 6 + (bonded ? 2 : 0)))
           pa.x += (dx / dist) * pull
           pa.y += (dy / dist) * pull
           pb.x -= (dx / dist) * pull
