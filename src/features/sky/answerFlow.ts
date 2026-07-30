@@ -18,7 +18,7 @@ export type AnswerResult =
 
 export async function answerThought(
   subjectId: string,
-  opts: { intent?: string; image?: PromptImage; sizing?: Sizing } = {},
+  opts: { intent?: string; question?: string; image?: PromptImage; sizing?: Sizing } = {},
 ): Promise<AnswerResult> {
   const s = useGraph.getState()
   const subject = s.thoughts.find((t) => t.id === subjectId)
@@ -60,6 +60,7 @@ export async function answerThought(
         context: [...inside, ...siblings].slice(0, 40),
         under: parent ? title(parent) : undefined,
         intent: opts.intent?.trim() || undefined,
+        question: opts.question?.trim() || undefined,
         image: opts.image,
       },
       // a question whose answer needs nothing looked up comes back in seconds

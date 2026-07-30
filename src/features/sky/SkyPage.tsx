@@ -1796,7 +1796,8 @@ function mountSky(root: HTMLDivElement) {
   type PageMode = 'capture' | 'say' | 'edit' | 'path' | 'brief' | 'open' | 'aside'
   /** The brief ⚡ brought back for this thought, if it went out for one. */
   const briefOf = (id: string) => S().artifacts.find((a) => a.thought_id === id) ?? null
-  let pageFor: { mode: PageMode; tl?: TL; ox: number; oy: number } | null = null
+  /** `into` is the group a capture belongs to — see the long press. */
+  let pageFor: { mode: PageMode; tl?: TL; ox: number; oy: number; into?: string | null } | null = null
   /**
    * Which group the writing box is currently naming.
    *
@@ -1871,7 +1872,7 @@ function mountSky(root: HTMLDivElement) {
   vv?.addEventListener('scroll', measureKeyboard)
   measureKeyboard()
 
-  function openPage(mode: PageMode, tl: TL | undefined, ox: number, oy: number) {
+  function openPage(mode: PageMode, tl: TL | undefined, ox: number, oy: number, into?: string | null) {
     // The group page re-renders itself in place whenever its list changes, and
     // a half-typed name in the box above that list must survive the row you
     // just took out. Anything the outgoing render still owed goes in first —
@@ -1879,7 +1880,11 @@ function mountSky(root: HTMLDivElement) {
     const owed = pending
     pending = []
     for (const write of owed) write()
-    pageFor = { mode, tl, ox, oy }
+    // Whatever you write while a group is open belongs to that group. The
+    // long press is the same gesture wherever you do it, and doing it inside a
+    // group and getting a loose drop somewhere else in the sky is the app
+    // ignoring where you were standing.
+    pageFor = { mode, tl, ox, oy, into: mode === 'capture' ? (into ?? openPool) : null }
     nameFor = null
     pageA.style.display = 'none'
     pageA.innerHTML = ''
@@ -1901,6 +1906,7 @@ function mountSky(root: HTMLDivElement) {
     // The agent's way out of the writing page. Not offered with nothing to
     // send it, and not offered when there is no way to reach it.
     pageD2.hidden = mode !== 'say' || S().offline
+    sayVerb()
     if (mode === 'path' && tl) {
       pageQ.textContent = `The rain from “${trim(label(tl.t), 44)}”`
       const stale = isKept(tl.t) && !!ex(tl.t).planSig && ex(tl.t).planSig !== sigOf(tl)
@@ -2245,7 +2251,13 @@ function mountSky(root: HTMLDivElement) {
       pageQ.textContent = 'What’s on your mind?'
       pageT.value = ''
       pageT.placeholder = 'Let it storm.'
-      pageN.textContent = '✦ organizes · or a line, a drop'
+      // Where it will land, said before you write rather than after. A group
+      // is open often enough that "this is going somewhere in particular" is
+      // worth a line.
+      {
+        const home = openPool ? S().thoughts.find((t) => t.id === openPool) : null
+        pageN.textContent = home ? `into “${trim(label(home), 24)}”` : '✦ organizes · or a line, a drop'
+      }
     } else if (mode === 'say' && tl) {
       /*
        * One page for putting words into a thing.
@@ -2264,7 +2276,7 @@ function mountSky(root: HTMLDivElement) {
       pendingImage = null
       pageQ.textContent = QUESTIONS[answersOf(tl.t).length] || 'What else wants to be said?'
       pageT.value = ''
-      pageT.placeholder = 'Anything at all — what you know, what changed, what you found out…'
+      pageT.placeholder = 'What you know, what changed — or ask it something about this…'
       // The subject is the one thing you cannot have forgotten — you tapped it
       // a second ago — and with two buttons in the row it was being ellipsised
       // down to four characters. The room goes to the verbs.
@@ -2395,10 +2407,16 @@ function mountSky(root: HTMLDivElement) {
       if (!blocks.length) return
       let drops = 0
       let pools = 0
+      // The group that was open when you started writing, if there was one.
+      // Checked against the store rather than trusted: a group can be put away
+      // while its page is up, and hanging a new thought off something that is
+      // no longer there loses it.
+      const into = pf.into && S().thoughts.some((t) => t.id === pf.into && t.status === 'open') ? pf.into : null
       for (const b of blocks) {
         if (b.children.length) {
           pools++
           const g = S().addThought({ raw_content: b.title, title: b.title, type: 'goal', due_date: b.due })
+          if (into) S().addRelationship(g.id, into, 'part_of')
           const gp = posOf(g.id)
           gp.x = gp.rx = pf.ox + (Math.random() - 0.5) * 60
           gp.y = gp.ry = Math.max(140, pf.oy - 60)
@@ -2410,6 +2428,7 @@ function mountSky(root: HTMLDivElement) {
           for (const line of b.body.split(/\n+/).map((s) => s.trim()).filter(Boolean)) {
             drops++
             const t = S().addThought({ raw_content: line, due_date: b.due, source: micUsed ? 'voice' : 'text' })
+            if (into) S().addRelationship(t.id, into, 'part_of')
             const p = posOf(t.id)
             const a = Math.random() * Math.PI * 2
             const rad = drops === 1 && pools === 0 ? 0 : 100 + (drops % 3) * 46
@@ -2422,12 +2441,15 @@ function mountSky(root: HTMLDivElement) {
       micUsed = false
       splash(pf.ox)
       persistLayout()
+      const home = into ? S().thoughts.find((t) => t.id === into) : null
       say(
-        pools
-          ? `${pools === 1 ? 'a pool formed' : pools + ' pools formed'}${drops ? ` · ${drops} loose drop${drops > 1 ? 's' : ''}` : ''}`
-          : drops > 1
-            ? `the storm settles — ${drops} drops in the sky`
-            : 'it’s yours — drag it, grow it, pool it',
+        home
+          ? `${drops + pools === 1 ? 'it is' : `${drops + pools} are`} in “${trim(label(home), 26)}”`
+          : pools
+            ? `${pools === 1 ? 'a pool formed' : pools + ' pools formed'}${drops ? ` · ${drops} loose drop${drops > 1 ? 's' : ''}` : ''}`
+            : drops > 1
+              ? `the storm settles — ${drops} drops in the sky`
+              : 'it’s yours — drag it, grow it, pool it',
       )
     } else if (pf.mode === 'say' && pf.tl) {
       // Which of the two things happens to what you wrote was decided by the
@@ -2438,6 +2460,15 @@ function mountSky(root: HTMLDivElement) {
       if (handOver) {
         handOver = false
         if (!txt && !img) return
+        // A question goes to be answered; anything else goes to be worked in.
+        // The same test the button used to choose its word, so what happens is
+        // what the button said would happen.
+        if (txt && isQuestion(txt)) {
+          pendingImage = null
+          micUsed = false
+          void runAnswer(pf.tl, txt)
+          return
+        }
         void runReshape(pf.tl, txt, img, micUsed)
         micUsed = false
         pendingImage = null
@@ -2598,6 +2629,31 @@ function mountSky(root: HTMLDivElement) {
       return
     }
     closePage(true)
+  })
+  /**
+   * The second way out of the writing page, which is two verbs.
+   *
+   * Everything you write about a thing is either something you are telling it
+   * or something you are asking it, and those want opposite things back: one
+   * moves the map, the other explains. Which one it is, is in the words —
+   * isQuestion() is the same test that decides whether a drop gets `answer it`
+   * or `work it`, so a sentence that reads as a question here is treated as a
+   * question everywhere.
+   *
+   * This is the thing that went missing when I cut the row to three: you could
+   * ask a *question* about itself, and nothing anywhere let you ask a question
+   * about something that was not one. Standing in front of "Memory
+   * architecture proof of concept" and wanting to know what mem 2.0 is had no
+   * gesture at all. It is this one, and the answer comes back as a brief on
+   * the thing you asked it about, which is where it belongs.
+   */
+  const sayVerb = () => {
+    const asking = isQuestion(pageT.value)
+    pageD2.textContent = asking ? 'Answer it' : 'Work it in'
+    pageD2.classList.toggle('ask', asking)
+  }
+  pageT.addEventListener('input', () => {
+    if (pageFor?.mode === 'say') sayVerb()
   })
   pageD2.addEventListener('click', () => {
     handOver = true
@@ -3221,7 +3277,7 @@ function mountSky(root: HTMLDivElement) {
    * thing you asked for, so if you are still standing here when it lands, it
    * opens. Nobody waits a minute for a number and then wants to tap twice more.
    */
-  async function runAnswer(tl: TL) {
+  async function runAnswer(tl: TL, question?: string) {
     if (working || S().offline) return
     working = tl.t.id
     els.get(tl.t.id)?.classList.add('working')
@@ -3242,6 +3298,7 @@ function mountSky(root: HTMLDivElement) {
     const img = ex(tl.t).img as string | undefined
     const b64 = img?.includes(',') ? img.split(',')[1] : undefined
     const res = await answerThought(tl.t.id, {
+      question,
       image: b64 ? { mediaType: 'image/jpeg', dataB64: b64 } : undefined,
       sizing,
     })
@@ -3253,7 +3310,7 @@ function mountSky(root: HTMLDivElement) {
       hold(res.why ?? 'could not get out there just now', trim(label(tl.t), 34))
       offerAction('tap to try again', 'again', () => {
         hold(null)
-        void runAnswer(tl)
+        void runAnswer(tl, question)
       })
       return
     }
@@ -3525,8 +3582,16 @@ function mountSky(root: HTMLDivElement) {
           if (bgDown && !pageFor && !holding) {
             const b = bgDown
             bgDown = null
-            clearAll()
-            openPage('capture', undefined, b.x, b.y)
+            // Where you were standing is where it goes. clearAll() steps out of
+            // the open group, and it runs before the page does — so the group
+            // has to be read first and handed over, or a note written inside a
+            // group lands loose in the sky next to it. Only the actions are
+            // cleared when there is a group open: closing the thing you are
+            // writing into, to write into it, is the app forgetting mid-gesture.
+            const into = openPool
+            if (into) closeMoons()
+            else clearAll()
+            openPage('capture', undefined, b.x, b.y, into)
             // Your finger is still down, and the page has just appeared under
             // it. iOS then treats the rest of that press as a long-press on
             // the text — magnifier, selection handles, callout. Let the page

@@ -38,6 +38,17 @@ const Input = z.object({
   under: z.string().max(300).optional(),
   /** anything they typed when they asked */
   intent: z.string().max(2000).optional(),
+  /**
+   * A question *about* the subject rather than the subject itself.
+   *
+   * "Memory architecture proof of concept" is not a question, and there was no
+   * way to stand in front of it and ask what mem 2.0 is. When this is set it is
+   * the thing being answered and the subject becomes the frame around it —
+   * which is most of what makes the answer worth having, because "what is mem
+   * 2.0" asked while looking at a memory architecture is a narrower question
+   * than the same five words on their own.
+   */
+  question: z.string().max(600).optional(),
   image: z
     .object({
       mediaType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/gif']),
@@ -97,7 +108,8 @@ export type AnswerOutput = z.infer<typeof Output>
 
 export const answer: ActionDef<AnswerInput, AnswerOutput> = {
   name: 'answer',
-  version: 1,
+  // 2: a question can now be *about* the subject rather than be it
+  version: 2,
   modelTier: 'smart',
   maxTokens: 6000,
   // A question is narrower than a brief, so it converges sooner: four searches
@@ -115,6 +127,7 @@ export const answer: ActionDef<AnswerInput, AnswerOutput> = {
       : ''
     const under = input.under ? `\nIt sits under: ${input.under}` : ''
     const asked = input.intent?.trim() ? `\nThey added: "${input.intent.trim()}"` : ''
+    const q = input.question?.trim()
     const picture = input.image
       ? `\nAn image is attached — it is part of the question. Read what is actually in it and answer about that.`
       : ''
@@ -129,7 +142,10 @@ export const answer: ActionDef<AnswerInput, AnswerOutput> = {
         `can source, say plainly that it is a range and why, and put the one thing that would settle it in ` +
         `\`unknown\` — never invent a precise number to look decisive.`,
       user:
-        `Answer this.\n\n` +
+        (q
+          ? `Answer their question.\n\n"${q}"\n\nThey asked it while looking at this, which is the frame ` +
+            `for it and not the question — answer what they asked, about this.\n\n`
+          : `Answer this.\n\n`) +
         `[${s.id}] ${s.title}${s.type ? ` (${s.type})` : ''}${s.summary ? `\n${s.summary}` : ''}` +
         `${s.due ? `\ndue ${s.due}` : ''}${under}${around}${asked}${picture}\n\n` +
         `asked: the question as it actually reads, in one plain line. If the wording is shorthand, say the full ` +

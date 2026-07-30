@@ -384,6 +384,31 @@ describe('answer — the other half of ⚡, for the things that are questions', 
     expect(p.user).toContain('Arrive by September 28')
   })
 
+  it('answers a question *about* the subject when one is asked, rather than the subject', () => {
+    // Standing in front of "Memory architecture proof of concept" and wanting
+    // to know what mem 2.0 is had no gesture at all, because the only question
+    // this action could answer was the thing itself.
+    const p = answer.buildPrompt(
+      {
+        subject: { id: 'g1', title: 'Memory architecture proof of concept' },
+        context: ['Decide storage architecture'],
+        question: 'what is mem 2.0?',
+      },
+      ctx,
+    )
+    expect(p.user).toContain('Answer their question')
+    expect(p.user).toContain('what is mem 2.0?')
+    // and the subject is still there, as the frame rather than the question
+    expect(p.user).toContain('Memory architecture proof of concept')
+    expect(p.user).toContain('not the question')
+  })
+
+  it('is still answering the subject itself when nothing was asked about it', () => {
+    const p = answer.buildPrompt({ subject: { id: 'q1', title: 'Fares for LAX→CDG' }, context: [] }, ctx)
+    expect(p.user).toContain('Answer this.')
+    expect(p.user).not.toContain('Answer their question')
+  })
+
   it('reads a picture as part of the question when one is attached', () => {
     const p = answer.buildPrompt(
       { subject: { id: 'q1', title: 'What fabric is this?' }, context: [], image: { mediaType: 'image/jpeg', dataB64: 'AAAA' } },
