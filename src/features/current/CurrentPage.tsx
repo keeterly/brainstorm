@@ -475,7 +475,7 @@ export default function CurrentPage() {
       )}
 
       {/* the read on you sits under the one thing to do, never above it */}
-      <NoticedPanel openCount={prepass.visible.length} />
+      <NoticedPanel />
 
       {focusThought && (
         <FocusOverlay

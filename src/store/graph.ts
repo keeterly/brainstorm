@@ -479,3 +479,39 @@ export const useGraph = create<GraphState>((set, get) => ({
     get().updateThought(id, { bucket })
   },
 }))
+
+/**
+ * Coming back.
+ *
+ * `offline` had exactly two writers, both inside `hydrate`, and `hydrate` only
+ * ran on an auth change. So one launch with no signal turned every AI button
+ * in the app off and nothing ever turned them back on: on an installed iOS app,
+ * which is resumed rather than relaunched, that state could survive for days
+ * until you thought to force-quit it. Meanwhile the banner said "reconnecting…"
+ * and nothing was.
+ *
+ * Three chances to notice, because iOS gives none of them reliably: the
+ * `online` event, coming back to the app, and a slow tick for the case where
+ * the radio came back and the page was never told.
+ */
+const RETRY_MS = 60_000
+let retrying = false
+async function retryHydrate() {
+  const s = useGraph.getState()
+  if (!s.offline || !s.userId || retrying) return
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return
+  retrying = true
+  try {
+    await s.hydrate(s.userId)
+  } finally {
+    retrying = false
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => void retryHydrate())
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void retryHydrate()
+  })
+  setInterval(() => void retryHydrate(), RETRY_MS)
+}

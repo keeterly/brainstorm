@@ -7,7 +7,9 @@ import { discardFailed, onOutboxChange, retryFailed } from '@/lib/outbox'
  *
  * It had two honest states — offline, and syncing — and a third that was not:
  * "Working from local copy — reconnecting…" while nothing was reconnecting at
- * all. Now it has a fourth that matters more than the other three: writes the
+ * all, because `offline` had no writer outside `hydrate`. The store retries
+ * now, so the word is earned. And it has a fourth state that matters more than
+ * any of the others, and never had a way to be said at all: writes the
  * server refused, which the outbox parks rather than deleting. Those need a
  * person, so they get a sentence and a choice, instead of the console warning
  * nobody was ever going to read.
@@ -43,7 +45,7 @@ export function OfflineBanner() {
       ? `Offline — changes saved locally${pending ? ` (${pending} pending)` : ''} · AI paused`
       : pending
         ? `Syncing ${pending} change${pending === 1 ? '' : 's'}…`
-        : 'Working from a local copy · AI paused'
+        : 'Working from a local copy · AI paused · retrying'
   const act: React.CSSProperties = {
     background: 'none',
     border: 0,

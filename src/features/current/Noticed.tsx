@@ -9,20 +9,31 @@ import { humanDate } from '@/domain/human-date'
 import { todayISO } from '@/domain/prioritize-prepass'
 import { lookAgain, noticedIsStale, readNoticed, type Noticed } from './noticeFlow'
 
-export function NoticedPanel({ openCount }: { openCount: number }) {
+export function NoticedPanel() {
   const offline = useGraph((s) => s.offline)
   const thoughts = useGraph((s) => s.thoughts)
   const settings = useGraph((s) => s.profile?.settings)
   const [busy, setBusy] = useState(false)
   const [open, setOpen] = useState(false)
+  const [failed, setFailed] = useState(false)
   const noticed = (settings?.noticed as Noticed | undefined) ?? readNoticed()
+  // Counted here, the same way `lookAgain` counts it — every open thought of
+  // any type. The Current used to hand down `prepass.visible.length`, which is
+  // open *actions and tasks* only, so the two numbers described different
+  // populations and drifted apart by four on any real graph the moment the
+  // read was written. It has never once said "looked today".
+  const openCount = thoughts.filter((t) => t.status === 'open').length
   const stale = noticedIsStale(noticed ?? null, openCount)
 
   // the first real read happens on its own, once there is enough to read
   useEffect(() => {
     if (offline || busy || openCount < 4 || !stale || noticed) return
     setBusy(true)
-    void lookAgain().finally(() => setBusy(false))
+    void lookAgain()
+      .then((got) => {
+        if (!got) setFailed(true)
+      })
+      .finally(() => setBusy(false))
     // deliberately only on mount: this is expensive and should not chase edits
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -30,9 +41,14 @@ export function NoticedPanel({ openCount }: { openCount: number }) {
   async function refresh() {
     if (busy || offline) return
     setBusy(true)
-    await lookAgain()
+    setFailed(false)
+    const got = await lookAgain()
     setBusy(false)
-    setOpen(true)
+    // A spinner that stops and leaves the button exactly as it was is the app
+    // saying nothing happened when something did. It cannot always say what
+    // went wrong — the flow keeps that to itself — but it can say that it did.
+    if (!got) setFailed(true)
+    else setOpen(true)
   }
 
   if (!noticed && !busy) {
@@ -40,7 +56,7 @@ export function NoticedPanel({ openCount }: { openCount: number }) {
     return (
       <div style={{ textAlign: 'center', marginTop: 'var(--sp-6)' }}>
         <button className="faint" style={{ fontSize: 'var(--fs-label)' }} onClick={refresh}>
-          ▾ what do you notice?
+          {failed ? '▾ that did not come back — try again' : '▾ what do you notice?'}
         </button>
       </div>
     )
@@ -112,7 +128,11 @@ export function NoticedPanel({ openCount }: { openCount: number }) {
             }}
           >
             <span className="faint" style={{ fontSize: 'var(--fs-caption)' }}>
-              {stale ? 'this has gone stale' : `looked ${humanDate(noticed.atISO.slice(0, 10), todayISO())}`}
+              {failed
+                ? 'that did not come back'
+                : stale
+                  ? 'this has gone stale'
+                  : `looked ${humanDate(noticed.atISO.slice(0, 10), todayISO())}`}
             </span>
             <button className="btn btn--ghost btn--sm" onClick={refresh} disabled={busy || offline}>
               {busy ? 'looking…' : 'look again'}

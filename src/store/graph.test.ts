@@ -100,6 +100,30 @@ describe('opening the app', () => {
     expect(useGraph.getState().offline).toBe(true)
   })
 
+  it('comes back on its own once there is a signal again', async () => {
+    // `offline` had two writers, both inside hydrate, and hydrate only ran on
+    // an auth change. One launch with no signal turned every AI button in the
+    // app off and nothing ever turned them back on — on an installed iOS app,
+    // resumed rather than relaunched, that could last days.
+    tables.thoughts = { error: { message: 'offline' } }
+    await useGraph.getState().hydrate('u1')
+    expect(useGraph.getState().offline).toBe(true)
+
+    tables.thoughts = { data: [th('t1')] }
+    window.dispatchEvent(new Event('online'))
+    await vi.waitFor(() => expect(useGraph.getState().offline).toBe(false))
+    expect(useGraph.getState().thoughts).toHaveLength(1)
+  })
+
+  it('does not go asking again while it is working fine', async () => {
+    tables.thoughts = { data: [th('t1')] }
+    await useGraph.getState().hydrate('u1')
+    const before = vi.mocked(flush).mock.calls.length
+    window.dispatchEvent(new Event('online'))
+    await Promise.resolve()
+    expect(vi.mocked(flush).mock.calls.length).toBe(before)
+  })
+
   it('writes the arrangement into the snapshot it keeps', async () => {
     vi.useFakeTimers()
     tables.thoughts = { data: [th('t1')] }
