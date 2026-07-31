@@ -194,6 +194,36 @@ export const DEMO_OUTPUT: Record<string, unknown> = {
     learned: [],
     note: 'three things, and one of them settles the other two',
   },
+  // ⚡ itself — the action the whole app is shaped around, and the one the
+  // demo could not show. Without this it was the single button here that
+  // still failed, on the surface people open the demo to look at.
+  deepen: {
+    read: 'A campaign that only works if the film does',
+    found: [
+      { point: 'Expired stock shifts colour before it loses speed', why: 'the cast arrives years before the grain does' },
+      { point: 'Labs will push it, but ask first', why: 'a few refuse anything they cannot predict' },
+    ],
+    steps: [
+      {
+        tempId: 'd1',
+        title: 'Shoot one roll of the expired stock before booking anything',
+        why: 'the whole look rests on it and nobody has seen it yet',
+        effort: 2,
+        dependsOn: [],
+      },
+      {
+        tempId: 'd2',
+        title: 'Book the lab before the shoot, not after',
+        why: 'turnaround on hand-processed rolls is the thing that slips',
+        effort: 1,
+        dependsOn: ['d1'],
+      },
+    ],
+    watchOuts: ['Mixing batches, so the test tells you nothing about the shoot'],
+    sources: [{ title: 'Shooting expired film', url: 'https://filmphotographyproject.com/expired-film' }],
+    learned: [],
+    note: 'two things, and the first one settles the other',
+  },
   gauge: {
     depth: 'deep',
     needs: ['live LAX→CDG premium economy fares for those dates', 'Flying Blue award availability'],

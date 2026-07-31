@@ -20,7 +20,7 @@ import { applyAnswer, answerThought } from './answerFlow'
 import { applyDraft, draftThought } from './draftFlow'
 import { rainThought } from './rainFlow'
 import { closeGoal, evaporateGoal } from './finishFlow'
-import { emptiedGroup } from '@/domain/finished'
+import { emptiedGroup, wouldCircle } from '@/domain/finished'
 import { fullDepth, sizeUp, waitingWord, type Sizing } from './gaugeFlow'
 import { isMakeable, isQuestion } from '@/domain/question'
 import { addTo, bin, complete, groupInto, membersOf, rename, takeOut, ungroup, type Undone } from './groupFlow'
@@ -1240,7 +1240,13 @@ function mountSky(root: HTMLDivElement) {
           ? `<div class="state blue">saturated</div>`
           : dots
     const photo = imgOf(t) ? `<div class="photo"></div>` : ''
-    el.innerHTML = (isRipe(t) ? `<div class="ring"></div>` : '') + photo + `<div class="t"></div>${r < 50 ? '' : st}`
+    // …and a mark, so a thing the agent has been out for looks different from
+    // one it has not, at a glance, without reading anything. The state line
+    // says it too on a drop this size — but not on a small one, and not on a
+    // pool, where the count wins the line.
+    const mark = brief || ex(t).answered_at ? `<div class="mark" aria-hidden="true"></div>` : ''
+    el.innerHTML =
+      (isRipe(t) ? `<div class="ring"></div>` : '') + photo + mark + `<div class="t"></div>${r < 50 ? '' : st}`
     const ph = el.querySelector('.photo') as HTMLDivElement | null
     if (ph && imgOf(t)) ph.style.backgroundImage = `url(${imgOf(t)})`
     const tx = el.querySelector('.t') as HTMLDivElement
@@ -1327,7 +1333,10 @@ function mountSky(root: HTMLDivElement) {
         const next = tl.members[0]
         const peek = !open && next ? `<div class="peek"></div>` : ''
         el.innerHTML =
-          `<div class="t" style="font-weight:600"></div>` + peek + (st ? `<div class="state ${todo || pb ? 'blue' : ''}"></div>` : '')
+          `<div class="t" style="font-weight:600"></div>` +
+          (pb ? `<div class="mark" aria-hidden="true"></div>` : '') +
+          peek +
+          (st ? `<div class="state ${todo || pb ? 'blue' : ''}"></div>` : '')
         const nameEl = el.querySelector('.t') as HTMLDivElement
         nameEl.style.fontSize = Math.round(Math.max(12, Math.min(18, 7 + r * 0.1)) * 10) / 10 + 'px'
         nameEl.textContent = label(tl.t)
@@ -1392,6 +1401,10 @@ function mountSky(root: HTMLDivElement) {
       }
     }
     for (const [id] of els) if (!alive.has(id)) unmountEl(id)
+    // Last, because it depends on which elements survived this pass. Every
+    // paint rebuilds and re-mounts, so the glow has to be re-applied from
+    // state each time rather than set once and hoped for.
+    paintWorking()
     // Last resort, and the reason it exists: a sky where every single thing is
     // behind glass has no way back out of itself, because the things you would
     // tap to escape are the things that stopped taking taps. If that ever
@@ -1754,6 +1767,14 @@ function mountSky(root: HTMLDivElement) {
       if (old) S().deleteRelationship(old.id)
       if (id !== to) S().addRelationship(id, to, 'part_of')
     }
+    // Dragging a group onto something it already contains. There is no reading
+    // of that which is not a loop, and a loop in `part_of` is a sky that
+    // cannot be drawn — `rebuild` breaks them, but by then an edge you did not
+    // ask for has been written and synced.
+    if (wouldCircle(b.t.id, a.t.id, S().relationships)) {
+      say(`“${trim(label(a.t), 22)}” is already inside that one`)
+      return
+    }
     const pa = posOf(a.t.id)
     const pb = posOf(b.t.id)
     coalesce(
@@ -1764,13 +1785,25 @@ function mountSky(root: HTMLDivElement) {
       at,
     )
     if (a.kind === 'pool' && b.kind === 'pool') {
-      for (const m of b.members) {
-        const rel = partOfRel(m.id)
-        if (rel) S().deleteRelationship(rel.id)
-        S().addRelationship(m.id, a.t.id, 'part_of')
-      }
-      S().deleteThought(b.t.id)
-      say(`pooled into “${label(a.t)}”`)
+      /*
+       * A group dropped on a group goes *inside* it, still a group.
+       *
+       * It used to be torn open: every member re-homed into the target and the
+       * group itself deleted. So the one gesture for "these belong together"
+       * was also the only gesture in the app that destroyed something — the
+       * name you had given it, the shape you had put it in, the fact that
+       * those five things were one thing. You did not ask for any of that to
+       * go, and there was no undo on it.
+       *
+       * Everything needed to hold it was already here: `rebuild` reads
+       * `part_of` one level at a time, an open pool draws a member that has
+       * members as its own bubble with "N inside" on it, and tapping that
+       * opens it. Nesting was built, drawn and reachable — and this one line
+       * was flattening it on the way in.
+       */
+      rehome(b.t.id, a.t.id)
+      say(`“${trim(label(b.t), 20)}” is inside “${trim(label(a.t), 20)}”`)
+      record(`“${trim(label(b.t), 26)}” inside “${trim(label(a.t), 26)}”`)
     } else if (a.kind === 'pool' || b.kind === 'pool') {
       const pool = a.kind === 'pool' ? a : b
       const drop = a.kind === 'pool' ? b : a
@@ -2179,6 +2212,10 @@ function mountSky(root: HTMLDivElement) {
                   // characters of that and hides the rest behind a button. A
                   // list of your work you cannot read is not a list.
                   `<textarea class="t" rows="1" aria-label="What this is called" enterkeyhint="done"></textarea>` +
+                  // a group inside a group is still a group, and the list has
+                  // to say so — a row that looks like any other item is the
+                  // page contradicting what the sky just showed you
+                  `<span class="held"></span>` +
                   `<button class="ctl out" aria-label="Take it out of this group">take out</button></div>`,
               )
               .join('')
@@ -2273,6 +2310,10 @@ function mountSky(root: HTMLDivElement) {
         }
         field.addEventListener('input', fit)
         requestAnimationFrame(fit)
+        const held = view.kidsOf.get(m.id)?.length ?? 0
+        const heldEl = row.querySelector('.held') as HTMLElement
+        if (held) heldEl.textContent = `${held} inside`
+        else heldEl.remove()
         row.classList.toggle('ticked', S().thoughts.find((t) => t.id === m.id)?.status === 'done')
         // No edit mode, no pencil, no second screen: the row is the field, so
         // fixing a name is typing over it. Committed when you leave it or press
@@ -3201,7 +3242,35 @@ function mountSky(root: HTMLDivElement) {
 
     // 3. Get on with it — see getOnWithIt, which is the only place that
     //    decision is made now, because the brief makes it too.
-    acts.push({ ...getOnWithIt(tl), run: () => { closeMoons(); getOnWithIt(tl).run() } })
+    const third = getOnWithIt(tl)
+    acts.push({ ...third, run: () => { closeMoons(); getOnWithIt(tl).run() } })
+
+    /*
+     * 4. …and what it already brought back, when there is any.
+     *
+     * Three was the right number while every thing had the same three things
+     * you could intend. But a thing ⚡ has already been out for is not in that
+     * state any more: there is a minute of research sitting on it, and the
+     * only way to reach it was the group page, four taps away, behind a fold,
+     * under a heading about deleting things. The pool's own label even said
+     * "the brief is one moon away and never goes anywhere" — it was not, and
+     * this is the moon that makes that true.
+     *
+     * It appears only when there is something to read, so nothing on a plain
+     * drop has changed, and never twice: `get on with it` already says
+     * `read it` on a step that has been written.
+     */
+    if (briefOf(tl.t.id) && third.lb !== 'read it') {
+      acts.push({
+        icon: 'brief',
+        lb: 'read it',
+        run: () => {
+          closeMoons()
+          const q = posOf(tl.t.id)
+          openPage('brief', tl, toScreenX(q.x), toScreenY(q.y))
+        },
+      })
+    }
     acts.forEach((a, i) => {
       const m = document.createElement('div')
       m.className = 'sky-moon' + (a.dim ? ' dim' : '')
@@ -3331,12 +3400,10 @@ function mountSky(root: HTMLDivElement) {
     }
     haptics.arrive()
 
-    working = tl.t.id
-    els.get(tl.t.id)?.classList.add('working')
+    setWorking(tl.t.id)
     hold('what falls out of this…', trim(label(tl.t), 34))
     const res = await rainThought(tl.t.id)
-    working = null
-    els.get(tl.t.id)?.classList.remove('working')
+    setWorking(null)
     if (dead) return
 
     if (res.kind === 'failed') {
@@ -3382,7 +3449,42 @@ function mountSky(root: HTMLDivElement) {
   }
   // ⚡ — the agent goes away and does the legwork on one drop, and what it
   // finds arrives as real work hanging under it rather than as a wall of prose.
+  /**
+   * What the agent is out working on, if anything.
+   *
+   * State, not a class poked onto an element — which is what it was, and is
+   * why the glow vanished the moment you left the group it was inside. The
+   * drop was unmounted along with everything else in that ring, taking its
+   * `.working` class with it, and nothing upstream ever knew. You would come
+   * out of a group to a perfectly still sky with a minute of research still
+   * running in it, and the only way to find out was to go back in.
+   *
+   * `paintWorking` puts the glow on whatever is actually on screen: the thing
+   * itself when you can see it, and otherwise the nearest ancestor you can —
+   * so the group you just stepped out of keeps pulsing until the work lands.
+   */
   let working: string | null = null
+  function setWorking(id: string | null) {
+    working = id
+    paintWorking()
+  }
+  function paintWorking() {
+    for (const [, el] of els) el.classList.remove('working')
+    if (!working) return
+    // up through the part_of chain until something is drawn. `seen` because a
+    // bad edge can make a loop and a loop here would hang the frame.
+    const seen = new Set<string>()
+    let id: string | undefined = working
+    while (id && !seen.has(id)) {
+      seen.add(id)
+      const el = els.get(id)
+      if (el) {
+        el.classList.add('working')
+        return
+      }
+      id = view.parentOf.get(id)
+    }
+  }
   /**
    * Work new information into a part of the map.
    *
@@ -3394,15 +3496,13 @@ function mountSky(root: HTMLDivElement) {
   async function runReshape(tl: TL, news: string, img: { mediaType: string; dataB64: string } | null, spoken: boolean) {
     if (working || S().offline) return
     const id = tl.t.id
-    working = id
-    els.get(id)?.classList.add('working')
+    setWorking(id)
     hold('working it in…', trim(label(tl.t), 34))
     const res = await reshapeThought(id, news || 'See the attached picture.', {
       image: img ? { mediaType: img.mediaType, dataB64: img.dataB64 } : undefined,
       spoken: spoken || undefined,
     })
-    working = null
-    els.get(id)?.classList.remove('working')
+    setWorking(null)
     if (res.kind === 'failed') {
       hold(res.why ?? 'could not work that in just now', trim(label(tl.t), 34))
       offerAction('nothing was changed', 'try again', () => {
@@ -3477,13 +3577,11 @@ function mountSky(root: HTMLDivElement) {
       }
       if (run.status === 'running') {
         // still out there. Take over the watch, and show it as out.
-        working = id
-        els.get(id)?.classList.add('working')
+        setWorking(id)
         hold('still out there — picking up where it left off')
         const res = await awaitRun(run.id, { startedAt: run.createdAt })
         if (dead) return
-        working = null
-        els.get(id)?.classList.remove('working')
+        setWorking(null)
         if (!res.ok) {
           void markApplied(run.id)
           hold(null)
@@ -3533,9 +3631,7 @@ function mountSky(root: HTMLDivElement) {
 
   async function runDeepen(tl: TL) {
     if (working || S().offline) return
-    working = tl.t.id
-    const el = els.get(tl.t.id)
-    el?.classList.add('working')
+    setWorking(tl.t.id)
     // It really is gone for a minute: the research runs as a background job
     // because it does not fit inside a request. So the notice stands for the
     // whole of that, and counts, rather than blinking once and leaving a
@@ -3565,8 +3661,7 @@ function mountSky(root: HTMLDivElement) {
       sizing,
     })
     clearInterval(patience)
-    working = null
-    els.get(tl.t.id)?.classList.remove('working')
+    setWorking(null)
     if (res.kind === 'failed') {
       // a minute of waiting deserves better than four seconds of apology, and
       // an offer to try again rather than hunting for the button
@@ -3625,8 +3720,7 @@ function mountSky(root: HTMLDivElement) {
    */
   async function runDraft(tl: TL, intent?: string) {
     if (working || S().offline) return
-    working = tl.t.id
-    els.get(tl.t.id)?.classList.add('working')
+    setWorking(tl.t.id)
     const began = Date.now()
     let sizing: Sizing = { ...fullDepth(2), why: 'reading the task' }
     const tick = () => {
@@ -3643,8 +3737,7 @@ function mountSky(root: HTMLDivElement) {
     tick()
     const res = await draftThought(tl.t.id, { intent, sizing })
     clearInterval(patience)
-    working = null
-    els.get(tl.t.id)?.classList.remove('working')
+    setWorking(null)
     if (dead) return
     if (res.kind === 'failed') {
       hold(res.why ?? 'could not do that just now', trim(label(tl.t), 34))
@@ -3708,8 +3801,7 @@ function mountSky(root: HTMLDivElement) {
    */
   async function runAnswer(tl: TL, question?: string) {
     if (working || S().offline) return
-    working = tl.t.id
-    els.get(tl.t.id)?.classList.add('working')
+    setWorking(tl.t.id)
     const began = Date.now()
     let sizing: Sizing = { ...fullDepth(3), why: 'sizing it up' }
     const tick = () => {
@@ -3732,8 +3824,7 @@ function mountSky(root: HTMLDivElement) {
       sizing,
     })
     clearInterval(patience)
-    working = null
-    els.get(tl.t.id)?.classList.remove('working')
+    setWorking(null)
     if (dead) return
     if (res.kind === 'failed') {
       hold(res.why ?? 'could not get out there just now', trim(label(tl.t), 34))

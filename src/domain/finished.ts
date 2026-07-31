@@ -31,3 +31,25 @@ export function emptiedGroup(
   )
   return stillOpen ? null : parent
 }
+
+/**
+ * Would putting `child` under `parent` close a loop?
+ *
+ * Dragging a group onto something it already contains is the one way to ask
+ * for one, and there is no reading of that request which is not a loop. The
+ * sky's `rebuild` does break cycles when it finds them — but by then an edge
+ * nobody asked for has been written, synced, and is sitting in the graph on
+ * every other device.
+ */
+export function wouldCircle(childId: string, parentId: string, rels: Relationship[]): boolean {
+  if (childId === parentId) return true
+  const seen = new Set<string>()
+  let cur: string | undefined = parentId
+  while (cur) {
+    if (cur === childId) return true
+    if (seen.has(cur)) return false // a loop that was already there
+    seen.add(cur)
+    cur = rels.find((r) => r.type === 'part_of' && r.from_id === cur)?.to_id
+  }
+  return false
+}

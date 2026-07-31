@@ -797,6 +797,18 @@ body.sky-held {
 }
 /* 44pt of target for a 10px label: the words are small because they are not
    the point of the row, but the thing you press is not. */
+/* a member that is itself a group says how much it is holding */
+.sky-page .pans .row .held {
+  flex-shrink: 0;
+  align-self: center;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: rgba(var(--accent-rgb), 0.9);
+  white-space: nowrap;
+}
+
 .sky-page .pans .row .out {
   flex-shrink: 0;
   min-height: 30px;
@@ -1346,6 +1358,31 @@ body.sky-resting .sky-tidy { right: calc(14px + var(--rest-w, 96px) + 8px); }
 
 /* a drop the agent has gone away to work on — lit, and breathing while it is
    out there, so you can put the phone down and know it is still going */
+/* The agent has been out for this one.
+ *
+ * A drop says so in words ("a brief · 3 sources") when it is big enough to
+ * carry a line; a small one has no room and a pool spends the line on how much
+ * work is inside it. So the fact itself gets a mark, which needs no room and
+ * no reading: a lit bead on the rim, the same accent the app uses for
+ * everything the agent did rather than you.
+ */
+.skyb .mark {
+  position: absolute;
+  top: 12%;
+  right: 12%;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(var(--accent-rgb), 0.92);
+  box-shadow:
+    0 0 0 2.5px rgba(var(--accent-rgb), 0.16),
+    0 0 10px rgba(var(--accent-rgb), 0.55);
+  pointer-events: none;
+}
+/* on a member disc in an orbit there is less rim to spare */
+.skyb.member .mark { width: 7px; height: 7px; top: 10%; right: 10%; }
+.skyb.small .mark { width: 6px; height: 6px; }
+
 .skyb.working {
   border-color: rgba(var(--accent-rgb), 0.72);
   animation: sky-working 2.1s ease-in-out infinite;
