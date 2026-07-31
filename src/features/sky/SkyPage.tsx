@@ -3281,6 +3281,27 @@ function mountSky(root: HTMLDivElement) {
     field.addEventListener('blur', () => {
       field.readOnly = true
     })
+    /*
+     * …and a way in that is not a finger.
+     *
+     * `readonly` is decided by a pointer gesture, which left anybody arriving
+     * by keyboard able to Tab onto a row, type, and watch nothing happen — a
+     * silent failure, the worst kind. Typing into it is an unambiguous request
+     * to edit it, so the first keystroke lets itself in: cleared during
+     * `keydown`, before the default action that inserts the character, so the
+     * character it was typed with is the first one in the field rather than
+     * being swallowed.
+     */
+    field.addEventListener('keydown', (e) => {
+      const k = e as KeyboardEvent
+      if (!field.readOnly) return
+      // Tab must still move on, and a modifier is somebody using a shortcut
+      if (k.key === 'Tab' || k.metaKey || k.ctrlKey || k.altKey) return
+      if (k.key.length === 1 || k.key === 'Enter' || k.key === 'Backspace') {
+        field.readOnly = false
+        if (k.key === 'Enter') k.preventDefault()
+      }
+    })
   }
 
   /** Hand a row's words over to the caret. Called by whatever decides a press

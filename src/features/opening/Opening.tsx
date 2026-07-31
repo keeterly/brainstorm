@@ -87,6 +87,7 @@ export default function Opening() {
     if (!hydrated || started.current) return
     started.current = true
     if (!anything) return setGone(true)
+
     const a = setTimeout(() => setLeaving(true), HOLD_MS)
     const b = setTimeout(() => setGone(true), HOLD_MS + FADE_MS)
     return () => {
@@ -95,9 +96,23 @@ export default function Opening() {
     }
   }, [hydrated, anything])
 
-  if (gone) return null
+  /*
+   * Nothing at all until the graph has landed.
+   *
+   * `hydrate` only runs for a signed-in session; signed out — the sign-in
+   * screen, a password reset, a device with no Supabase configured — the store
+   * stays unhydrated for ever. Waiting for hydration behind an opaque
+   * full-screen sheet therefore meant a black screen over the form you had come
+   * to fill in, with no way to make it go away. It renders when it has
+   * something to say and not one frame before.
+   */
+  if (gone || !hydrated || !anything) return null
   return (
-    <div className={`opening${leaving ? ' leaving' : ''}${hydrated && anything ? ' lit' : ''}`} aria-hidden="true">
+    <div
+      data-testid="opening"
+      className={`opening lit${leaving ? ' leaving' : ''}`}
+      aria-hidden="true"
+    >
       <div className="opening-in">
         {WORDS.map(([k, word], i) => (
           <div className="opening-line" style={{ '--i': i } as React.CSSProperties} key={k}>

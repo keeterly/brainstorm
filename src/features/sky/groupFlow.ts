@@ -56,7 +56,22 @@ export function rename(id: string, name: string): Undone | null {
   if (!t || !next || next === (t.title ?? '')) return null
   const wasTitle = t.title
   const wasRaw = t.raw_content
-  S().updateThought(id, { title: next, raw_content: next })
+  /*
+   * The name, and the body only if they were ever the same thing.
+   *
+   * This used to write `next` into both. For most things that is right: you
+   * type one line into the sky and the line is both what it is called and all
+   * there is of it. But a paragraph you captured and the short title `classify`
+   * gave it afterwards are *not* the same thing — and renaming replaced the
+   * paragraph with the title. The original wording was gone from the export,
+   * from every prompt built out of it, and from the app; only the undo bar
+   * still had it, for as long as it was on screen.
+   *
+   * Saving as you type made that worse rather than better, because it happens
+   * six hundred milliseconds after a keystroke rather than when you look away.
+   */
+  const bodyWasTheName = !wasRaw.trim() || wasRaw.trim() === (wasTitle ?? '').trim()
+  S().updateThought(id, bodyWasTheName ? { title: next, raw_content: next } : { title: next })
   return {
     note: `renamed to “${next}”`,
     undo: () => S().updateThought(id, { title: wasTitle, raw_content: wasRaw }),
