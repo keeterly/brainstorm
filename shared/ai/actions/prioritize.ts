@@ -61,7 +61,7 @@ export const prioritize: ActionDef<PrioritizeInput, PrioritizeOutput> = {
         `Open actions:\n${lines}\n\n` +
         (input.energy ? `User energy right now: ${input.energy}.\n` : '') +
         (input.availableMinutes ? `Available time: about ${input.availableMinutes} minutes.\n` : '') +
-        `Assign EVERY action to a bucket: now (do today), next (this week), later, waiting (blocked or external). ` +
+        `Assign EVERY action to a bucket: now (do today), next (in the flow — the default, and where most work belongs), later (deliberately set aside, so it drops out of sight until they go looking), waiting (blocked on something else, or on somebody else). Use "later" sparingly: it is a decision to not do something for now, not a place to put anything undated. ` +
         `Weigh importance, urgency, effort, dependencies, momentum, and energy. BLOCKED actions must be "waiting". ` +
         `Each assignment gets a short reason.\n` +
         `Then pick ONE recommended action (must be bucket "now") with a plain-language why that explains what it unlocks ` +

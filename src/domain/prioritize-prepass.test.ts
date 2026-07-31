@@ -51,14 +51,15 @@ describe('prioritizePrepass', () => {
     const r = prioritizePrepass([a, b], [rel('a', 'b', 'depends_on')], TODAY)
     expect(r.buckets.get('a')).toBe('waiting')
     expect(r.blocked.has('a')).toBe(true)
-    expect(r.buckets.get('b')).toBe('later')
+    // and the thing it is waiting on is flowing — it is the work to do next
+    expect(r.buckets.get('b')).toBe('next')
   })
 
   it('dependency on a DONE thought does not block', () => {
     const a = th({ id: 'a' })
     const b = th({ id: 'b', status: 'done' })
     const r = prioritizePrepass([a, b], [rel('a', 'b', 'depends_on')], TODAY)
-    expect(r.buckets.get('a')).toBe('later')
+    expect(r.buckets.get('a')).toBe('next')
   })
 
   it('blocks edge marks the target as waiting', () => {
@@ -68,7 +69,7 @@ describe('prioritizePrepass', () => {
     expect(r.buckets.get('b')).toBe('waiting')
   })
 
-  it('overdue and due-today go to now; due-this-week to next', () => {
+  it('overdue and due-today go to now; everything else open is flowing', () => {
     const over = th({ id: 'over', due_date: '2026-07-20' })
     const today = th({ id: 'today', due_date: TODAY })
     const week = th({ id: 'week', due_date: '2026-08-01' })
@@ -77,7 +78,10 @@ describe('prioritizePrepass', () => {
     expect(r.buckets.get('over')).toBe('now')
     expect(r.buckets.get('today')).toBe('now')
     expect(r.buckets.get('week')).toBe('next')
-    expect(r.buckets.get('far')).toBe('later')
+    // A date in September is not a reason to hide something. `later` means
+    // deferred — snoozed, or a bucket you set by hand — and a far-off due date
+    // is neither; the list is sorted by date, so it simply sits further down.
+    expect(r.buckets.get('far')).toBe('next')
   })
 
   it('future snooze hides the action; past snooze wakes it', () => {
@@ -112,5 +116,29 @@ describe('prioritizePrepass', () => {
     const dued = th({ id: 'dued', due_date: '2026-08-01', created_at: '2026-07-20T00:00:00Z' })
     const r = prioritizePrepass([late, early, dued], [], TODAY)
     expect(r.visible.map((t) => t.id)).toEqual(['dued', 'early', 'late'])
+  })
+})
+
+describe('what "later" means', () => {
+  // The rule that made the Current unreadable: almost no real work carries a
+  // due date, so almost all of it was filed as `later` and counted off to a
+  // fourth place. You could rain a cloud, watch four things fall out of it,
+  // open the Current and be told nothing was flowing.
+  it('is never where undated work ends up', () => {
+    const many = Array.from({ length: 12 }, (_, i) => th({ id: `t${i}` }))
+    const r = prioritizePrepass(many, [], TODAY)
+    expect([...r.buckets.values()].every((b) => b === 'next')).toBe(true)
+  })
+
+  it('is where a snooze puts something, and it stays out of sight entirely', () => {
+    const t = th({ id: 'a', snooze_until: '2026-09-01' })
+    const r = prioritizePrepass([t], [], TODAY)
+    expect(r.visible).toHaveLength(0)
+  })
+
+  it('is where you can still put something by hand', () => {
+    const t = th({ id: 'a', bucket: 'later' })
+    const r = prioritizePrepass([t], [], TODAY)
+    expect(r.buckets.get('a')).toBe('later')
   })
 })

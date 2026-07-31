@@ -6,7 +6,6 @@ import { TabBar } from '@/components/TabBar'
 import { OfflineBanner } from '@/components/OfflineBanner'
 import { Atmosphere, WorldHem } from '@/world/Atmosphere'
 import SkyPage from '@/features/sky/SkyPage'
-import CollectPage from '@/features/collect/CollectPage'
 import CurrentPage from '@/features/current/CurrentPage'
 import MemoryPage from '@/features/memory/MemoryPage'
 import ThoughtPage from '@/features/thought/ThoughtPage'
@@ -37,7 +36,13 @@ export default function App() {
         <div className="view" key={pathname}>
           <Routes>
             <Route path="/" element={<SkyPage />} />
-            <Route path="/collect" element={<CollectPage />} />
+            {/* Collect was a second capture screen — "What is on your mind?",
+                a box, a Capture button — and nothing in the app has linked to
+                it for months. The sky does the same job better: hold anywhere
+                and write, and what you write lands where you were standing,
+                inside the group you were reading. A screen you cannot reach is
+                not a feature, it is a thing that has to keep compiling. */}
+            <Route path="/collect" element={<Navigate to="/" replace />} />
             {/* the sky is the world now; ThinkPage was a second drawing of the
                 same graph and rendered nowhere for months. The redirect stays
                 for anything holding an old link — a bookmark, a cached PWA

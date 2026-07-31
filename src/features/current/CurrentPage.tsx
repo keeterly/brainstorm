@@ -1,7 +1,6 @@
 // The Current — one meaningful action, large. Everything else stays folded
 // until asked for. Never a task list first.
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useGraph } from '@/store/graph'
 import { nextAction } from '@/domain/next-action'
 import { prioritizePrepass, todayISO } from '@/domain/prioritize-prepass'
@@ -21,7 +20,6 @@ import type { AnswerOutput } from '@shared/ai/actions/answer'
 import type { Thought } from '@/domain/types'
 
 export default function CurrentPage() {
-  const navigate = useNavigate()
   const thoughts = useGraph((s) => s.thoughts)
   const relationships = useGraph((s) => s.relationships)
   const profile = useGraph((s) => s.profile)
@@ -74,6 +72,20 @@ export default function CurrentPage() {
     const b = prepass.buckets.get(t.id)
     return b === 'now' || b === 'next'
   })
+  // Held up by something else that is still open. Part of the current — it is
+  // your work and it is going somewhere — but not something you can pick up,
+  // so it is shown apart from what you can. It used to be counted off to "the
+  // world" along with everything else, which is how a page with two dozen live
+  // actions on it came to say nothing was flowing.
+  const held = prepass.visible.filter((t) => prepass.buckets.get(t.id) === 'waiting')
+  const heldOn = (t: Thought) => {
+    const dep = relationships.find(
+      (r) => (r.type === 'depends_on' && r.from_id === t.id) || (r.type === 'blocks' && r.to_id === t.id),
+    )
+    const otherId = dep ? (dep.type === 'depends_on' ? dep.to_id : dep.from_id) : null
+    const other = otherId ? thoughts.find((x) => x.id === otherId) : null
+    return other ? (other.title || other.raw_content.slice(0, 60)) : null
+  }
   // The same answer the sky gives, from the same rules.
   //
   // This page used to work out its own first thing and its own reason for it,
@@ -86,7 +98,9 @@ export default function CurrentPage() {
   const primary = recThought ?? auto?.thought ?? null
   const primaryWhy = recThought && rec ? rec.why : (auto?.why ?? '')
   const rest = flow.filter((t) => t.id !== primary?.id)
-  const elsewhere = prepass.visible.length - (primary ? 1 : 0) - rest.length
+  // Whatever is neither flowing nor held: something you put in `later` by hand.
+  // Snoozed work is not here — that is out of `visible` entirely, by design.
+  const aside = prepass.visible.length - (primary ? 1 : 0) - rest.length - held.length
 
   async function decideFirst() {
     const candidates = prepass.visible.slice(0, 80).map((t) => ({
@@ -345,10 +359,13 @@ export default function CurrentPage() {
         </p>
       )}
 
-      {rest.length > 0 && (
+      {rest.length + held.length > 0 && (
         <div style={{ textAlign: 'center' }}>
+          {/* Counts the held ones too. A day where everything but the first
+              thing is blocked is a real day, and the fold used not to open on
+              it at all — you got one action and a silent page. */}
           <button className="faint" style={{ fontSize: 'var(--fs-label)' }} onClick={() => setShowAll((s) => !s)}>
-            {showAll ? '▴ fold the current' : `▾ ${rest.length} more in the current`}
+            {showAll ? '▴ fold the current' : `▾ ${rest.length + held.length} more in the current`}
           </button>
           {showAll && (
             <div style={{ display: 'grid', gap: 6, marginTop: 14, textAlign: 'left' }}>
@@ -400,6 +417,38 @@ export default function CurrentPage() {
               ))}
             </div>
           )}
+          {/* And what is held up. Shown, not hidden: knowing that four things
+              are waiting on one other thing is the most useful shape a day
+              has, and it is the reason the primary above is the primary. */}
+          {showAll && held.length > 0 && (
+            <div style={{ marginTop: 18, textAlign: 'left' }}>
+              <div className="eyebrow" style={{ marginBottom: 8 }}>
+                Waiting on something else
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                {held.map((t) => (
+                  <div
+                    key={t.id}
+                    style={{
+                      padding: '10px 12px',
+                      border: '0.5px solid var(--glass-line)',
+                      borderRadius: 'var(--r-md)',
+                      opacity: 0.72,
+                    }}
+                  >
+                    <div style={{ fontWeight: 500, fontSize: 'var(--fs-label)' }}>
+                      {t.title || t.raw_content.slice(0, 120)}
+                    </div>
+                    {heldOn(t) && (
+                      <div className="faint" style={{ fontSize: 'var(--fs-caption)', marginTop: 3 }}>
+                        after · {heldOn(t)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {showAll && prepass.visible.length > 2 && !offline && (
             <button
               className="chip chip--ai"
@@ -413,14 +462,15 @@ export default function CurrentPage() {
         </div>
       )}
 
-      {elsewhere > 0 && (
+      {/* "N more wait in the world", pointing at the sky, was the line that made
+          this page unreadable. It was almost always every open action you had
+          — because everything without a due date was filed as `later` — so the
+          Current told you your work was in another room, and the room it named
+          was the tab you had just come from. What is left here now is only what
+          you deliberately put aside. */}
+      {aside > 0 && (
         <p className="faint" style={{ fontSize: 'var(--fs-caption)', textAlign: 'center', marginTop: 'var(--sp-5)' }}>
-          {elsewhere} more wait{elsewhere === 1 ? 's' : ''} in{' '}
-          {/* the sky, which is the world — this pointed at /think, a route
-              that has quietly redirected here for months */}
-          <button style={{ textDecoration: 'underline', color: 'inherit' }} onClick={() => navigate('/')}>
-            the world
-          </button>
+          {aside} set aside for later
         </p>
       )}
 

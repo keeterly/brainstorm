@@ -32,7 +32,6 @@ export function prioritizePrepass(
     }
   }
 
-  const inAWeek = addDays(today, 7)
   const buckets = new Map<string, Bucket>()
   const visible: Thought[] = []
 
@@ -52,10 +51,20 @@ export function prioritizePrepass(
     }
     if (t.due_date && t.due_date <= today) {
       buckets.set(t.id, 'now')
-    } else if (t.due_date && t.due_date <= inAWeek) {
-      buckets.set(t.id, 'next')
     } else {
-      buckets.set(t.id, 'later')
+      // Everything else that is open and unblocked is flowing.
+      //
+      // This used to be `later` for anything without a due date, and almost no
+      // real work has a due date — so the current was empty on a map with two
+      // dozen live actions on it, and every one of them was counted off to a
+      // fourth place called "the world". You could rain a cloud, watch four
+      // things fall out of it, open the Current and be told nothing was
+      // flowing. That is the opposite of what the word means.
+      //
+      // `later` is now what it says: something you deferred. A snooze, or a
+      // bucket you set by hand. Both are handled above this line, so nothing
+      // reaches here except work that is genuinely in the flow.
+      buckets.set(t.id, 'next')
     }
   }
 

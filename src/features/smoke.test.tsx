@@ -1,7 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import CollectPage from './collect/CollectPage'
 import CurrentPage from './current/CurrentPage'
 import { useGraph } from '@/store/graph'
 import type { Thought } from '@/domain/types'
@@ -47,38 +46,6 @@ function action(over: Partial<Thought> & { id: string; title: string }): Thought
 }
 
 beforeEach(seedStore)
-
-describe('CollectPage', () => {
-  it('captures a thought and shows only the quiet skyline — no list', () => {
-    render(
-      <MemoryRouter>
-        <CollectPage />
-      </MemoryRouter>,
-    )
-    fireEvent.change(screen.getByTestId('capture-input'), { target: { value: 'test a messy thought' } })
-    fireEvent.click(screen.getByText('Capture'))
-    expect(useGraph.getState().thoughts).toHaveLength(1)
-    expect(screen.getByText(/1 thought in the sky/)).toBeInTheDocument()
-    // reduce cognitive load: the captured text is NOT listed on Collect
-    expect(screen.queryByText('test a messy thought')).not.toBeInTheDocument()
-  })
-
-  it('heading + bullets becomes a goal with part_of steps', () => {
-    render(
-      <MemoryRouter>
-        <CollectPage />
-      </MemoryRouter>,
-    )
-    fireEvent.change(screen.getByTestId('capture-input'), {
-      target: { value: 'Launch plan:\n- step one\n- step two' },
-    })
-    fireEvent.click(screen.getByText('Capture'))
-    const s = useGraph.getState()
-    expect(s.thoughts.find((t) => t.type === 'goal')?.title).toBe('Launch plan')
-    expect(s.thoughts.filter((t) => t.type === 'action')).toHaveLength(2)
-    expect(s.relationships.filter((r) => r.type === 'part_of')).toHaveLength(2)
-  })
-})
 
 describe('CurrentPage', () => {
   it('surfaces exactly one primary action; the rest stay folded', () => {
