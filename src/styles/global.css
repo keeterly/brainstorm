@@ -762,6 +762,14 @@ a {
     scale: 1;
   }
 }
+/* The wake a press-and-hold leaves, as opposed to the tick a tap leaves.
+   Slower, fainter and it keeps going — it is running ahead of a page that
+   takes the best part of a second to arrive, so a 900ms ring would be gone
+   before the paper caught up with it. */
+.ripple.wake {
+  border-color: rgba(var(--accent-rgb), 0.34);
+  animation: rip 1300ms cubic-bezier(0.16, 0.72, 0.24, 1) forwards;
+}
 .vapor {
   position: fixed;
   border-radius: 50%;

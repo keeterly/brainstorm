@@ -628,14 +628,84 @@ body.sky-dragging .sky-undo.show {
     radial-gradient(circle 320px at 30% 10%, var(--paper-lit, rgba(255, 255, 255, 0.5)), transparent 72%),
     radial-gradient(ellipse 92% 42% at 50% 108%, rgba(var(--accent-rgb), 0.16), transparent 62%);
   color: var(--paper-ink, #1b2430);
+  /*
+   * It arrives like water, not like a wipe.
+   *
+   * The old opening was one thing: a clip-path circle going from nothing to
+   * the far corner in 560ms. That is a razor edge — clip-path has no other
+   * kind — and a razor edge of near-white travelling across a dark sky at
+   * that speed is a slap, however nice the shape of it is.
+   *
+   * So it is three things now, and none of them is the edge:
+   *
+   *   1. **Longer, and easing out for most of it.** It leaves promptly and
+   *      then spends the rest of the time slowing down, which is what a
+   *      spreading front actually does.
+   *   2. **The paper fades up as the front passes.** By the time any part of
+   *      the boundary is opaque enough to see as a line, it is off the screen.
+   *      Nothing about the shape changed; what changed is that you cannot see
+   *      its edge any more.
+   *   3. **Rings leave the point you pressed**, ahead of it — see openPage.
+   *      The same rings every button in this app makes, because this is the
+   *      same act: something was touched, and the surface answered.
+   */
   clip-path: circle(0px at 50% 50%);
-  transition: clip-path 560ms cubic-bezier(0.32, 0, 0.15, 1);
+  opacity: 0;
+  /*
+   * The curve matters more than the duration.
+   *
+   * The first attempt at fixing this was `cubic-bezier(0.16, 0.72, 0.24, 1)`,
+   * which is half a second of easing out — and easing out means the *fastest
+   * part is the beginning*. Work the curve by hand and it is 46% of the way
+   * across in the first tenth of the time: a sprint, then a long coast. The
+   * sprint is the jarring bit, and no amount of extra duration fixes it,
+   * because all the extra goes into the coast nobody minded.
+   *
+   * This one is gentle at both ends and steady through the middle — half the
+   * travel at 40% of the time, 85% at 61%, then a long settle. A front moving
+   * at a readable speed, which is what water does.
+   */
+  transition:
+    clip-path 950ms cubic-bezier(0.42, 0.02, 0.3, 1),
+    opacity 560ms cubic-bezier(0.4, 0, 0.6, 1);
 }
 .sky-page.show { display: flex; }
+.sky-page.on { opacity: 1; }
+/* Closing is crisper than opening on purpose: arriving is an event and leaving
+   is not, and a long fade out of a page you have finished with reads as the
+   app being slow rather than as the app being gentle. */
+.sky-page:not(.on) {
+  transition:
+    clip-path 520ms cubic-bezier(0.5, 0, 0.75, 0.9),
+    opacity 300ms ease-in 120ms;
+}
+
+/* Film, not paint.
+   The world already wears grain over everything; this is the same texture
+   caught *in* the paper, a little heavier while it is arriving so the surface
+   develops rather than switches on. */
+.sky-page::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.13;
+  background-size: 160px 160px;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  transition: opacity 900ms ease 120ms;
+}
+.sky-page.on::after { opacity: 0.05; }
+/* everything the page holds sits above its own grain */
+.sky-page > * { position: relative; z-index: 1; }
 .sky-page .top, .sky-page > textarea, .sky-page .pans, .sky-page .bot {
   opacity: 0;
   transform: translateY(12px);
-  transition: opacity 420ms ease 140ms, transform 520ms cubic-bezier(0.2, 0.8, 0.2, 1) 140ms;
+  /* after the paper, not during it. The front takes the best part of a second
+     now, and words appearing on a surface that is still arriving is two
+     things happening at once where there should be one and then the other. */
+  transition: opacity 460ms ease 380ms, transform 560ms cubic-bezier(0.2, 0.8, 0.2, 1) 380ms;
 }
 .sky-page.on .top, .sky-page.on > textarea, .sky-page.on .pans, .sky-page.on .bot { opacity: 1; transform: none; }
 .sky-page .top {

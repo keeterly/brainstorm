@@ -2803,14 +2803,52 @@ function mountSky(root: HTMLDivElement) {
       Math.hypot(ox, pageH - oy),
       Math.hypot(W - ox, pageH - oy),
     )
+    // Rings, out ahead of it.
+    //
+    // Every button in this app answers a touch the way water does — a body
+    // that dips, and a ring leaving the point that was pushed. Holding the sky
+    // to write is the same act and was the one place that did not: the page
+    // simply appeared out of nowhere in particular. These leave first and run
+    // in front of the paper, so what you see is the surface being disturbed
+    // where your thumb is and the page coming up behind it.
+    if (!reduced) wake(ox, oy)
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         page.style.clipPath = `circle(${Math.ceil(reach) + 4}px at ${ox}px ${oy}px)`
         page.classList.add('on')
       }),
     )
-    if (!reading) setTimeout(() => pageT.focus(), reduced ? 0 : 260)
+    // …and after the front has passed, not while it is still travelling. The
+    // keyboard used to come up over a page that was a third open.
+    if (!reading) setTimeout(() => pageT.focus(), reduced ? 0 : 560)
   }
+  /**
+   * The surface, disturbed where you touched it.
+   *
+   * Four rings rather than the two a button makes, spread over four hundred
+   * milliseconds and growing as they go — a press-and-hold is a longer, softer
+   * act than a tap and the answer should be too. They live under the page
+   * (z-index 3 against its 120), which is what puts them out in the dark sky
+   * the paper has not reached yet.
+   */
+  function wake(x: number, y: number) {
+    for (const [size, delay] of [
+      [64, 0],
+      [128, 90],
+      [230, 200],
+      [360, 330],
+    ] as const) {
+      const r = document.createElement('div')
+      r.className = 'ripple wake'
+      r.style.width = r.style.height = `${size}px`
+      r.style.left = `${x - size / 2}px`
+      r.style.top = `${y - size / 2}px`
+      r.style.animationDelay = `${delay}ms`
+      document.body.appendChild(r)
+      setTimeout(() => r.remove(), 1400 + delay)
+    }
+  }
+
   function classifyQuiet(t: Thought) {
     if (S().offline) return
     void runAction<ClassifyOutput>('classify_thought', { raw_content: t.raw_content })
