@@ -921,43 +921,33 @@ body.sky-dragging .sky-undo.show {
 
 /* Rearranging by hand.
 
-   The handle exists rather than a press-and-hold on the row because the row IS
-   a text field, and a long press inside a field on this phone belongs to the
-   selection magnifier. It is also the only version of this that announces
-   itself: nobody discovers a gesture on a list that looks like a list. */
-.sky-page .pans .row .grip {
-  flex-shrink: 0;
-  width: 26px;
-  /* 40pt of target for a 12px mark, on the first line of however tall the row
-     is — the same bargain the take-out button makes */
-  min-height: 40px;
-  margin: 1px -6px -4px 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  /* it has to win the gesture from the page's own scrolling, or the first
-     drag down just scrolls the list */
-  touch-action: none;
-  cursor: grab;
-  position: relative;
+   Press and hold the row and it comes up — the same gesture that makes a drop
+   out in the sky, so there is one thing to learn rather than a handle to find.
+
+   Which leaves the row's own text field, where a long press means *select this
+   word* and brings up the magnifier. Two rules keep the two apart, and they
+   have to be read together:
+
+     * Until you are typing in it, the field does not take selection at all, so
+       a long press over the words is the row's rather than the caret's. Focus
+       and typing are untouched by this; only the magnifier is.
+     * The moment it has focus it behaves like any other field again — see
+       `:focus` below — and the drag stands aside for it, in `down()`.
+
+   `pan-y` lets the list go on scrolling normally: a finger that moves is
+   scrolling, a finger that stays is picking the row up, and the drag takes the
+   gesture back at the moment of the lift. */
+.sky-page .pans .row { touch-action: pan-y; }
+.sky-page .pans .row .t {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
-.sky-page .pans .row .grip::before {
-  content: '';
-  position: absolute;
-  inset: 50% 0 auto 50%;
-  width: 12px;
-  height: 9px;
-  transform: translate(-50%, -50%);
-  /* three short rules, faint. Loud enough to be found, quiet enough that a
-     list of eight of them still reads as a list rather than as a control panel */
-  background:
-    linear-gradient(currentColor, currentColor) 0 0 / 100% 1px no-repeat,
-    linear-gradient(currentColor, currentColor) 0 50% / 100% 1px no-repeat,
-    linear-gradient(currentColor, currentColor) 0 100% / 100% 1px no-repeat;
-  color: var(--paper-soft, #9db0c2);
-  opacity: 0.5;
+.sky-page .pans .row .t:focus {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
-.sky-page .pans .row .grip:active::before { opacity: 0.95; }
 
 /* The row you are holding: lifted off the page, and out of the way of the
    hairlines it is passing over. */

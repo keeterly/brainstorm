@@ -76,3 +76,34 @@ describe('the stylesheets say what they mean', () => {
     }
   })
 })
+
+// Two rules make press-and-hold on a list row possible at all, and both are
+// invisible: nothing renders differently when either is missing, and the
+// failure only shows up under a thumb on an actual phone. They are worth
+// pinning because the temptation to "tidy" them is real.
+describe('picking a row up off a list', () => {
+  const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
+
+  it('still lets the list scroll while it waits for the hold', () => {
+    // `touch-action: none` on the row would win the drag and lose the scroll:
+    // the list would simply stop moving under a finger.
+    expect(sky).toMatch(/\.sky-page \.pans \.row \{ touch-action: pan-y; \}/)
+  })
+
+  it('keeps the magnifier off the words until you are actually typing in them', () => {
+    // A long press inside a text field belongs to iOS's selection UI. The row
+    // can only claim that gesture while the field is not focused — and has to
+    // hand it straight back the moment it is, or you could never select a word
+    // you were editing.
+    const idle = sky.slice(sky.indexOf('.sky-page .pans .row .t {\n  -webkit-user-select'))
+    expect(idle).toMatch(/-webkit-user-select: none/)
+    expect(idle).toMatch(/-webkit-touch-callout: none/)
+    const onFocus = sky.slice(sky.indexOf('.sky-page .pans .row .t:focus'))
+    expect(onFocus).toMatch(/-webkit-user-select: text/)
+    expect(onFocus).toMatch(/user-select: text/)
+  })
+
+  it('has no handle left to press', () => {
+    expect(sky).not.toMatch(/\.grip/)
+  })
+})

@@ -39,6 +39,7 @@ import {
   type Undone,
 } from './groupFlow'
 import { branchOf, dropAt, type Drop, type Line } from './arrange'
+import { editsPending, flushEdits, forgetEdit, keepEdit, watchForLeaving } from './autosave'
 import { awaitRun, markApplied, pendingRuns, subjectOf } from '@/ai/pending'
 import { reshapeTally, reshapeThought } from './reshapeFlow'
 import { haptics } from '@/lib/haptics'
@@ -608,8 +609,18 @@ function mountSky(root: HTMLDivElement) {
   pageT.addEventListener('input', () => {
     if (draftT) clearTimeout(draftT)
     draftT = setTimeout(keepDraft, 400)
+    // …and a name being typed over a group is not a draft of something new,
+    // it is an edit of something that exists. It goes to the graph on the same
+    // terms as the rows below it rather than to localStorage.
+    if (nameFor) keepEdit(nameFor, pageT.value)
   })
-  const releaseHold = holdReload(() => page.classList.contains('show') && pageT.value.trim().length > 0)
+  // Anything still on a timer, written before the phone can take the app away.
+  const stopWatching = watchForLeaving()
+  // …and a chosen reload waits while anything is unsaved: the text in front of
+  // you, and now also any edit still sitting on its own timer.
+  const releaseHold = holdReload(
+    () => (page.classList.contains('show') && pageT.value.trim().length > 0) || editsPending(),
+  )
 
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
   document.body.classList.add('sky-held')
@@ -2494,12 +2505,6 @@ function mountSky(root: HTMLDivElement) {
                   // page contradicting what the sky just showed you
                   `<span class="held"></span>` +
                   `<button class="ctl out" aria-label="Take it out of this group">take out</button>` +
-                  // Its own handle, rather than a press-and-hold on the row.
-                  // The row *is* a text field — that is the whole point of it —
-                  // and a long press inside a field on this phone belongs to
-                  // the selection magnifier, not to us. A handle is also the
-                  // only version of this that announces it can be done.
-                  `<button class="grip" aria-label="Move “${esc(label(b.t))}” — drag up or down to reorder, right to nest"></button>` +
                   `</div>`,
               )
               .join('')
@@ -2600,11 +2605,31 @@ function mountSky(root: HTMLDivElement) {
         else heldEl.remove()
         row.classList.toggle('ticked', S().thoughts.find((t) => t.id === m.id)?.status === 'done')
         // No edit mode, no pencil, no second screen: the row is the field, so
-        // fixing a name is typing over it. Committed when you leave it or press
-        // return — and re-rendering the list here would steal the caret, so it
-        // does not.
-        const commit = () => landUndo(rename(m.id, field.value))
+        // fixing a name is typing over it. Re-rendering the list here would
+        // steal the caret, so it does not.
+        //
+        // Saved as you type rather than when you leave. Blur used to be the
+        // only thing that committed this, which is fine right up until the
+        // phone takes the app away mid-sentence — see autosave. What blur does
+        // now is offer the undo, for the whole edit rather than for whatever
+        // the last debounce happened to catch.
+        let began = field.value
+        const commit = () => {
+          forgetEdit(m.id)
+          const u = rename(m.id, field.value)
+          if (u) return landUndo(u)
+          // already saved on its own; the undo is still owed
+          const was = began
+          if (field.value.trim() === was.trim()) return
+          began = field.value
+          landUndo({
+            note: `renamed to “${field.value.trim()}”`,
+            undo: () => S().updateThought(m.id, { title: was, raw_content: was }),
+          })
+        }
         pending.push(commit)
+        field.addEventListener('focus', () => (began = field.value))
+        field.addEventListener('input', () => keepEdit(m.id, field.value))
         field.addEventListener('change', commit)
         field.addEventListener('keydown', (e) => {
           if ((e as KeyboardEvent).key === 'Enter') {
@@ -3194,6 +3219,18 @@ function mountSky(root: HTMLDivElement) {
   const INDENT = 18
   /** Far enough that a thumb wandering while it drags down is not a nest. */
   const NEST_SLOP = 10
+  /**
+   * How long the row has to be held before it comes up.
+   *
+   * The same wait as holding empty sky to write on it, and as holding a drop to
+   * gather with it — this is meant to be one gesture you learn once, and a list
+   * that answered a third of a second sooner than the sky would be a different
+   * gesture wearing the same name. It is also the far side of any plausible
+   * scroll: a flick is gone in a fraction of this.
+   */
+  const HOLD_MS = 420
+  /** …and how still. Move further than this and it was a scroll. */
+  const HOLD_SLOP = 9
 
   /**
    * Rearranging the list by hand.
@@ -3204,9 +3241,16 @@ function mountSky(root: HTMLDivElement) {
    * way to say "that one first, and those three are really part of this one"
    * was to close the page and drag bubbles around the sky one pair at a time.
    *
-   * Down the list reorders; across it nests. The same drag does both, because
-   * they are the same thought: this goes there. Where "there" is comes out of
-   * `dropAt`, which knows the rules and has no idea a finger exists.
+   * Press and hold a row and it comes up — the same wait as holding empty sky
+   * to write on it, so this is one gesture learned once rather than a handle to
+   * be found. Down the list reorders; across it nests. The same drag does both,
+   * because they are the same thought: this goes there. Where "there" is comes
+   * out of `dropAt`, which knows the rules and has no idea a finger exists.
+   *
+   * Telling that hold apart from a scroll is most of the work in here, and none
+   * of it can be done with `pointermove` alone — see `feel`, the `timeStamp`
+   * check in `move`, and `letGo` for what the browser will and will not tell
+   * you in time.
    *
    * Nesting here is not a list-only idea. Nothing in the graph marks a thought
    * as a group — being the far end of a `part_of` is what makes one — so the
@@ -3232,7 +3276,11 @@ function mountSky(root: HTMLDivElement) {
       y0: number
       lines: Line[]
       at: Drop | null
-      moved: boolean
+      /** has the hold fired and the row actually left the page? */
+      up: boolean
+      pointer: number
+      /** when the finger landed, by the clock the input events themselves use */
+      t0: number
     } | null = null
 
     // where the row would land, drawn as a line across the list at the depth it
@@ -3251,10 +3299,90 @@ function mountSky(root: HTMLDivElement) {
       mark.hidden = false
     }
 
+    /** Cancels the wait, wherever it got to. */
+    let holdT: ReturnType<typeof setTimeout> | null = null
+    const dropHold = () => {
+      if (holdT) clearTimeout(holdT)
+      holdT = null
+    }
+    /** Give up on a hold that has not fired yet. */
+    const giveUp = () => {
+      dropHold()
+      if (drag && !drag.up) drag = null
+    }
+    /** A backstop: by the time the list has actually scrolled under a finger,
+     *  the hold may already have fired. `feel` below is the real signal. */
+    host.addEventListener('scroll', giveUp, { passive: true })
+
+    /**
+     * The finger moved — heard from the one source that says so in time.
+     *
+     * `pointermove` cannot do this job. The browser withholds it while it works
+     * out whether a touch is going to scroll, and releases it only once it has
+     * decided. Measured on this page: pointerdown at 0ms and then *nothing*
+     * until pointermove at 505ms, followed immediately by pointercancel — while
+     * the raw touchmoves had been arriving since 60ms. A hold that fires at
+     * 420ms therefore fires into silence, and a swipe meant to scroll the list
+     * picks a row up instead. About one swipe in four, before this.
+     *
+     * `touchmove` is not subject to that delay, so it is what the wait listens
+     * to. Passive, because this one only ever cancels: the drag's own
+     * `preventDefault` is a separate listener, added at the lift.
+     */
+    const feel = (e: TouchEvent) => {
+      if (!drag || drag.up) return
+      // The first touch, rather than a hunt for the right one: a second finger
+      // arriving mid-wait can only make this cancel a hold, never start one,
+      // and declining to pick a row up is the harmless way to be wrong.
+      const t = e.touches[0]
+      if (!t) return
+      if (Math.abs(t.clientX - drag.x0) + Math.abs(t.clientY - drag.y0) > HOLD_SLOP) giveUp()
+    }
+    document.addEventListener('touchmove', feel, { passive: true })
+
+    /**
+     * Once the row is up, the finger belongs to us.
+     *
+     * The list has to keep scrolling normally until the hold fires, so the rows
+     * cannot simply refuse touch — they allow `pan-y` and this takes it back at
+     * the moment of the lift. It works because a hold that has fired is one the
+     * finger held still through, so the browser has not begun a pan to argue
+     * with. A passive listener could not do this; hence the explicit `false`.
+     */
+    const eat = (e: TouchEvent) => e.cancelable && e.preventDefault()
+
+    const lift = () => {
+      if (!drag) return
+      holdT = null
+      drag.up = true
+      // A row picked up while some other row's field still holds focus would be
+      // dragged around underneath a keyboard covering half the list it is
+      // travelling through. Putting that field away also commits it, on the
+      // usual terms.
+      const typing = document.activeElement as HTMLElement | null
+      if (typing?.closest('.pans')) typing.blur()
+      try {
+        drag.row.setPointerCapture(drag.pointer)
+      } catch {
+        /* the finger has already gone; pointerup is on its way */
+      }
+      host.classList.add('arranging')
+      for (const r of drag.branch) r.classList.add('lifted')
+      host.appendChild(mark)
+      document.addEventListener('touchmove', eat, { passive: false })
+      haptics.grab()
+    }
+
     const down = (e: PointerEvent) => {
-      const grip = (e.target as HTMLElement).closest('.grip') as HTMLElement | null
-      if (!grip || e.button > 0 || !groupOf()) return
-      const row = grip.closest('.row') as HTMLDivElement
+      const row = (e.target as HTMLElement).closest('.row[data-id]') as HTMLDivElement | null
+      if (!row || e.button > 0 || !groupOf()) return
+      // The controls are taps, not places to pick the row up from — and a field
+      // you are already typing in is somewhere a long press means *select this
+      // word*, which is the one thing on this page it must go on meaning.
+      const on = e.target as HTMLElement
+      if (on.closest('.tick, .out, .ctl')) return
+      if (on.closest('.t') && document.activeElement === on.closest('.t')) return
+
       const id = row.dataset.id as string
       const all = rows()
       const lines: Line[] = all.map((r) => {
@@ -3262,22 +3390,53 @@ function mountSky(root: HTMLDivElement) {
         return { id: r.dataset.id as string, depth: Number(r.dataset.depth), mid: b.top + b.height / 2 }
       })
       const branch = branchOf(lines, id).map((l) => all.find((r) => r.dataset.id === l.id) as HTMLDivElement)
-      drag = { id, row, branch, x0: e.clientX, y0: e.clientY, lines, at: null, moved: false }
-      grip.setPointerCapture(e.pointerId)
-      e.preventDefault()
+      // Note the pointer, but do not take it. Until the hold fires this gesture
+      // is still the browser's to interpret, and capturing it here is enough to
+      // stop the list scrolling under a finger that was only ever scrolling.
+      // The capture happens at the lift instead, which is the moment it is
+      // actually ours.
+      drag = {
+        id,
+        row,
+        branch,
+        x0: e.clientX,
+        y0: e.clientY,
+        t0: e.timeStamp,
+        lines,
+        at: null,
+        up: false,
+        pointer: e.pointerId,
+      }
+      dropHold()
+      holdT = setTimeout(lift, HOLD_MS)
     }
 
     const move = (e: PointerEvent) => {
       if (!drag) return
       const dx = e.clientX - drag.x0
       const dy = e.clientY - drag.y0
-      if (!drag.moved) {
-        if (Math.abs(dx) + Math.abs(dy) < 4) return
-        drag.moved = true
-        host.classList.add('arranging')
-        for (const r of drag.branch) r.classList.add('lifted')
-        host.appendChild(mark)
-        haptics.grab()
+      /*
+       * When it happened, not when we heard about it.
+       *
+       * A move's `timeStamp` is the moment the finger actually moved; the
+       * moment it is *delivered* can be much later, because the browser sits on
+       * these while it decides whether the touch is a scroll — and, on a busy
+       * page, because the main thread was not free to run anything at all. Both
+       * produce the same trap: the hold matures on a timer that keeps perfect
+       * time, into a page that has not yet been told the finger left.
+       *
+       * So a move that says it happened before the hold was due unlifts the
+       * row. The row was never held; we were only late to find out.
+       */
+      if (drag.up && e.timeStamp - drag.t0 < HOLD_MS) {
+        letGo(false)
+        return
+      }
+      if (!drag.up) {
+        // Moving before the hold has fired is the list being scrolled, or a
+        // thumb on its way somewhere. Either way it is not this.
+        if (Math.abs(dx) + Math.abs(dy) > HOLD_SLOP) giveUp()
+        return
       }
       // the branch travels as one, so what you are holding stays together
       for (const r of drag.branch) r.style.transform = `translateY(${dy}px)`
@@ -3293,10 +3452,26 @@ function mountSky(root: HTMLDivElement) {
       else if (e.clientY > box.bottom - edge) host.scrollTop += 8
     }
 
-    const up = () => {
+    /**
+     * Let go.
+     *
+     * `keep` is false when the browser took the gesture away from us rather
+     * than the finger leaving the glass — a `pointercancel`, which means it has
+     * decided this touch was a scroll after all. That verdict can arrive *after*
+     * the row has already come up, because the browser sits on its pointer
+     * events while it makes up its mind: measured here, pointerdown at 0ms,
+     * silence through the 420ms lift, then pointermove at 505ms and cancel at
+     * 517ms. Treating that cancel as an ordinary release is what made a swipe
+     * rearrange the list about once in every four or five tries. It is not a
+     * release; it is the browser saying none of that happened.
+     */
+    const letGo = (keep: boolean) => {
+      dropHold()
       if (!drag) return
-      const { at, id, branch, moved } = drag
+      const { at, id, branch, up: was } = drag
+      const lifted = was && keep
       drag = null
+      document.removeEventListener('touchmove', eat)
       for (const r of branch) {
         r.style.transform = ''
         r.classList.remove('lifted')
@@ -3304,7 +3479,14 @@ function mountSky(root: HTMLDivElement) {
       host.classList.remove('arranging')
       mark.hidden = true
       mark.remove()
-      if (!moved || !at) return
+      if (was) {
+        // A press that lifted the row is not also a tap on its words. Without
+        // this, holding a row and then thinking better of it puts the caret in
+        // it and brings the keyboard up over the list you were looking at.
+        addEventListener('click', (c) => c.preventDefault(), { capture: true, once: true })
+      }
+      // let go without ever picking it up: a tap, which belongs to the field
+      if (!lifted || !at) return
       const u = moveInto(id, at.parent, at.after)
       // a move that changes nothing is not worth an undo bar
       if (!u) return
@@ -3314,10 +3496,25 @@ function mountSky(root: HTMLDivElement) {
       redrawGroupPage()
     }
 
+    // Down on the list; everything after it on the document. A finger that
+    // leaves the list is the ordinary case — you drag a row to the top by going
+    // past the top — and a listener on the list alone stops hearing about it at
+    // the boundary.
     host.addEventListener('pointerdown', down)
-    host.addEventListener('pointermove', move)
-    host.addEventListener('pointerup', up)
-    host.addEventListener('pointercancel', up)
+    document.addEventListener('pointermove', move)
+    const up = () => letGo(true)
+    const cancel = () => letGo(false)
+    document.addEventListener('pointerup', up)
+    document.addEventListener('pointercancel', cancel)
+    return () => {
+      host.removeEventListener('pointerdown', down)
+      document.removeEventListener('pointermove', move)
+      document.removeEventListener('pointerup', up)
+      document.removeEventListener('pointercancel', cancel)
+      document.removeEventListener('touchmove', eat)
+      document.removeEventListener('touchmove', feel)
+      host.removeEventListener('scroll', giveUp)
+    }
   }
 
   /**
@@ -3360,11 +3557,14 @@ function mountSky(root: HTMLDivElement) {
   }
 
   // Once, for every group list this page will ever show — see wireArrange.
-  wireArrange(pageA)
+  const stopArranging = wireArrange(pageA)
 
   // Leaving the name box is committing it, wherever you are going next.
   pageT.addEventListener('change', () => {
-    if (nameFor) landUndo(rename(nameFor, pageT.value))
+    if (!nameFor) return
+    // it may already have gone in on its own — see the input handler above
+    forgetEdit(nameFor)
+    landUndo(rename(nameFor, pageT.value))
   })
   pageD.addEventListener('click', () => {
     if (pageFor?.mode === 'capture' && micUsed && pageT.value.trim().length > 80) {
@@ -5784,6 +5984,11 @@ function mountSky(root: HTMLDivElement) {
     cancelAnimationFrame(raf)
     unsub()
     releaseHold()
+    stopWatching()
+    stopArranging()
+    // leaving the sky is one of the ways typing stops; the timer it was
+    // waiting on is about to be thrown away with everything else here
+    flushEdits()
     if (draftT) clearTimeout(draftT)
     removeEventListener('resize', onResize)
     removeEventListener('pointerup', onUp)
