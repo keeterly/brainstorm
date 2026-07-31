@@ -50,8 +50,14 @@ No CRDT, no realtime channels — one user on a few devices does not need them y
 
 Actions: `classify_thought`, `summarize`, `clarify_question`, `find_related`, `to_goal`,
 `make_mind_map`, `generate_roadmap` (streamed), `prioritize`, `absorb`, `organize`,
-`name_pool`, `cluster`, `gauge`, `deepen`, `answer`, `draft`, `reshape`, `notice`,
+`name_pool`, `cluster`, `gauge`, `deepen`, `answer`, `draft`, `rain`, `reshape`, `notice`,
 `remember`.
+
+**The funnel.** A thought becomes an idea; ideas gather into a cloud; `rain` condenses the
+cloud into real actions *under* it; and each of those leaves is then read by the sky's third
+moon on its own terms — `answer it` for a question, `do it` for something makeable (`draft`),
+`work it` for anything needing research (`deepen`). Everything an action produces lands as
+thoughts in the graph, never as prose the rest of the app cannot reach.
 
 ## Memory
 

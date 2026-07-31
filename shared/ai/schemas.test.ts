@@ -36,6 +36,7 @@ function sampleInput(name: string): never {
     generate_roadmap: { goal: ref, raw_content: 'launch the campaign' },
     prioritize: { actions: [{ id: 'aaaa', title: 'do a thing' }] },
     remember: { text: 'I prefer mornings', known: [] },
+    rain: { name: 'SS27 campaign', inside: ['shoot on expired film'], known: [], already: [] },
     absorb: { text: 'the buyer moved our meeting to friday', thoughts: [ref] },
     organize: { text: 'a long messy dump about the campaign and the pop-up', thoughts: [ref], spoken: true },
     name_pool: { members: ['shoot on expired film', 'letters sealed with wax'] },
@@ -646,5 +647,82 @@ describe('remember — memory that reconciles instead of accumulating', () => {
     const twelve = Array.from({ length: 12 }, (_, i) => ({ op: 'add' as const, content: `fact ${i}` }))
     expect(remember.outputSchema.safeParse({ ops: twelve }).success).toBe(true)
     expect(remember.outputSchema.safeParse({ ops: [...twelve, { op: 'add', content: 'one more' }] }).success).toBe(false)
+  })
+})
+
+describe('rain — what falls out of a full cloud', () => {
+  const rain = ACTION_REGISTRY.rain
+  const ctx = { nowISO: '2026-07-30T12:00:00Z', tzOffsetMin: -420, memory: ['Two-person label in LA'] }
+  const good = {
+    read: 'Whether to build the memory layer on Postgres or rent it',
+    steps: [
+      { tempId: 's1', title: 'Decide storage: pgvector or a hosted memory API', why: 'four of these are waiting on it', effort: 2, dependsOn: [] },
+      { tempId: 's2', title: 'Feed a week of real notes through whichever you pick', why: 'the only way to know if recall is good enough', effort: 3, dependsOn: ['s1'] },
+    ],
+    missing: [],
+    learned: [],
+    note: 'one decision, and the thing that proves it',
+  }
+
+  it('stays instant — it may not go out to the web', () => {
+    // the whole reason this is not a second `deepen`: the material is theirs,
+    // nothing on the web has heard of it, and searching would turn a gesture
+    // into a minute
+    expect(rain.searchMaxUses).toBe(0)
+    expect(rain.background).toBeFalsy()
+  })
+
+  it('is handed the whole group, and what is already under it', () => {
+    const p = rain.buildPrompt(
+      {
+        name: 'SS27 campaign',
+        inside: ['letters sealed with wax', 'shoot on expired film'],
+        known: ['the drop moved to September'],
+        already: ['Book the studio'],
+      },
+      ctx,
+    )
+    expect(p.user).toContain('They called it: SS27 campaign')
+    expect(p.user).toContain('letters sealed with wax')
+    expect(p.user).toContain('shoot on expired film')
+    expect(p.user).toContain('the drop moved to September')
+    expect(p.user).toContain('none of this again')
+    expect(p.user).toContain('Book the studio')
+  })
+
+  it('is forbidden the one thing the template it replaced did', () => {
+    // `Rough out "<a thing they already wrote>"` — their own note with a verb
+    // in front of it, which was four of the five rows
+    const p = rain.buildPrompt({ name: 'x', inside: [], known: [], already: [] }, ctx)
+    expect(p.system).toContain('hand their own notes back with a verb in front')
+    expect(p.user).toContain('Nothing that restates an item above')
+  })
+
+  it('is told to refuse the generic step, which was the other row', () => {
+    // "Show the pool to someone who gets it" was a literal, printed under
+    // every group there has ever been
+    const p = rain.buildPrompt({ name: 'x', inside: [], known: [], already: [] }, ctx)
+    expect(p.user).toContain('would still make sense under a different group')
+    expect(p.system).toContain('Never pad to a number')
+  })
+
+  it('accepts a small, ordered fall', () => {
+    expect(rain.outputSchema.safeParse(good).success).toBe(true)
+  })
+
+  it('will not accept nothing at all — that is what `missing` is for', () => {
+    expect(rain.outputSchema.safeParse({ ...good, steps: [] }).success).toBe(false)
+  })
+
+  it('caps the fall well below a plan, because a cloud is not a roadmap', () => {
+    const seven = Array.from({ length: 7 }, (_, i) => ({ ...good.steps[0], tempId: `s${i}`, dependsOn: [] }))
+    expect(rain.outputSchema.safeParse({ ...good, steps: seven }).success).toBe(true)
+    expect(rain.outputSchema.safeParse({ ...good, steps: [...seven, good.steps[0]] }).success).toBe(false)
+  })
+
+  it('makes it say what it is about, not repeat what they called it', () => {
+    const without: Record<string, unknown> = { ...good }
+    delete without.read
+    expect(rain.outputSchema.safeParse(without).success).toBe(false)
   })
 })

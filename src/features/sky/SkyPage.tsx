@@ -16,6 +16,7 @@ import { armUpright, stepUpright, worldTilt } from '@/world/upright'
 import { applyDeepen, deepenThought } from './deepenFlow'
 import { applyAnswer, answerThought } from './answerFlow'
 import { applyDraft, draftThought } from './draftFlow'
+import { rainThought } from './rainFlow'
 import { fullDepth, sizeUp, waitingWord, type Sizing } from './gaugeFlow'
 import { isMakeable, isQuestion } from '@/domain/question'
 import { addTo, bin, complete, groupInto, membersOf, rename, takeOut, ungroup, type Undone } from './groupFlow'
@@ -196,11 +197,6 @@ function Ico({ d }: { d: string }) {
 // the engine — imperative, like the prototype, so nothing re-renders per frame
 // ---------------------------------------------------------------------------
 
-interface Step {
-  ph: string
-  pt: string
-  detail: string
-}
 interface TL {
   kind: 'drop' | 'pool'
   t: Thought
@@ -847,12 +843,6 @@ function mountSky(root: HTMLDivElement) {
     if (!guess || texts.some((t) => same(guess, t))) return `${texts.length} together`
     return guess
   }
-  function sigOf(tl: TL) {
-    return tl.kind === 'pool'
-      ? tl.members.map((m) => label(m)).sort().join('|')
-      : label(tl.t) + '·' + answersOf(tl.t).length
-  }
-
   // ---------- radii ----------
   const looseCount = () => view.tls.filter((tl) => tl.kind === 'drop').length
   /**
@@ -1162,9 +1152,7 @@ function mountSky(root: HTMLDivElement) {
         ? `<div class="state blue">a brief${brief.sources.length ? ` · ${brief.sources.length} sources` : ''}</div>`
         : isRipe(t)
           ? `<div class="state blue">saturated</div>`
-          : isKept(t)
-            ? `<div class="state">has a path</div>`
-            : dots
+          : dots
     const photo = imgOf(t) ? `<div class="photo"></div>` : ''
     el.innerHTML = (isRipe(t) ? `<div class="ring"></div>` : '') + photo + `<div class="t"></div>${r < 50 ? '' : st}`
     const ph = el.querySelector('.photo') as HTMLDivElement | null
@@ -1233,22 +1221,27 @@ function mountSky(root: HTMLDivElement) {
       if (tl.kind === 'pool') {
         const r = radiusOf(tl)
         el.style.width = el.style.height = r * 2 + 'px'
-        const shifted = isKept(tl.t) && !!ex(tl.t).planSig && ex(tl.t).planSig !== sigOf(tl)
         const open = openPool === tl.t.id
         const pb = briefOf(tl.t.id)
+        // "has a path" and "the sky shifted" both described the template plan
+        // in extra.plan, which no longer exists — what a cloud that has rained
+        // has now is work inside it, and the count already says so.
+        const todo = tl.members.filter((m) => m.type === 'action' && m.status !== 'done').length
+        // Work first, then the brief, then the plain count. A cloud that has
+        // rained has things to do in it, and that is the more useful of the
+        // two facts — the brief is one moon away and never goes anywhere,
+        // whereas "3 to do" is the whole visible answer to having just rained.
         const st = open
           ? ''
-          : shifted
-            ? 'the sky shifted'
+          : todo
+            ? `${todo} to do · ${tl.members.length} inside`
             : pb
               ? `a brief · ${tl.members.length} inside`
-              : isKept(tl.t)
-                ? 'has a path'
-                : `${tl.members.length} inside`
+              : `${tl.members.length} inside`
         const next = tl.members[0]
         const peek = !open && next ? `<div class="peek"></div>` : ''
         el.innerHTML =
-          `<div class="t" style="font-weight:600"></div>` + peek + (st ? `<div class="state ${shifted || pb ? 'blue' : ''}"></div>` : '')
+          `<div class="t" style="font-weight:600"></div>` + peek + (st ? `<div class="state ${todo || pb ? 'blue' : ''}"></div>` : '')
         const nameEl = el.querySelector('.t') as HTMLDivElement
         nameEl.style.fontSize = Math.round(Math.max(12, Math.min(18, 7 + r * 0.1)) * 10) / 10 + 'px'
         nameEl.textContent = label(tl.t)
@@ -1812,7 +1805,7 @@ function mountSky(root: HTMLDivElement) {
   })
 
   // ---------- the light page ----------
-  type PageMode = 'capture' | 'say' | 'ask' | 'path' | 'brief' | 'open' | 'aside'
+  type PageMode = 'capture' | 'say' | 'ask' | 'brief' | 'open' | 'aside'
   /** The brief ⚡ brought back for this thought, if it went out for one. */
   const briefOf = (id: string) => S().artifacts.find((a) => a.thought_id === id) ?? null
   /** `into` is the group a capture belongs to — see the long press. */
@@ -1838,30 +1831,6 @@ function mountSky(root: HTMLDivElement) {
    * them all first. Nothing here depends on an event arriving in time.
    */
   let pending: (() => void)[] = []
-  function planOf(tl: TL): Step[] {
-    if (tl.kind === 'drop') {
-      const a = answersOf(tl.t)
-      const why = a[0] || 'the reason it surfaced at all'
-      const small = a[1] || 'the smallest version you can picture'
-      const who = a[2] || 'one person who would get it'
-      return [
-        { ph: 'first', pt: 'Sit with it', detail: `Hold on to “${trim(why, 60)}.” Notice what keeps returning.` },
-        { ph: 'then', pt: 'Shape the smallest true version', detail: `${trim(small, 70)} — small enough to finish before doubt arrives.` },
-        { ph: 'then', pt: 'Make one piece of it real', detail: 'One sitting, one artifact. Rough is correct.' },
-        { ph: 'later', pt: `Show it to ${trim(who, 36)}`, detail: 'Not for approval — to watch what happens.' },
-      ]
-    }
-    const steps = tl.members.slice(0, 3).map((m) => {
-      const t = trim(label(m), 46)
-      if (/\?$/.test(label(m).trim())) return { ph: 'then', pt: `Answer: ${t}`, detail: 'One honest paragraph is enough.' }
-      return { ph: 'then', pt: `Rough out “${t}”`, detail: 'A sketch, a note, a photo — proof it can exist.' }
-    })
-    return [
-      { ph: 'first', pt: `Name the thread: ${label(tl.t)}`, detail: 'These ideas pooled for a reason. Say it in one line.' },
-      ...steps,
-      { ph: 'later', pt: 'Show the pool to someone who gets it', detail: 'Not for approval — to watch what happens.' },
-    ].slice(0, 5)
-  }
   /** Ignore whatever is left of the press that opened the page. */
   let deafT: ReturnType<typeof setTimeout> | null = null
   function deafenPage() {
@@ -1915,7 +1884,7 @@ function mountSky(root: HTMLDivElement) {
     nameFor = null
     pageA.style.display = 'none'
     pageA.innerHTML = ''
-    const reading = mode === 'path' || mode === 'brief' || mode === 'aside'
+    const reading = mode === 'brief' || mode === 'aside'
     pageT.style.display = reading ? 'none' : ''
     page.classList.toggle('path', reading)
     page.classList.toggle('brief', mode === 'brief')
@@ -1933,28 +1902,8 @@ function mountSky(root: HTMLDivElement) {
             ? 'Keep it'
             : mode === 'ask'
               ? 'Ask'
-              : mode === 'path'
-                ? (tl && isKept(tl.t) ? 'Keep it' : 'Keep this path')
-                : 'Done'
-    if (mode === 'path' && tl) {
-      pageQ.textContent = `The rain from “${trim(label(tl.t), 44)}”`
-      const stale = isKept(tl.t) && !!ex(tl.t).planSig && ex(tl.t).planSig !== sigOf(tl)
-      pageN.textContent = stale ? 'the sky shifted — this is fresh' : ''
-      const plan = (isKept(tl.t) && !stale && (ex(tl.t).plan as Step[] | undefined)) || planOf(tl)
-      patchExtra(tl.t, { plan, planSig: sigOf(tl) })
-      pageA.style.display = 'block'
-      pageA.innerHTML = plan
-        .map((_, i) => `<div class="step${i === 0 ? ' first' : ''}"><div class="k"></div><div class="v"></div><div class="d"></div></div>`)
-        .join('')
-      const stepEls = [...pageA.querySelectorAll('.step')] as HTMLDivElement[]
-      stepEls.forEach((el, i) => {
-        // a numeral, not "then / then / then" — repetition carries no information
-        ;(el.querySelector('.k') as HTMLElement).textContent = String(i + 1)
-        ;(el.querySelector('.v') as HTMLElement).textContent = plan[i].pt
-        ;(el.querySelector('.d') as HTMLElement).textContent = plan[i].detail
-        el.style.transitionDelay = reduced ? '0ms' : 180 + i * 90 + 'ms'
-      })
-    } else if (mode === 'brief' && tl) {
+              : 'Done'
+    if (mode === 'brief' && tl) {
       // What ⚡ actually came back with. It ran for the best part of a minute
       // and wrote all of this down; before, the only trace of it was four
       // seconds of text at the top of the sky and then nothing.
@@ -2534,9 +2483,6 @@ function mountSky(root: HTMLDivElement) {
       pendingImage = null
       if (!q) return
       void runAnswer(pf.tl, q)
-    } else if (pf.mode === 'path' && pf.tl) {
-      patchExtra(pf.tl.t, { kept: true })
-      say('the path is kept — it will wait for you')
     } else if (pf.mode === 'open' && pf.tl) {
       landUndo(rename(pf.tl.t.id, v))
     } else if (pf.tl) {
@@ -2967,19 +2913,14 @@ function mountSky(root: HTMLDivElement) {
     //    and needs no connection. Anything else has to be worked out first.
     acts.push({
       icon: made ? 'brief' : asking ? 'ask' : doable ? 'make' : ready && canRain ? 'rain' : 'work',
-      lb: made
-        ? 'read it'
-        : asking
-          ? 'answer it'
-          : doable
-            ? 'do it'
-            : ready && canRain
-              ? isKept(tl.t)
-                ? 'path'
-                : 'rain'
-              : 'work it',
-      // reading what is already written needs nothing from the network
-      dim: !made && (asking || doable || !ready) && S().offline,
+      // Always 'rain', never 'path'. A cloud that has rained once and been
+      // added to since has more to give; the old second label opened a page of
+      // five template rows that had already been produced, which is the one
+      // thing a second press should never do.
+      lb: made ? 'read it' : asking ? 'answer it' : doable ? 'do it' : ready && canRain ? 'rain' : 'work it',
+      // reading what is already written is the only one of these that needs
+      // nothing from the network — rain goes out to condense now
+      dim: !made && S().offline,
       run: () => {
         closeMoons()
         if (made) {
@@ -2990,7 +2931,7 @@ function mountSky(root: HTMLDivElement) {
         // which would otherwise make it "ready" and offer to rain a single
         // action into the current, which is not a thing that means anything
         else if (doable) void runDraft(tl)
-        else if (ready && canRain) rain(tl)
+        else if (ready && canRain) void rain(tl)
         else void runDeepen(tl)
       },
     })
@@ -3078,7 +3019,29 @@ function mountSky(root: HTMLDivElement) {
   }
 
 
-  function rain(tl: TL) {
+  /**
+   * The cloud lets go, and what falls is work.
+   *
+   * The rain itself is unchanged and it is the point: seven drops off the
+   * underside, into the water, a splash. What is behind it is new. It used to
+   * open a page of five template rows — the group's own name, its first three
+   * members with `Rough out "…"` in front of them, and one closing sentence,
+   * the same five for any group of any content — and "keep this path" set a
+   * flag and wrote them into a blob nothing else in the app could read. So
+   * nothing ever actually rained into the Current.
+   *
+   * Now it reads the whole cloud and what falls becomes real actions under it,
+   * which is where the rest of the app is waiting: they land in the Current,
+   * they can be ticked, and each one is a leaf under a goal, so the third moon
+   * reads it and offers `answer it`, `do it` or `work it` on its own terms.
+   *
+   * It stays instant on purpose. No search — this is their own thinking, and
+   * the web has never heard of it — so what is left is one ordinary call that
+   * lands about as the splash finishes. Going away for a minute is `work it`,
+   * one moon over.
+   */
+  async function rain(tl: TL) {
+    if (working || S().offline) return
     closeMoons()
     openPool = null
     const p = posOf(tl.t.id)
@@ -3100,7 +3063,55 @@ function mountSky(root: HTMLDivElement) {
       setTimeout(() => splash(p.x), 480)
     }
     haptics.arrive()
-    setTimeout(() => openPage('path', tl, toScreenX(p.x), toScreenY(p.y)), reduced ? 0 : 430)
+
+    working = tl.t.id
+    els.get(tl.t.id)?.classList.add('working')
+    hold('what falls out of this…', trim(label(tl.t), 34))
+    const res = await rainThought(tl.t.id)
+    working = null
+    els.get(tl.t.id)?.classList.remove('working')
+    if (dead) return
+
+    if (res.kind === 'failed') {
+      hold(res.why ?? 'nothing fell just now', trim(label(tl.t), 34))
+      offerAction('tap to try again', 'again', () => {
+        hold(null)
+        void rain(tl)
+      })
+      return
+    }
+    if (res.kind === 'thin') {
+      // A cloud of half-formed ideas sometimes genuinely has no next action in
+      // it yet, and the one question that would unlock it is worth more than
+      // five invented chores. Saying so is the honest answer, and the old
+      // template could never give it.
+      hold(res.missing[0] ?? 'nothing follows from this yet', trim(label(tl.t), 34))
+      record('rained · nothing follows yet', trim(label(tl.t), 40))
+      return
+    }
+    landRain(tl, res)
+  }
+
+  /** Put what fell where it belongs, and show it falling. */
+  function landRain(tl: TL, res: Extract<Awaited<ReturnType<typeof rainThought>>, { kind: 'rained' }>) {
+    // the new work arrives around the cloud it came out of, rather than
+    // wherever an unplaced drop would have been dropped
+    const gp = posOf(tl.t.id)
+    const before = new Set(view.byId.keys())
+    rebuild()
+    for (const id of view.byId.keys()) {
+      if (before.has(id)) continue
+      const q = posOf(id)
+      const a = -Math.PI / 2 + Math.random() * Math.PI * 2
+      q.x = q.rx = gp.x + Math.cos(a) * 150
+      q.y = q.ry = gp.y + Math.sin(a) * 120
+      q.s = 0.3
+    }
+    paintAll()
+    haptics.join()
+    hold(res.note || `${res.added} thing${res.added === 1 ? '' : 's'} fell out of it`, trim(label(tl.t), 34))
+    record(`rained · ${res.added} to do`, trim(label(tl.t), 40))
+    fitWhenSettled()
   }
   // ⚡ — the agent goes away and does the legwork on one drop, and what it
   // finds arrives as real work hanging under it rather than as a wall of prose.

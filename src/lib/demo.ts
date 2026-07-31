@@ -159,6 +159,38 @@ export const DEMO_SEED = {
 export const DEMO_OUTPUT: Record<string, unknown> = {
   // The commonest real answer, and the one the old code could not give.
   remember: { ops: [] },
+  // What falls out of a full cloud: what these ideas turned out to be about,
+  // and the two things that follow from it. Not the members with a verb in
+  // front of them, which is what this replaced.
+  rain: {
+    read: 'One campaign built on things that cannot be reproduced',
+    steps: [
+      {
+        tempId: 's1',
+        title: 'Shoot one roll of the expired stock before booking anything',
+        why: 'the whole look rests on it and nobody has seen it yet',
+        effort: 2,
+        dependsOn: [],
+      },
+      {
+        tempId: 's2',
+        title: 'Write the wax-letter copy for six buyers, by name',
+        why: 'six letters is the campaign; a hundred is a mailout',
+        effort: 3,
+        dependsOn: [],
+      },
+      {
+        tempId: 's3',
+        title: 'Pick the one feeling the room has to leave people with',
+        why: 'the pop-up and the letters are both waiting on this',
+        effort: 1,
+        dependsOn: ['s1'],
+      },
+    ],
+    missing: [],
+    learned: [],
+    note: 'three things, and one of them settles the other two',
+  },
   gauge: {
     depth: 'deep',
     needs: ['live LAX→CDG premium economy fares for those dates', 'Flying Blue award availability'],
