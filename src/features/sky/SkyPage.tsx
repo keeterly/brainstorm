@@ -33,6 +33,7 @@ import { sendWork, sentWord } from '@/lib/send'
 import { holdReload } from '@/lib/sw'
 import { noteTrail } from '@/lib/trail'
 import { echoRing, wabiBlob, wabiPill, wabiSeed } from '@/world/echo'
+import { rippleAt, WAKE } from '@/world/ripple'
 import { type Body, card, contact, disc, oilPath, pull } from '@/world/shape'
 import type { Thought } from '@/domain/types'
 import './sky.css'
@@ -344,6 +345,58 @@ function blobOf(id: string) {
 // How much of a drop's stretch toward its partner is paid for by narrowing
 // across it. Water has a volume; a body that reaches has to thin somewhere.
 export const MORPH_PERP = 0.55
+
+/** How far from round the page's arriving edge is. Proportional, so the front
+ *  is as amorphous when it is small as when it fills the screen. */
+export const FRONT_WOBBLE = 0.055
+
+/**
+ * The edge of the page as it arrives.
+ *
+ * This was `circle()`, and at the size it grows to it was the loudest thing on
+ * the screen: a hard, mathematically perfect arc sweeping across a world in
+ * which nothing else — not a drop, not a tab, not an echo — is a true circle.
+ * The rings leaving your thumb were amorphous and the front chasing them was a
+ * compass circle, so the two read as coming from different apps.
+ *
+ * Same curve as those rings now, at page scale. `clip-path` interpolates
+ * `path()` against `path()` point by point when the two have the same commands
+ * in the same order, which they do here — `echoRing` always emits the same 26 —
+ * so the blob grows rather than morphing or snapping.
+ *
+ * The wobble is proportional, so the edge is as far from round when it is small
+ * as when it fills the screen, and the seed comes from where you pressed, so
+ * the same place opens the same shape twice.
+ */
+export function frontPath(ox: number, oy: number, r: number): string {
+  return `path('${echoRing(ox, oy, r, ((ox * 0.618033 + oy * 0.318309) % 1) * 9.7, FRONT_WOBBLE)}')`
+}
+
+/**
+ * How far the front has to travel to have covered the page from where it
+ * opened.
+ *
+ * Far enough to reach every corner — a fixed screen diagonal is only enough
+ * when the origin is on screen, and a drop's position is in world space, so
+ * after a pan it may be nowhere near it. Getting that wrong leaves the page
+ * frozen as a giant arc across a corner.
+ *
+ * …and then far enough again that the *dents* clear the corners too. A wobbled
+ * edge is pulled inward as much as it is pushed outward, and a front sized to
+ * the corner alone would land with a bite of night sky still in one of them.
+ * The margin on top of that is not decoration: the curve through the sampled
+ * points can dip a little below the shallowest of them, so the arithmetic bound
+ * by itself is not quite a guarantee.
+ */
+export function frontReach(ox: number, oy: number, w: number, h: number): number {
+  const corner = Math.max(
+    Math.hypot(ox, oy),
+    Math.hypot(w - ox, oy),
+    Math.hypot(ox, h - oy),
+    Math.hypot(w - ox, h - oy),
+  )
+  return Math.ceil(corner / (1 - FRONT_WOBBLE) + 24)
+}
 export { echoRing }
 
 // The neck two droplets form as they reach for each other. Circles do not
@@ -2787,22 +2840,12 @@ function mountSky(root: HTMLDivElement) {
     // .world-hem, which is document content and so is not covered by anything
     // fixed, however full-screen it looks
     document.body.classList.add('on-paper')
-    page.style.clipPath = `circle(0px at ${ox}px ${oy}px)`
-    // Far enough to reach every corner from wherever it opened. A fixed screen
-    // diagonal is only enough when the origin is on screen — and a drop's
-    // position is in world space, so after a pan it may be nowhere near it.
-    // Getting that wrong leaves the page frozen as a giant arc across a corner.
-    // …and the page's own height, not the viewport's. The page runs --bleed
-    // past the bottom of the glass so it covers the whole screen on an
-    // installed phone; sizing the circle to innerHeight would leave that last
-    // strip clipped — an arc of night sky across the bottom of the paper.
-    const pageH = page.offsetHeight || innerHeight
-    const reach = Math.max(
-      Math.hypot(ox, oy),
-      Math.hypot(W - ox, oy),
-      Math.hypot(ox, pageH - oy),
-      Math.hypot(W - ox, pageH - oy),
-    )
+    page.style.clipPath = frontPath(ox, oy, 0)
+    // The page's own height, not the viewport's. The page runs --bleed past the
+    // bottom of the glass so it covers the whole screen on an installed phone;
+    // sizing the front to innerHeight would leave that last strip clipped — an
+    // arc of night sky across the bottom of the paper.
+    const reach = frontReach(ox, oy, W, page.offsetHeight || innerHeight)
     // Rings, out ahead of it.
     //
     // Every button in this app answers a touch the way water does — a body
@@ -2814,7 +2857,7 @@ function mountSky(root: HTMLDivElement) {
     if (!reduced) wake(ox, oy)
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
-        page.style.clipPath = `circle(${Math.ceil(reach) + 4}px at ${ox}px ${oy}px)`
+        page.style.clipPath = frontPath(ox, oy, reach)
         page.classList.add('on')
       }),
     )
@@ -2832,22 +2875,9 @@ function mountSky(root: HTMLDivElement) {
    * the paper has not reached yet.
    */
   function wake(x: number, y: number) {
-    for (const [size, delay] of [
-      [64, 0],
-      [128, 90],
-      [230, 200],
-      [360, 330],
-    ] as const) {
-      const r = document.createElement('div')
-      r.className = 'ripple wake'
-      r.style.width = r.style.height = `${size}px`
-      r.style.left = `${x - size / 2}px`
-      r.style.top = `${y - size / 2}px`
-      r.style.animationDelay = `${delay}ms`
-      document.body.appendChild(r)
-      setTimeout(() => r.remove(), 1400 + delay)
-    }
+    rippleAt(x, y, WAKE)
   }
+
 
   function classifyQuiet(t: Thought) {
     if (S().offline) return
@@ -2923,7 +2953,10 @@ function mountSky(root: HTMLDivElement) {
     pageT.blur() // fires change, which is what commits a group's name
     nameFor = null
     page.classList.remove('on')
-    page.style.clipPath = `circle(0px at ${pf.ox}px ${pf.oy}px)`
+    // the same shape it arrived as, back down to nothing — a `circle()` here
+    // would have nothing in common with the `path()` it is leaving and the
+    // page would vanish rather than close
+    page.style.clipPath = frontPath(pf.ox, pf.oy, 0)
     document.body.classList.remove('on-paper')
     // Held, so opening another page can cancel it.
     //

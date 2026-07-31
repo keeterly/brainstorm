@@ -636,18 +636,22 @@ body.sky-dragging .sky-undo.show {
    * kind — and a razor edge of near-white travelling across a dark sky at
    * that speed is a slap, however nice the shape of it is.
    *
-   * So it is three things now, and none of them is the edge:
+   * So it is four things now, and only the last one is the edge:
    *
    *   1. **Longer, and easing out for most of it.** It leaves promptly and
    *      then spends the rest of the time slowing down, which is what a
    *      spreading front actually does.
    *   2. **The paper fades up as the front passes.** By the time any part of
    *      the boundary is opaque enough to see as a line, it is off the screen.
-   *      Nothing about the shape changed; what changed is that you cannot see
-   *      its edge any more.
    *   3. **Rings leave the point you pressed**, ahead of it — see openPage.
    *      The same rings every button in this app makes, because this is the
    *      same act: something was touched, and the surface answered.
+   *   4. **The front is not a circle.** It stayed one long after the rings in
+   *      front of it stopped being one, and at the size it grows to it was the
+   *      loudest thing on the screen — a perfect arc sweeping across a world
+   *      where nothing else is a true circle. It is the same wobbled curve now.
+   *      See `front()` in SkyPage: this value is only what the page rests at,
+   *      and is replaced inline before it is ever shown.
    */
   clip-path: circle(0px at 50% 50%);
   opacity: 0;

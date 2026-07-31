@@ -7,6 +7,7 @@ import { computeWorld } from './engine'
 import { SURFACE, WATER_DEEP, WATER_DRAW_H, WATER_H, drawWater, invalidateWaterline, seaFloor } from './water'
 import { stepUpright, worldTilt } from './upright'
 import { tickDaylight } from './daylight'
+import { rippleAt, SPLASH } from './ripple'
 
 // The ocean is drawn bigger than the window it shows through: wider on both
 // sides and deeper than the bottom edge, so however far it tilts to stay level
@@ -386,16 +387,9 @@ const GRAIN: React.CSSProperties = {
 
 /** Motion-language helpers shared by surfaces. */
 export function splashAt(x: number, y: number) {
-  for (const s of [26, 48]) {
-    const r = document.createElement('div')
-    r.className = 'ripple'
-    r.style.width = r.style.height = `${s}px`
-    r.style.left = `${x - s / 2}px`
-    r.style.top = `${y - s / 4}px`
-    r.style.transform = 'scaleY(0.32)'
-    document.body.appendChild(r)
-    setTimeout(() => r.remove(), 950)
-  }
+  // squashed toward the horizontal, because you are looking at this surface
+  // from just above it rather than straight down onto it
+  rippleAt(x, y, SPLASH)
 }
 
 export function evaporateAt(x?: number) {
