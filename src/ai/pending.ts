@@ -10,8 +10,39 @@
 // This is the coming back for it. On load it asks what is unfinished or
 // finished-and-unclaimed, hands each one to whoever knows how to apply it, and
 // marks it claimed so a second device does not apply it twice.
+import { get as idbGet, set as idbSet } from 'idb-keyval'
 import { supabase } from '@/lib/supabase'
+import { write } from '@/lib/outbox'
 import { whyItFailed } from './why'
+
+/**
+ * Runs this device has already folded in.
+ *
+ * `applied_at` is the real answer and it lives on the server, but the PATCH
+ * that sets it can fail — and it used to be sent as a bare `void` with no
+ * retry, so a dropped connection at that exact moment left the row saying
+ * "nobody has claimed this" while its output was already in your graph. The
+ * next load picked it up and applied it a second time: duplicate tasks,
+ * duplicate briefs, duplicate memories, no way to tell which was which.
+ *
+ * So two locks rather than one. The write goes through the outbox, which does
+ * not give up; and until it lands, this local list is enough on its own to
+ * stop the same device doing the work twice.
+ */
+const CLAIMED_KEY = 'brainstorm-applied-runs-v1'
+/** Enough to cover any plausible backlog; runs older than 15 minutes are gone anyway. */
+const CLAIMED_MAX = 200
+let claimed: string[] | null = null
+
+async function claimedIds(): Promise<string[]> {
+  if (claimed) return claimed
+  try {
+    claimed = ((await idbGet(CLAIMED_KEY)) as string[] | undefined) ?? []
+  } catch {
+    claimed = [] // no IndexedDB — the in-memory list still covers this session
+  }
+  return claimed
+}
 
 export interface PendingRun {
   id: string
@@ -44,8 +75,10 @@ export async function pendingRuns(): Promise<PendingRun[]> {
     .order('created_at', { ascending: false })
     .limit(8)
   if (error || !data) return []
+  const mine = await claimedIds()
   return data
     .filter((r) => r.status !== 'failed' && r.status !== 'invalid_output')
+    .filter((r) => !mine.includes(r.id as string))
     .map((r) => ({
       id: r.id as string,
       action: r.action as string,
@@ -57,9 +90,29 @@ export async function pendingRuns(): Promise<PendingRun[]> {
     }))
 }
 
-/** Say this one has been dealt with, so no other device deals with it again. */
+/** Say this one has been dealt with, so nothing deals with it again. */
 export async function markApplied(runId: string): Promise<void> {
-  await supabase.from('agent_runs').update({ applied_at: new Date().toISOString() }).eq('id', runId)
+  const mine = await claimedIds()
+  if (!mine.includes(runId)) {
+    mine.push(runId)
+    if (mine.length > CLAIMED_MAX) mine.splice(0, mine.length - CLAIMED_MAX)
+    try {
+      await idbSet(CLAIMED_KEY, mine)
+    } catch {
+      /* memory-only fallback */
+    }
+  }
+  await write({
+    table: 'agent_runs',
+    op: 'update',
+    pk: { id: runId },
+    payload: { applied_at: new Date().toISOString() },
+  })
+}
+
+/** Tests only — the claim list is process-wide by design. */
+export function __resetClaimed(): void {
+  claimed = null
 }
 
 /**

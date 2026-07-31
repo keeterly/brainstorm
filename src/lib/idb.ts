@@ -2,6 +2,7 @@
 import { get as idbGet, set as idbSet, del as idbDel } from 'idb-keyval'
 import type {
   Memory,
+  MemoryEvent,
   Profile,
   Relationship,
   ResearchArtifact,
@@ -15,8 +16,19 @@ export interface GraphSnapshot {
   relationships: Relationship[]
   roadmaps: Roadmap[]
   memories: Memory[]
+  /** How it came to believe things. Optional: snapshots written before this. */
+  memoryEvents?: MemoryEvent[]
   artifacts: ResearchArtifact[]
   profile: Profile | null
+  /**
+   * Where you put everything.
+   *
+   * Left out of the snapshot until now, which meant opening the app offline
+   * restored `{}` — so the sky re-randomised every drop, and the first time
+   * anything settled it wrote that scrambled arrangement back over the real
+   * one. An hour of placing things by hand, undone by one launch on a plane.
+   */
+  layouts?: Record<string, Record<string, { x: number; y: number }>>
   savedAt: string
 }
 

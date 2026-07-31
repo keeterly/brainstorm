@@ -23,6 +23,7 @@ import { addTo, bin, complete, groupInto, membersOf, rename, takeOut, ungroup, t
 import { awaitRun, markApplied, pendingRuns, subjectOf } from '@/ai/pending'
 import { reshapeTally, reshapeThought } from './reshapeFlow'
 import { haptics } from '@/lib/haptics'
+import { holdReload } from '@/lib/sw'
 import { noteTrail } from '@/lib/trail'
 import { echoRing, wabiBlob, wabiPill, wabiSeed } from '@/world/echo'
 import { type Body, card, contact, disc, oilPath, pull } from '@/world/shape'
@@ -417,6 +418,51 @@ function mountSky(root: HTMLDivElement) {
   const lightbox = $('lightbox')
   const lightboxImg = root.querySelector('[data-sky="lightboxImg"]') as HTMLImageElement
   const lightboxX = $('lightboxX')
+
+  /*
+   * What you have written and not yet let go of.
+   *
+   * Everything typed into this page lived in the DOM and nowhere else until
+   * you pressed Done. Switch apps, get a call, let the phone sleep long enough
+   * that iOS discards the tab — or simply come back to a new deploy — and a
+   * paragraph you had been working out was gone with no sign it had ever
+   * existed. That is the worst thing a thinking app can do.
+   *
+   * Two answers, because they cover different failures. The draft is written
+   * to localStorage as you type, so it survives the page dying; and a reload
+   * the app *chooses* to do is asked to wait while there is unsaved text in
+   * front of you, so it does not interrupt a sentence to install a new bundle.
+   */
+  const DRAFT_KEY = 'brainstorm-sky-draft-v1'
+  let draftT: ReturnType<typeof setTimeout> | null = null
+  function keepDraft() {
+    const v = pageT.value
+    try {
+      if (pageFor?.mode === 'capture' && v.trim()) localStorage.setItem(DRAFT_KEY, v)
+      else if (pageFor?.mode === 'capture') localStorage.removeItem(DRAFT_KEY)
+    } catch {
+      /* private mode — the hold below is still doing its half of the job */
+    }
+  }
+  function dropDraft() {
+    try {
+      localStorage.removeItem(DRAFT_KEY)
+    } catch {
+      /* ignore */
+    }
+  }
+  function heldDraft(): string {
+    try {
+      return localStorage.getItem(DRAFT_KEY) ?? ''
+    } catch {
+      return ''
+    }
+  }
+  pageT.addEventListener('input', () => {
+    if (draftT) clearTimeout(draftT)
+    draftT = setTimeout(keepDraft, 400)
+  })
+  const releaseHold = holdReload(() => page.classList.contains('show') && pageT.value.trim().length > 0)
 
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
   document.body.classList.add('sky-held')
@@ -2227,14 +2273,24 @@ function mountSky(root: HTMLDivElement) {
     } else if (mode === 'capture') {
       pendingImage = null
       pageQ.textContent = 'What’s on your mind?'
-      pageT.value = ''
+      // Whatever you were writing last time this page went away without being
+      // finished. It comes back here rather than reopening itself, because a
+      // draft that reopens the page is an app talking over you; a draft that
+      // is simply still there when you next go to write is an app that did not
+      // lose anything.
+      const kept = heldDraft()
+      pageT.value = kept
       pageT.placeholder = 'Let it storm.'
       // Where it will land, said before you write rather than after. A group
       // is open often enough that "this is going somewhere in particular" is
       // worth a line.
       {
         const home = openPool ? S().thoughts.find((t) => t.id === openPool) : null
-        pageN.textContent = home ? `into “${trim(label(home), 24)}”` : '✦ organizes · or a line, a drop'
+        pageN.textContent = kept
+          ? 'still here from before'
+          : home
+            ? `into “${trim(label(home), 24)}”`
+            : '✦ organizes · or a line, a drop'
       }
     } else if (mode === 'say' && tl) {
       /*
@@ -2396,6 +2452,11 @@ function mountSky(root: HTMLDivElement) {
     nameFor = null
     for (const write of owed) write()
     stopMic()
+    // The draft, written now rather than on the debounce that is still 400ms
+    // out — leaving without committing is precisely when the last sentence you
+    // typed matters most.
+    if (draftT) clearTimeout(draftT)
+    if (pageFor.mode === 'capture' && !commit) keepDraft()
     const pf = pageFor
     pageFor = null
     pageT.blur() // fires change, which is what commits a group's name
@@ -2407,6 +2468,8 @@ function mountSky(root: HTMLDivElement) {
     if (!commit) return
     const v = pageT.value
     if (pf.mode === 'capture') {
+      // it is in the graph now (or it was whitespace) — the copy is spent
+      dropDraft()
       const blocks = parseCapture(v.trim())
       if (!blocks.length) return
       let drops = 0
@@ -2787,6 +2850,7 @@ function mountSky(root: HTMLDivElement) {
       // the picture now knows what it shows
       if (photoId && res.source) S().updateThought(photoId, { title: res.source, raw_content: res.source })
       pageT.value = ''
+      dropDraft() // the words are drops now
       micUsed = false
       pendingImage = null
       closePage(false)
@@ -4800,6 +4864,8 @@ function mountSky(root: HTMLDivElement) {
     dead = true
     cancelAnimationFrame(raf)
     unsub()
+    releaseHold()
+    if (draftT) clearTimeout(draftT)
     removeEventListener('resize', onResize)
     removeEventListener('pointerup', onUp)
     removeEventListener('pointercancel', onCancel)

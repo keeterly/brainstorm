@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { STALE_AFTER_MS, awaitRun, markApplied, pendingRuns, subjectOf } from './pending'
+import { STALE_AFTER_MS, __resetClaimed, awaitRun, markApplied, pendingRuns, subjectOf } from './pending'
 
 // One fluent chain per call, so a test can say what the query came back with
 // and then assert on how the query was built.
@@ -85,6 +85,18 @@ describe('claiming one', () => {
     expect(q.table).toBe('agent_runs')
     expect((q.update as { applied_at: string }).applied_at).toBeTruthy()
     expect(q.filters['eq:id']).toBe('r9')
+  })
+
+  it('does not hand the same run back to this device, stamp or no stamp', async () => {
+    // The stamp is the server's answer, and the server may not have heard yet:
+    // the PATCH used to go out as a bare `void` with no retry, so one dropped
+    // connection at that moment left `applied_at` null while the output was
+    // already folded into the graph — and the next load applied it again.
+    // Duplicate tasks, duplicate briefs, duplicate memories, no telling which.
+    __resetClaimed()
+    await markApplied('r1')
+    reply = { data: [row()] } // the server still says nobody has claimed it
+    expect(await pendingRuns()).toHaveLength(0)
   })
 })
 

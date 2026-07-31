@@ -92,8 +92,10 @@ function scheduleSnapshot(get: () => GraphState) {
       relationships: s.relationships,
       roadmaps: s.roadmaps,
       memories: s.memories,
+      memoryEvents: s.memoryEvents,
       artifacts: s.artifacts,
       profile: s.profile,
+      layouts: s.layouts,
       savedAt: new Date().toISOString(),
     })
   }, 800)
@@ -119,6 +121,13 @@ export const useGraph = create<GraphState>((set, get) => ({
   async hydrate(userId) {
     set({ userId })
     try {
+      // Send what is owed before asking what is there. The other way round —
+      // read the server, overwrite the store, *then* flush — means the fresh
+      // server rows momentarily replace edits that have not landed yet, and
+      // the snapshot written straight afterwards captures the graph without
+      // them. Harmless in the happy case, and the exact shape of a lost edit
+      // in every other one.
+      await flush()
       const [th, re, rm, me, ev, ar, pr, la] = await Promise.all([
         supabase.from('thoughts').select('*').order('created_at', { ascending: false }).limit(5000),
         supabase.from('relationships').select('*').limit(20000),
@@ -129,7 +138,16 @@ export const useGraph = create<GraphState>((set, get) => ({
         supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
         supabase.from('layouts').select('*'),
       ])
-      if (th.error) throw th.error
+      // Every one of them, not just the thoughts.
+      //
+      // Only `th.error` was checked, so a relationships query that failed on
+      // its own gave you `hydrated: true, offline: false` with an empty edge
+      // set — every pool in the sky dissolved, nothing read as blocked, the
+      // Current showed no dependencies — and `scheduleSnapshot` then wrote
+      // that blank graph over the good local copy. A partial answer is not an
+      // answer; fall through to the snapshot like any other failure.
+      const bad = [th, re, rm, me, ev, ar, pr, la].find((r) => r.error)
+      if (bad?.error) throw bad.error
       const layouts: GraphState['layouts'] = {}
       for (const row of la.data ?? []) layouts[row.scope] = row.positions
       set({
@@ -145,7 +163,6 @@ export const useGraph = create<GraphState>((set, get) => ({
         offline: false,
       })
       scheduleSnapshot(get)
-      void flush()
     } catch {
       // Offline (or server unreachable): open from the local snapshot.
       const snap = await loadSnapshot(userId)
@@ -155,6 +172,13 @@ export const useGraph = create<GraphState>((set, get) => ({
           relationships: snap.relationships,
           roadmaps: snap.roadmaps,
           memories: snap.memories,
+          // Both of these used to be dropped on the floor. Without `layouts`
+          // the sky reshuffled itself and then saved the reshuffle; without
+          // `memoryEvents` the Memory page's record of what it changed its
+          // mind about was silently empty — the one section whose whole point
+          // is that it must never be invisible.
+          memoryEvents: snap.memoryEvents ?? [],
+          layouts: snap.layouts ?? {},
           artifacts: snap.artifacts,
           profile: snap.profile,
           hydrated: true,

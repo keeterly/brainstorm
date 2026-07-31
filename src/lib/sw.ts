@@ -22,7 +22,40 @@
 //      the old bundle, and only a navigation fixes that. Guarded so the first
 //      visit — which has no controller to change *from* — never reloads, and so
 //      it can never happen twice.
+//
+// …and one thing that is: **the reload must not eat what you are in the middle
+// of writing.** `reg.update()` runs every time the app comes back to the
+// front, which is exactly the moment you have typed half a thought, switched
+// to check something and come back. A new worker landing right then took the
+// page out from under a textarea whose contents lived nowhere but the DOM.
+// Anything that holds unsaved work can now say so, and the reload waits.
 const RE_ASK_MS = 30 * 60 * 1000
+/** How often to look again once a hold has asked the reload to wait. */
+const HOLD_POLL_MS = 1500
+
+const holds = new Set<() => boolean>()
+
+/**
+ * "Do not reload while this is true."
+ *
+ * Register one for anything that would be destroyed by a navigation. Returns
+ * the release — call it when the surface goes away, or the hold outlives it.
+ */
+export function holdReload(busy: () => boolean): () => void {
+  holds.add(busy)
+  return () => holds.delete(busy)
+}
+
+function held(): boolean {
+  for (const h of holds) {
+    try {
+      if (h()) return true
+    } catch {
+      /* a broken hold must not block the update forever */
+    }
+  }
+  return false
+}
 
 export function keepFresh(): void {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
@@ -36,7 +69,17 @@ export function keepFresh(): void {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!wasControlled || reloading) return
     reloading = true
-    location.reload()
+    // The new bundle is already installed and will be served on the next
+    // navigation whenever that comes — there is no hurry, and no version of
+    // being up to date that is worth a paragraph you were halfway through.
+    const go = () => {
+      if (held()) {
+        setTimeout(go, HOLD_POLL_MS)
+        return
+      }
+      location.reload()
+    }
+    go()
   })
 
   const start = async () => {
