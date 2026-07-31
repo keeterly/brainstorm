@@ -893,6 +893,34 @@ body.sky-dragging .sky-undo.show {
   outline: none;
   background: rgba(19, 26, 36, 0.05);
 }
+/* The picture, where its name would be. A reference is the one kind of thing
+   whose title tells you nothing about it — five rows reading "Photo" is a list
+   of your own eye that you cannot use. Small enough that a row is still a row,
+   and it opens the full frame when pressed. */
+.sky-page .pans .row .pic {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  margin: 4px 0 -2px;
+  padding: 0;
+  border: 0.5px solid rgba(19, 26, 36, 0.16);
+  border-radius: 9px;
+  overflow: hidden;
+  background: rgba(19, 26, 36, 0.05);
+}
+.sky-page .pans .row .pic img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  /* the thumbnails are tiny — let them stay soft rather than blocky */
+  image-rendering: auto;
+  margin: 0;
+  border-radius: 0;
+  max-width: none;
+}
+.sky-page .pans .row .pic:active { opacity: 0.62; }
+.sky-page .pans .row.ticked .pic { opacity: 0.5; }
 /* 44pt of target for a 10px label: the words are small because they are not
    the point of the row, but the thing you press is not. */
 /* a member that is itself a group says how much it is holding */
@@ -925,25 +953,24 @@ body.sky-dragging .sky-undo.show {
    out in the sky, so there is one thing to learn rather than a handle to find.
 
    Which leaves the row's own text field, where a long press means *select this
-   word* and brings up the magnifier. Two rules keep the two apart, and they
-   have to be read together:
-
-     * Until you are typing in it, the field does not take selection at all, so
-       a long press over the words is the row's rather than the caret's. Focus
-       and typing are untouched by this; only the magnifier is.
-     * The moment it has focus it behaves like any other field again — see
-       `:focus` below — and the drag stands aside for it, in `down()`.
+   word* and brings up the magnifier. `user-select` alone does not settle that
+   argument: iOS special-cases form controls, so an editable field takes the
+   long press however the stylesheet is written. The field is therefore
+   `readonly` until you tap it — see `tapToEdit` — and only then does it behave
+   like a field again, magnifier included, which is exactly when you want it to.
 
    `pan-y` lets the list go on scrolling normally: a finger that moves is
    scrolling, a finger that stays is picking the row up, and the drag takes the
    gesture back at the moment of the lift. */
 .sky-page .pans .row { touch-action: pan-y; }
-.sky-page .pans .row .t {
+.sky-page .pans .row .t[readonly] {
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
+  /* it is a paragraph you can hold, not a field you are in */
+  cursor: default;
 }
-.sky-page .pans .row .t:focus {
+.sky-page .pans .row .t:not([readonly]) {
   -webkit-user-select: text;
   user-select: text;
   -webkit-touch-callout: default;
@@ -1235,8 +1262,15 @@ body.sky-dragging .sky-undo.show {
   /* It stands on the keyboard, not under it. iOS never resizes the layout
      viewport for the keyboard, so this whole row — photo, voice, ✦, Done —
      was simply behind it and unreachable. --kb is how tall the keyboard
-     currently is, published from visualViewport. */
-  padding: 8px 20px calc(var(--kb, 0px) + var(--sab) + 16px);
+     currently is, published from visualViewport.
+
+     The safe area is only owed while the keyboard is *down*. With it up the
+     home indicator sits on the keyboard rather than on this page, and
+     reserving both left a band of blank paper the height of the indicator
+     between the Done row and the top of the keyboard — dead space that came
+     straight off the list above it. That is what made a group of five show
+     two rows. max() spends the safe area only where it is still uncovered. */
+  padding: 8px 20px calc(var(--kb, 0px) + 16px + max(0px, var(--sab) - var(--kb, 0px)));
   transition: padding 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .sky-page .tools { display: flex; align-items: center; gap: 10px; min-width: 0; }

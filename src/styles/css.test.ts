@@ -91,16 +91,18 @@ describe('picking a row up off a list', () => {
   })
 
   it('keeps the magnifier off the words until you are actually typing in them', () => {
-    // A long press inside a text field belongs to iOS's selection UI. The row
-    // can only claim that gesture while the field is not focused — and has to
-    // hand it straight back the moment it is, or you could never select a word
-    // you were editing.
-    const idle = sky.slice(sky.indexOf('.sky-page .pans .row .t {\n  -webkit-user-select'))
+    // A long press inside an *editable* element belongs to iOS's selection UI
+    // whatever the stylesheet says — form controls are special-cased, which is
+    // why the first attempt at this did nothing on the phone. The row's field
+    // is `readonly` until tapped, and these two rules hang off that: read-only
+    // text is ordinary text and obeys user-select; a field you are actually in
+    // behaves like a field, magnifier included.
+    const idle = sky.slice(sky.indexOf('.sky-page .pans .row .t[readonly]'))
     expect(idle).toMatch(/-webkit-user-select: none/)
     expect(idle).toMatch(/-webkit-touch-callout: none/)
-    const onFocus = sky.slice(sky.indexOf('.sky-page .pans .row .t:focus'))
-    expect(onFocus).toMatch(/-webkit-user-select: text/)
-    expect(onFocus).toMatch(/user-select: text/)
+    const live = sky.slice(sky.indexOf('.sky-page .pans .row .t:not([readonly])'))
+    expect(live).toMatch(/-webkit-user-select: text/)
+    expect(live).toMatch(/user-select: text/)
   })
 
   it('has no handle left to press', () => {

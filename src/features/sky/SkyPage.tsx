@@ -1172,6 +1172,21 @@ function mountSky(root: HTMLDivElement) {
     el.className = cls
     el.dataset.id = id
     el.style.setProperty('--blob', blobOf(id))
+    /*
+     * Not shown until it knows where it goes.
+     *
+     * `paintAll` makes a drop and gives it its size; the frame loop is what
+     * gives it its position, and that is a frame later. For that one frame
+     * every drop in the sky is drawn stacked on the field's own origin at full
+     * size, and then they all snap outward at once. Measured on a cold load:
+     * one frame with seven drops piled at the top left, then a 604px jump.
+     * That was the jitter — not the settling animation after it, which is the
+     * sky doing what it is supposed to.
+     *
+     * Cleared by the loop below, in the same pass that first writes a
+     * transform, so nothing is ever visible in the wrong place.
+     */
+    el.style.visibility = 'hidden'
     field.appendChild(el)
     els.set(id, el)
     return el
@@ -2494,12 +2509,27 @@ function mountSky(root: HTMLDivElement) {
                   // for the indent — one number, so the two can never disagree
                   `<div class="row" data-i="${i}" data-id="${b.t.id}" data-depth="${b.depth}" style="--d:${b.depth}">` +
                   `<button class="tick" role="checkbox" aria-checked="false" aria-label="Done"></button>` +
+                  // The picture itself, where the word "Photo" used to be. A
+                  // wall of references read as a list of five identical rows
+                  // all saying the same useless word — the one kind of content
+                  // that cannot be described by its title, listed by title.
+                  (imgOf(b.t)
+                    ? `<button class="pic" aria-label="See “${esc(label(b.t))}” full screen"><img alt="" /></button>`
+                    : '') +
                   // A textarea, because these are sentences now. ⚡ writes real
                   // steps — "Work backward from your SS27 production schedule
                   // to a funding date" — and an input shows the first thirty
                   // characters of that and hides the rest behind a button. A
                   // list of your work you cannot read is not a list.
-                  `<textarea class="t" rows="1" aria-label="What this is called" enterkeyhint="done"></textarea>` +
+                  //
+                  // Read-only until you tap it. `user-select: none` does not
+                  // stop iOS putting its magnifier and selection handles on a
+                  // long press, because a *field* is special-cased: it is
+                  // editable, so text interaction wins whatever the stylesheet
+                  // says. The only way to hold a row down without the loupe
+                  // appearing over the words is for those words not to be in an
+                  // editable thing yet. See `tapToEdit`.
+                  `<textarea class="t" rows="1" readonly aria-label="What this is called" enterkeyhint="done"></textarea>` +
                   // a group inside a group is still a group, and the list has
                   // to say so — a row that looks like any other item is the
                   // page contradicting what the sky just showed you
@@ -2591,7 +2621,23 @@ function mountSky(root: HTMLDivElement) {
       ;[...pageA.querySelectorAll('.row:not(.add)')].forEach((row, i) => {
         const m = inside[i]
         const field = row.querySelector('.t') as HTMLTextAreaElement
-        field.value = label(m)
+        const thumb = imgOf(m)
+        // "Photo" is what the camera called it, not what you would call it. Now
+        // that the picture is on the row, the word is noise — so it steps aside
+        // and leaves an invitation. Nothing is written until you accept it: the
+        // graph still holds the old name, and an empty field saves nothing.
+        const unnamed = !!thumb && label(m) === 'Photo'
+        field.value = unnamed ? '' : label(m)
+        if (unnamed) field.placeholder = 'Say what this is'
+        const pic = row.querySelector('.pic') as HTMLButtonElement | null
+        if (pic && thumb) {
+          ;(pic.querySelector('img') as HTMLImageElement).src = thumb
+          pic.addEventListener('click', (e) => {
+            e.stopPropagation()
+            const full = fullOf(m)
+            if (full) openPhoto(full, label(m))
+          })
+        }
         // as tall as what it holds, measured rather than guessed
         const fit = () => {
           field.style.height = 'auto'
@@ -2628,6 +2674,7 @@ function mountSky(root: HTMLDivElement) {
           })
         }
         pending.push(commit)
+        tapToEdit(field)
         field.addEventListener('focus', () => (began = field.value))
         field.addEventListener('input', () => keepEdit(m.id, field.value))
         field.addEventListener('change', commit)
@@ -3215,6 +3262,38 @@ function mountSky(root: HTMLDivElement) {
     if (tl) openPage('open', tl, pf.ox, pf.oy)
   }
 
+  /**
+   * A row's words: readable always, editable once you ask.
+   *
+   * The row is still the field — no pencil, no edit mode, no second screen —
+   * but it does not *hold* an editable field until you tap it. That is the only
+   * arrangement in which press-and-hold can belong to the row: iOS gives a long
+   * press inside an editable element to its own selection UI, magnifier and
+   * all, and no amount of `user-select` changes that, because a form control is
+   * special-cased. A read-only one is ordinary text and obeys the stylesheet.
+   *
+   * Tapping hands it straight back. Removing `readonly` and focusing inside the
+   * click keeps it within the user gesture, which is what iOS wants before it
+   * will raise a keyboard, and the caret goes to the end — the one thing lost
+   * against a genuinely live field, and worth it against the loupe.
+   */
+  function tapToEdit(field: HTMLTextAreaElement) {
+    field.addEventListener('blur', () => {
+      field.readOnly = true
+    })
+  }
+
+  /** Hand a row's words over to the caret. Called by whatever decides a press
+   *  was a tap and not a hold — see `letGo`, which is the only such thing. */
+  function openField(row: HTMLElement) {
+    const f = row.querySelector('.t') as HTMLTextAreaElement | null
+    if (!f || !f.readOnly) return
+    f.readOnly = false
+    f.focus()
+    const end = f.value.length
+    f.setSelectionRange(end, end)
+  }
+
   /** One level of nesting, in pixels. Kept with the CSS that draws it. */
   const INDENT = 18
   /** Far enough that a thumb wandering while it drags down is not a nest. */
@@ -3355,12 +3434,19 @@ function mountSky(root: HTMLDivElement) {
       if (!drag) return
       holdT = null
       drag.up = true
-      // A row picked up while some other row's field still holds focus would be
-      // dragged around underneath a keyboard covering half the list it is
-      // travelling through. Putting that field away also commits it, on the
-      // usual terms.
+      // A row picked up while *another* row's field holds focus would be dragged
+      // around underneath a keyboard covering half the list it is travelling
+      // through. Putting that field away also commits it, on the usual terms.
+      //
+      // Another row's, not this one's. Blurring the field belonging to the row
+      // being lifted is a fight with the tap that opened it: on a page busy
+      // enough to deliver a pointerup late, the hold matures during an ordinary
+      // tap, and the blur it fired put the row straight back to read-only
+      // behind the click that was about to make it editable. The row needed
+      // tapping twice to type in, and only sometimes, which is the worst way
+      // for a thing to be broken.
       const typing = document.activeElement as HTMLElement | null
-      if (typing?.closest('.pans')) typing.blur()
+      if (typing?.closest('.pans') && !drag.row.contains(typing)) typing.blur()
       try {
         drag.row.setPointerCapture(drag.pointer)
       } catch {
@@ -3380,7 +3466,7 @@ function mountSky(root: HTMLDivElement) {
       // you are already typing in is somewhere a long press means *select this
       // word*, which is the one thing on this page it must go on meaning.
       const on = e.target as HTMLElement
-      if (on.closest('.tick, .out, .ctl')) return
+      if (on.closest('.tick, .out, .ctl, .pic')) return
       if (on.closest('.t') && document.activeElement === on.closest('.t')) return
 
       const id = row.dataset.id as string
@@ -3465,11 +3551,22 @@ function mountSky(root: HTMLDivElement) {
      * rearrange the list about once in every four or five tries. It is not a
      * release; it is the browser saying none of that happened.
      */
-    const letGo = (keep: boolean) => {
+    const letGo = (keep: boolean, e?: PointerEvent) => {
       dropHold()
       if (!drag) return
-      const { at, id, branch, up: was } = drag
-      const lifted = was && keep
+      const { at, id, row, branch, up: was, t0 } = drag
+      /*
+       * …and the same for letting go as for moving.
+       *
+       * A release whose own clock says the finger was already gone before the
+       * hold came due did not hold anything; we were simply late to hear about
+       * it. Without this, a page busy enough to delay a pointerup past 420ms
+       * turns every tap into a lift — which does not move anything, because
+       * nothing was dragged, but does arm the guard below, and that swallows
+       * the tap. The symptom is a row that needs tapping twice to type in.
+       */
+      const early = !!e && e.timeStamp - t0 < HOLD_MS
+      const lifted = was && keep && !early
       drag = null
       document.removeEventListener('touchmove', eat)
       for (const r of branch) {
@@ -3479,12 +3576,18 @@ function mountSky(root: HTMLDivElement) {
       host.classList.remove('arranging')
       mark.hidden = true
       mark.remove()
-      if (was) {
-        // A press that lifted the row is not also a tap on its words. Without
-        // this, holding a row and then thinking better of it puts the caret in
-        // it and brings the keyboard up over the list you were looking at.
-        addEventListener('click', (c) => c.preventDefault(), { capture: true, once: true })
-      }
+      /*
+       * A press that was never a hold is a tap, and a tap on a row opens it for
+       * typing. Decided here rather than by a `click` listener on the field,
+       * because those two were racing and the race was not winnable: the hold
+       * matures on a timer, the click arrives whenever the browser gets round
+       * to it, and on a busy page they interleave differently every time. The
+       * row needed tapping twice, and only sometimes.
+       *
+       * One authority. This function already knows whether the press became a
+       * hold; nothing else needs to guess.
+       */
+      if (!was || early) openField(row)
       // let go without ever picking it up: a tap, which belongs to the field
       if (!lifted || !at) return
       const u = moveInto(id, at.parent, at.after)
@@ -3502,8 +3605,8 @@ function mountSky(root: HTMLDivElement) {
     // the boundary.
     host.addEventListener('pointerdown', down)
     document.addEventListener('pointermove', move)
-    const up = () => letGo(true)
-    const cancel = () => letGo(false)
+    const up = (e: PointerEvent) => letGo(true, e)
+    const cancel = (e: PointerEvent) => letGo(false, e)
     document.addEventListener('pointerup', up)
     document.addEventListener('pointercancel', cancel)
     return () => {
@@ -4767,6 +4870,9 @@ function mountSky(root: HTMLDivElement) {
     dy: number
     sx: number
     sy: number
+    /** where it stood in the world before you picked it up */
+    wx: number
+    wy: number
     vx: number
     vy: number
     moved: boolean
@@ -4918,6 +5024,9 @@ function mountSky(root: HTMLDivElement) {
       dy: p.y - toWorldY(e.clientY),
       sx: e.clientX,
       sy: e.clientY,
+      /** where it stood before you picked it up, for a move that is refused */
+      wx: p.x,
+      wy: p.y,
       vx: 0,
       vy: 0,
       moved: false,
@@ -4988,16 +5097,22 @@ function mountSky(root: HTMLDivElement) {
     drag.vy = (ny - p.y) * 0.6 + drag.vy * 0.4
     p.x = nx
     p.y = ny
-    // the closer to the water, the more the sea reaches up for it
-    if (drag.tl.kind === 'drop') {
-      // The drop, not the finger.
-      //
-      // You pick a drop up by whatever part of it was under your thumb, so the
-      // two are as much as a radius apart — and it is the drop you are
-      // watching cross the line, not your hand. Reading the pointer meant the
-      // band lit at one moment and the release fired at another, and a gesture
-      // whose feedback and whose verdict disagree is a gesture you cannot
-      // learn.
+    // The closer to the water, the more the sea reaches up for it.
+    //
+    // A group answers to the two edges as well now. It was the only thing in
+    // the sky that did not, which made the one gesture that means "this is
+    // finished" refuse the very things most likely to be finished — and left
+    // the only way to be rid of a whole group behind a fold on its own page.
+    // What differs is the landing, not the reach: a drop crosses and it is
+    // done, a group crosses and is asked. See the release.
+    //
+    // The drop, not the finger. You pick a drop up by whatever part of it was
+    // under your thumb, so the two are as much as a radius apart — and it is
+    // the drop you are watching cross the line, not your hand. Reading the
+    // pointer meant the band lit at one moment and the release fired at
+    // another, and a gesture whose feedback and whose verdict disagree is a
+    // gesture you cannot learn.
+    {
       const at = edgeAt(drag.id)
       const line = seaLineAt(at.x, worldTilt(), W)
       const reach = 190
@@ -5142,17 +5257,42 @@ function mountSky(root: HTMLDivElement) {
       else onTap(d.id, d.isMember, { x: e.clientX, y: e.clientY })
       return
     }
-    if (d.tl.kind === 'drop' && d.moved) {
+    if (d.moved) {
       // the same reading the bands were drawn from, so what you were shown and
       // what happens are the same thing
       const at = edgeAt(d.id)
-      if (at.y < SKY_EDGE + sat()) {
-        riseDrop(d.tl.t)
-        persistLayout()
-        return
-      }
-      if (at.y > seaLineAt(at.x, worldTilt(), W) - 12) {
-        sinkDrop(d.tl.t)
+      const up = at.y < SKY_EDGE + sat()
+      const down = at.y > seaLineAt(at.x, worldTilt(), W) - 12
+      if (up || down) {
+        /*
+         * A drop crosses and it is done. A group crosses and is asked.
+         *
+         * The gesture is the same size either way; what it does is not. One is
+         * a thing; the other is that thing and everything under it. Both are
+         * undoable — nothing in this app deletes — but an undo you have to
+         * notice within a few seconds is a poor guard against a thumb that
+         * slipped while moving a cloud out of the way, and a group is the thing
+         * you would least like to lose by accident.
+         *
+         * So it goes back where it stood and the question waits. Nothing has
+         * happened yet, and ignoring the bar is a way of answering it.
+         */
+        if (d.tl.kind === 'pool') {
+          const t = d.tl.t
+          const n = d.tl.members.length
+          const held = n === 1 ? 'and the one inside' : `and the ${n} inside`
+          const what = `“${trim(label(t), 18)}” ${held}`
+          const p = posOf(d.id)
+          p.x = d.wx
+          p.y = d.wy
+          p.vx = 0
+          p.vy = 0
+          if (up) offerAction(`Finish ${what}?`, 'finish it', () => riseDrop(t), 9000)
+          else offerAction(`Let ${what} go?`, 'let it go', () => sinkDrop(t), 9000)
+          return
+        }
+        if (up) riseDrop(d.tl.t)
+        else sinkDrop(d.tl.t)
         persistLayout()
         return
       }
@@ -5817,6 +5957,8 @@ function mountSky(root: HTMLDivElement) {
     for (const [id, el] of els) {
       const p = pos.get(id)
       if (!p) continue
+      // it has a place now, so it may be seen — see mountEl
+      if (el.style.visibility) el.style.visibility = ''
       // half of each axis: the opened card is wider than it is tall, and using
       // one number for both hangs it off its own centre
       const rx = el.clientWidth / 2 || 40
