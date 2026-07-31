@@ -855,8 +855,28 @@ function mountSky(root: HTMLDivElement) {
 
   // ---------- radii ----------
   const looseCount = () => view.tls.filter((tl) => tl.kind === 'drop').length
+  /**
+   * How big a group is, read off how much is in it.
+   *
+   * The area scales with the count, not the radius — which is to say the
+   * radius goes as the square root. A pool holding twice as much should look
+   * twice as big, and "twice as big" for a disc is twice the area; doubling
+   * the radius would make it four times the thing and one group would eat the
+   * sky by six members.
+   *
+   * It used to be `min(126, 78 + 9n)`, which is a straight line into a wall:
+   * the cap arrives at five and a half members, so a group of six, a group of
+   * twelve and a group of forty were all drawn exactly the same size. Half the
+   * information the sky is for — which of these is the big one — was thrown
+   * away at the point it started to matter. The ceiling is still there, four
+   * hundred per cent further out, where the camera can still frame the thing.
+   *
+   * Tuned to land on the old numbers at the small end: one member 86 against
+   * 87, three 105 against 105. Nothing about a sky of small groups moves.
+   */
+  const POOL_R = (n: number) => Math.max(78, Math.min(190, 60 + 26 * Math.sqrt(n)))
   function radiusOf(tl: TL) {
-    if (tl.kind === 'pool') return Math.min(126, 78 + tl.members.length * 9)
+    if (tl.kind === 'pool') return POOL_R(tl.members.length)
     if (openPool && memberShown(tl.t)) return 50
     const shrink = Math.min(22, Math.max(0, (looseCount() - 5) * 2.5))
     return Math.max(36, Math.min(112, 62 + answersOf(tl.t).length * 13 - shrink))
@@ -1151,7 +1171,10 @@ function mountSky(root: HTMLDivElement) {
     if (ph && imgOf(t)) ph.style.backgroundImage = `url(${imgOf(t)})`
     const tx = el.querySelector('.t') as HTMLDivElement
     // type grows with the drop, so a big idea reads big and a small one stays quiet
-    tx.style.fontSize = Math.round(Math.max(10.5, Math.min(17, 6 + r * 0.105)) * 10) / 10 + 'px'
+    // The ceiling moves with the discs. Held at 17 while a pool could never be
+    // wider than 126, a group of twenty now has room for a bigger disc and
+    // would have gone on wearing the same small label in the middle of it.
+    tx.style.fontSize = Math.round(Math.max(10.5, Math.min(19, 6 + r * 0.105)) * 10) / 10 + 'px'
     tx.textContent = trim(label(t), r < 50 ? 40 : 92)
   }
   /** What is on stage: the roots, plus the group you are currently inside if
@@ -4692,9 +4715,18 @@ function mountSky(root: HTMLDivElement) {
   }
 
   // ---------- boot ----------
+  //
+  // Frame first, then draw. The order used to be the other way round with a
+  // 60ms timer in between, which meant the first thing you saw on every visit
+  // to the sky was one frame of the whole world at the wrong zoom and in the
+  // wrong place, and then a hard snap into position — the pop. contentBox()
+  // only reads positions and radii, so there is nothing to wait for: the
+  // camera can be right before a single drop is painted.
   rebuild()
+  fitAll(false)
   paintAll()
-  setTimeout(() => fitAll(false), 60)
+  // …and again once the physics have stopped shuffling things, animated this
+  // time, so a sky that settled a little wider is eased back into frame.
   setTimeout(() => fitAll(), 900)
   let lastCount = view.tls.length
   let fitSoon: ReturnType<typeof setTimeout> | null = null
