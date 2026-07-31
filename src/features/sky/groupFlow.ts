@@ -25,6 +25,9 @@
 // **Every one of them comes back.** Each returns an undo that restores exactly
 // what it changed, in reverse, and nothing else.
 import { useGraph } from '@/store/graph'
+import { between, ordered, rankOf, spread } from '@/domain/rank'
+import { wouldCircle } from '@/domain/finished'
+import { MAX_DEPTH } from './arrange'
 import type { Thought } from '@/domain/types'
 
 export interface Undone {
@@ -293,8 +296,160 @@ export function groupInto(
  */
 export function membersOf(groupId: string, withDone = false): Thought[] {
   const s = S()
-  return s.relationships
-    .filter((r) => r.type === 'part_of' && r.to_id === groupId)
-    .map((r) => s.thoughts.find((t) => t.id === r.from_id))
-    .filter((t): t is Thought => !!t && (t.status === 'open' || (withDone && t.status === 'done')))
+  return ordered(
+    s.relationships
+      .filter((r) => r.type === 'part_of' && r.to_id === groupId)
+      .map((r) => s.thoughts.find((t) => t.id === r.from_id))
+      .filter((t): t is Thought => !!t && (t.status === 'open' || (withDone && t.status === 'done'))),
+  )
+}
+
+/** One line of the list: what it is, and how far in it sits. */
+export interface Branch {
+  t: Thought
+  /** 0 for a direct member of the group whose page this is */
+  depth: number
+  /** what it is currently part of */
+  parentId: string
+}
+
+/**
+ * A group's contents as a list you can see the shape of.
+ *
+ * The list used to show direct members only, which was fine while the only way
+ * to nest something was to drag one drop onto another out in the sky. The
+ * moment you can nest *here*, direct-members-only means the row you have just
+ * tucked under another one vanishes from the page — and a rearrangement that
+ * makes things disappear is indistinguishable from having deleted them.
+ *
+ * So it is a tree, walked depth-first, each row carrying how far in it is.
+ * Finished work sinks within its own set of siblings rather than to the bottom
+ * of everything: a done thing three deep belongs beside the things it is with,
+ * not stranded at the foot of some other branch.
+ */
+export function branchesOf(groupId: string, withDone = false, maxDepth = MAX_DEPTH): Branch[] {
+  const out: Branch[] = []
+  // a bad edge upstream must not hang the page that draws it
+  const seen = new Set<string>([groupId])
+  const walk = (parentId: string, depth: number) => {
+    if (depth > maxDepth) return
+    const kids = [...membersOf(parentId, withDone)].sort((a, b) => {
+      const da = a.status === 'done' ? 1 : 0
+      const db = b.status === 'done' ? 1 : 0
+      if (da !== db) return da - db
+      return da ? String(a.completed_at ?? '').localeCompare(String(b.completed_at ?? '')) : 0
+    })
+    for (const t of kids) {
+      if (seen.has(t.id)) continue
+      seen.add(t.id)
+      out.push({ t, depth, parentId })
+      walk(t.id, depth + 1)
+    }
+  }
+  walk(groupId, 0)
+  return out
+}
+
+/**
+ * Put something at a particular place, under a particular parent.
+ *
+ * One operation rather than two, because a drag in the list is one act: you
+ * pick a row up and put it down, and where you put it down says both what it is
+ * part of now and what it sits after. Splitting that into "reparent" and
+ * "reorder" would make an ordinary drag two entries in the undo bar, and leave
+ * a moment where it has moved but not landed.
+ *
+ * Refuses to put a thing inside itself or inside its own descendant. `rebuild`
+ * survives a cycle, but only by silently dropping whatever caused it — which
+ * from the outside is indistinguishable from the app having eaten your work.
+ */
+function setRank(id: string, rank: number | null) {
+  const t = S().thoughts.find((x) => x.id === id)
+  if (t) S().updateThought(id, { extra: { ...t.extra, rank: rank ?? undefined } })
+}
+
+/**
+ * Give something a rank that puts it after `afterId` among `parentId`'s
+ * contents, numbering the whole list first if it has to.
+ *
+ * Two reasons it has to. Nobody has ever arranged this group, so there are no
+ * ranks to sit between — the common one, since a list carries no order at all
+ * until the first time you touch it. Or there are ranks, and the gap between
+ * these two particular neighbours has finally been halved down to nothing.
+ * Both are occasional, and both are far cheaper here than renumbering the list
+ * on every single move would be.
+ *
+ * Returns the ranks it overwrote on the way, so a caller can put them back.
+ */
+function place(child: Thought, parentId: string, afterId: string | null): { id: string; rank: number | null }[] {
+  const siblings = membersOf(parentId, true).filter((m) => m.id !== child.id)
+  const at = afterId ? siblings.findIndex((m) => m.id === afterId) : -1
+  const gap = siblings.some((m) => rankOf(m) === null)
+    ? null
+    : between(at >= 0 ? rankOf(siblings[at]) : null, siblings[at + 1] ? rankOf(siblings[at + 1]) : null)
+
+  if (gap !== null) {
+    setRank(child.id, gap)
+    return []
+  }
+  const laid = [...siblings]
+  laid.splice(at + 1, 0, child)
+  const fresh = spread(laid.length)
+  const was: { id: string; rank: number | null }[] = []
+  laid.forEach((m, i) => {
+    if (m.id !== child.id) was.push({ id: m.id, rank: rankOf(m) })
+    setRank(m.id, fresh[i])
+  })
+  return was
+}
+
+export function moveInto(childId: string, parentId: string, afterId: string | null): Undone | null {
+  const s = S()
+  const t = s.thoughts.find((x) => x.id === childId)
+  if (!t || childId === parentId || afterId === childId) return null
+  if (!s.thoughts.some((x) => x.id === parentId)) return null
+  if (wouldCircle(childId, parentId, s.relationships)) return null
+
+  const old = s.relationships.find((r) => r.type === 'part_of' && r.from_id === childId)
+  const from = old ? old.to_id : null
+  if (afterId && !membersOf(parentId, true).some((m) => m.id === afterId)) return null
+
+  // Everything about to change, captured before any of it does.
+  //
+  // Where it *was* has to be captured as a neighbour and not only as a number:
+  // if it is leaving one list for another, the list it leaves may have no ranks
+  // at all, and a rank of null tells you nothing about where among them it
+  // stood. Undo puts it back after the same thing it was after, which is the
+  // one description that survives either case.
+  const wasRank = rankOf(t)
+  const oldSiblings = from ? membersOf(from, true) : []
+  const wasAt = oldSiblings.findIndex((m) => m.id === childId)
+  const wasAfter = wasAt > 0 ? oldSiblings[wasAt - 1].id : null
+
+  const respread = place(t, parentId, afterId)
+  if (from !== parentId) {
+    if (old) S().deleteRelationship(old.id)
+    S().addRelationship(childId, parentId, 'part_of')
+  }
+
+  const into = s.thoughts.find((x) => x.id === parentId)
+  return {
+    note: from === parentId ? `“${label(t)}” moved` : `“${label(t)}” is under “${into ? label(into) : 'it'}” now`,
+    undo: () => {
+      if (from !== parentId) {
+        const made = S().relationships.find(
+          (r) => r.type === 'part_of' && r.from_id === childId && r.to_id === parentId,
+        )
+        if (made) S().deleteRelationship(made.id)
+        if (from) S().addRelationship(childId, from, 'part_of')
+      }
+      for (const r of respread) setRank(r.id, r.rank)
+      setRank(childId, wasRank)
+      // It came from somewhere else, and going back into that list at the end —
+      // which is where an unranked thing lands — is not where it was. Put it
+      // back beside what it used to sit after.
+      const back = S().thoughts.find((x) => x.id === childId)
+      if (back && from && from !== parentId) place(back, from, wasAfter)
+    },
+  }
 }

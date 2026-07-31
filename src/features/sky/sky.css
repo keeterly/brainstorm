@@ -857,6 +857,12 @@ body.sky-dragging .sky-undo.show {
   gap: 10px;
   padding: 3px 0;
   border-top: 0.5px solid rgba(19, 26, 36, 0.08);
+  /* How far in it sits. --d is set on the element from the same number the
+     drag reads back out of data-depth, so the picture and the maths cannot
+     drift apart. The rule travels with the row rather than staying at the left
+     margin: the step in the hairline is what makes the shape of the list
+     readable at a glance, without a single line or chevron drawn for it. */
+  margin-left: calc(var(--d, 0) * 18px);
 }
 /* The row is the field. No pencil, no edit mode, no second screen: a list of
    your own words that you may look at and not fix is not a list, it is a
@@ -911,6 +917,77 @@ body.sky-dragging .sky-undo.show {
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+
+/* Rearranging by hand.
+
+   The handle exists rather than a press-and-hold on the row because the row IS
+   a text field, and a long press inside a field on this phone belongs to the
+   selection magnifier. It is also the only version of this that announces
+   itself: nobody discovers a gesture on a list that looks like a list. */
+.sky-page .pans .row .grip {
+  flex-shrink: 0;
+  width: 26px;
+  /* 40pt of target for a 12px mark, on the first line of however tall the row
+     is — the same bargain the take-out button makes */
+  min-height: 40px;
+  margin: 1px -6px -4px 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  /* it has to win the gesture from the page's own scrolling, or the first
+     drag down just scrolls the list */
+  touch-action: none;
+  cursor: grab;
+  position: relative;
+}
+.sky-page .pans .row .grip::before {
+  content: '';
+  position: absolute;
+  inset: 50% 0 auto 50%;
+  width: 12px;
+  height: 9px;
+  transform: translate(-50%, -50%);
+  /* three short rules, faint. Loud enough to be found, quiet enough that a
+     list of eight of them still reads as a list rather than as a control panel */
+  background:
+    linear-gradient(currentColor, currentColor) 0 0 / 100% 1px no-repeat,
+    linear-gradient(currentColor, currentColor) 0 50% / 100% 1px no-repeat,
+    linear-gradient(currentColor, currentColor) 0 100% / 100% 1px no-repeat;
+  color: var(--paper-soft, #9db0c2);
+  opacity: 0.5;
+}
+.sky-page .pans .row .grip:active::before { opacity: 0.95; }
+
+/* The row you are holding: lifted off the page, and out of the way of the
+   hairlines it is passing over. */
+.sky-page .pans .row.lifted {
+  position: relative;
+  z-index: 2;
+  /* opaque, not nearly so: it passes over the rows it is travelling across,
+     and a row you can see another row through reads as a rendering fault
+     rather than as something held above the page */
+  border-top-color: transparent;
+  box-shadow: 0 10px 26px rgba(19, 26, 36, 0.14);
+  background: var(--paper, #eef3f8);
+  border-radius: 10px;
+}
+/* while a drag is on, nothing else in the list reacts to a finger passing over it */
+.sky-page .pans.arranging .row:not(.lifted) { pointer-events: none; }
+.sky-page .pans.arranging .row .t { user-select: none; }
+
+/* Where it would land, at the depth it would land at. Without this the sideways
+   half of the gesture is invisible and therefore does not exist. */
+.sky-page .pans .dropmark {
+  height: 2px;
+  margin-left: calc(var(--d, 0) * 18px);
+  border-radius: 2px;
+  background: rgba(var(--accent-rgb), 0.75);
+  box-shadow: 0 0 8px rgba(var(--accent-rgb), 0.45);
+  transition: margin-left 110ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sky-page .pans .dropmark { transition: none; }
 }
 
 /* Ticking off, and choosing — two things a round control on the left of a row

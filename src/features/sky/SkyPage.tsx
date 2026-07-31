@@ -25,7 +25,20 @@ import { closeGoal, evaporateGoal } from './finishFlow'
 import { emptiedGroup, wouldCircle } from '@/domain/finished'
 import { fullDepth, sizeUp, waitingWord, type Sizing } from './gaugeFlow'
 import { isMakeable, isQuestion } from '@/domain/question'
-import { addTo, bin, complete, groupInto, membersOf, rename, takeOut, ungroup, type Undone } from './groupFlow'
+import {
+  addTo,
+  bin,
+  branchesOf,
+  complete,
+  groupInto,
+  membersOf,
+  moveInto,
+  rename,
+  takeOut,
+  ungroup,
+  type Undone,
+} from './groupFlow'
+import { branchOf, dropAt, type Drop, type Line } from './arrange'
 import { awaitRun, markApplied, pendingRuns, subjectOf } from '@/ai/pending'
 import { reshapeTally, reshapeThought } from './reshapeFlow'
 import { haptics } from '@/lib/haptics'
@@ -155,14 +168,17 @@ export default function SkyPage() {
  * walks the lines it actually writes and escapes everything else, so nothing
  * that came back off the open web can put markup into the page.
  */
+/** Somebody's own words, on their way into an attribute or a document. They are
+ *  words, not markup, and this is the only thing standing between the two. */
+export const esc = (t: string) =>
+  t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
 export function briefHtml(
   md: string,
   sources: { title: string; url: string }[],
   /** Live rows to slot in ahead of the sources — see whatToDoNext. */
   extra = '',
 ): string {
-  const esc = (t: string) =>
-    t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
   // **lead** — the rest, which is the one bit of inline markup it uses
   const inline = (t: string) =>
     esc(t)
@@ -2429,22 +2445,18 @@ function mountSky(root: HTMLDivElement) {
       // finger instead of vanishing out from under it — and settling to the
       // bottom, because four finished things stranded among nine unfinished
       // ones is a list you have to read twice to find your place in.
-      const statusOf = (id: string) => S().thoughts.find((t) => t.id === id)?.status
-      const inside = membersOf(tl.t.id, true).sort((a2, b2) => {
-        const da = statusOf(a2.id) === 'done' ? 1 : 0
-        const db = statusOf(b2.id) === 'done' ? 1 : 0
-        if (da !== db) return da - db
-        // among the finished, in the order they were finished
-        return da ? String(a2.completed_at ?? '').localeCompare(String(b2.completed_at ?? '')) : 0
-      })
+      // Everything under it, not only what it directly holds — because a row
+      // you have just nested has to still be on the page. See branchesOf.
+      const branches = branchesOf(tl.t.id, true)
+      const inside = branches.map((b) => b.t)
+      // …but the tally counts what the group itself holds, so the words under
+      // the name agree with the number on the bubble out in the sky
+      const held = () => membersOf(tl.t.id, true).length
       const done = () => inside.filter((m) => S().thoughts.find((t) => t.id === m.id)?.status === 'done').length
       const tally = () => {
         const d = done()
-        pageN.textContent = !inside.length
-          ? 'nothing inside it yet'
-          : d
-            ? `${inside.length} inside · ${d} done`
-            : `${inside.length} inside`
+        const n = held()
+        pageN.textContent = !n ? 'nothing inside it yet' : d ? `${n} inside · ${d} done` : `${n} inside`
       }
       tally()
       // Everything this thing holds, on the one page it has.
@@ -2464,10 +2476,12 @@ function mountSky(root: HTMLDivElement) {
         (inside.length
           ? `<div class="lab head"><span>what is inside</span>` +
             `<button class="ctl sel">Select</button></div>` +
-            inside
+            branches
               .map(
-                (_m, i) =>
-                  `<div class="row" data-i="${i}">` +
+                (b, i) =>
+                  // how far in it sits, as data for the drag and as a variable
+                  // for the indent — one number, so the two can never disagree
+                  `<div class="row" data-i="${i}" data-id="${b.t.id}" data-depth="${b.depth}" style="--d:${b.depth}">` +
                   `<button class="tick" role="checkbox" aria-checked="false" aria-label="Done"></button>` +
                   // A textarea, because these are sentences now. ⚡ writes real
                   // steps — "Work backward from your SS27 production schedule
@@ -2479,7 +2493,14 @@ function mountSky(root: HTMLDivElement) {
                   // to say so — a row that looks like any other item is the
                   // page contradicting what the sky just showed you
                   `<span class="held"></span>` +
-                  `<button class="ctl out" aria-label="Take it out of this group">take out</button></div>`,
+                  `<button class="ctl out" aria-label="Take it out of this group">take out</button>` +
+                  // Its own handle, rather than a press-and-hold on the row.
+                  // The row *is* a text field — that is the whole point of it —
+                  // and a long press inside a field on this phone belongs to
+                  // the selection magnifier, not to us. A handle is also the
+                  // only version of this that announces it can be done.
+                  `<button class="grip" aria-label="Move “${esc(label(b.t))}” — drag up or down to reorder, right to nest"></button>` +
+                  `</div>`,
               )
               .join('')
           : '') +
@@ -3112,6 +3133,16 @@ function mountSky(root: HTMLDivElement) {
     const before = new Map(rows().map((r) => [r, r.offsetTop]))
 
     const all = rows()
+    // Sinking to the foot of the list is only the right answer for a row that
+    // stands on its own. A nested one belongs to a branch — sending it to the
+    // bottom would carry it out from under its own parent and leave any
+    // children of its own stranded behind it, at an indent that now means
+    // nothing. It strikes through where it is instead, and `branchesOf` puts it
+    // at the end of its own siblings the next time the page is drawn.
+    const depth = Number(row.dataset.depth)
+    const next = all[all.indexOf(row) + 1]
+    const holdsSomething = !!next && Number(next.dataset.depth) > depth
+    if (depth > 0 || holdsSomething) return
     if (done) {
       // after everything, finished or not: the most recently done sits last
       const last = all[all.length - 1]
@@ -3159,6 +3190,136 @@ function mountSky(root: HTMLDivElement) {
     if (tl) openPage('open', tl, pf.ox, pf.oy)
   }
 
+  /** One level of nesting, in pixels. Kept with the CSS that draws it. */
+  const INDENT = 18
+  /** Far enough that a thumb wandering while it drags down is not a nest. */
+  const NEST_SLOP = 10
+
+  /**
+   * Rearranging the list by hand.
+   *
+   * The group page could already do everything to a group except say what
+   * order it is in or what belongs under what — the two things a list is for.
+   * ⚡ writes eight steps in whatever order it thought of them, and the only
+   * way to say "that one first, and those three are really part of this one"
+   * was to close the page and drag bubbles around the sky one pair at a time.
+   *
+   * Down the list reorders; across it nests. The same drag does both, because
+   * they are the same thought: this goes there. Where "there" is comes out of
+   * `dropAt`, which knows the rules and has no idea a finger exists.
+   *
+   * Nesting here is not a list-only idea. Nothing in the graph marks a thought
+   * as a group — being the far end of a `part_of` is what makes one — so the
+   * row you tuck under another is a pool in the sky before you have let go of
+   * it, with its own ring and its own page.
+   *
+   * Wired once, on an element that outlives every redraw of its own contents.
+   * Everything else on this page hangs its listeners on rows, which `innerHTML`
+   * throws away and rebuilds; these hang on the list itself, so wiring them per
+   * render adds a second set each time — and a drag handled twice performs the
+   * move, then performs it again against the graph it just changed.
+   */
+  function wireArrange(host: HTMLElement) {
+    const rows = () => [...host.querySelectorAll('.row[data-id]')] as HTMLDivElement[]
+    /** The group whose list this is, asked for per drag rather than bound once. */
+    const groupOf = () => (pageFor?.mode === 'open' ? (pageFor.tl?.t.id ?? null) : null)
+    let drag: {
+      id: string
+      row: HTMLDivElement
+      /** the row and everything under it, which travels with it */
+      branch: HTMLDivElement[]
+      x0: number
+      y0: number
+      lines: Line[]
+      at: Drop | null
+      moved: boolean
+    } | null = null
+
+    // where the row would land, drawn as a line across the list at the depth it
+    // would land at — the one thing that makes "across nests" discoverable
+    const mark = document.createElement('div')
+    mark.className = 'dropmark'
+    mark.hidden = true
+
+    const paint = () => {
+      if (!drag?.at) return
+      const rest = rows().filter((r) => !drag?.branch.includes(r))
+      const to = rest[drag.at.gap]
+      mark.style.setProperty('--d', String(drag.at.depth))
+      if (to) to.before(mark)
+      else (rest[rest.length - 1] ?? drag.row).after(mark)
+      mark.hidden = false
+    }
+
+    const down = (e: PointerEvent) => {
+      const grip = (e.target as HTMLElement).closest('.grip') as HTMLElement | null
+      if (!grip || e.button > 0 || !groupOf()) return
+      const row = grip.closest('.row') as HTMLDivElement
+      const id = row.dataset.id as string
+      const all = rows()
+      const lines: Line[] = all.map((r) => {
+        const b = r.getBoundingClientRect()
+        return { id: r.dataset.id as string, depth: Number(r.dataset.depth), mid: b.top + b.height / 2 }
+      })
+      const branch = branchOf(lines, id).map((l) => all.find((r) => r.dataset.id === l.id) as HTMLDivElement)
+      drag = { id, row, branch, x0: e.clientX, y0: e.clientY, lines, at: null, moved: false }
+      grip.setPointerCapture(e.pointerId)
+      e.preventDefault()
+    }
+
+    const move = (e: PointerEvent) => {
+      if (!drag) return
+      const dx = e.clientX - drag.x0
+      const dy = e.clientY - drag.y0
+      if (!drag.moved) {
+        if (Math.abs(dx) + Math.abs(dy) < 4) return
+        drag.moved = true
+        host.classList.add('arranging')
+        for (const r of drag.branch) r.classList.add('lifted')
+        host.appendChild(mark)
+        haptics.grab()
+      }
+      // the branch travels as one, so what you are holding stays together
+      for (const r of drag.branch) r.style.transform = `translateY(${dy}px)`
+      const was = drag.at
+      const groupId = groupOf()
+      drag.at = groupId ? dropAt(drag.lines, drag.id, e.clientY, Math.abs(dx) > NEST_SLOP ? dx : 0, INDENT, groupId) : null
+      if (drag.at && (!was || was.gap !== drag.at.gap || was.depth !== drag.at.depth)) haptics.grab()
+      paint()
+      // the list is taller than the screen more often than not
+      const box = host.getBoundingClientRect()
+      const edge = 44
+      if (e.clientY < box.top + edge) host.scrollTop -= 8
+      else if (e.clientY > box.bottom - edge) host.scrollTop += 8
+    }
+
+    const up = () => {
+      if (!drag) return
+      const { at, id, branch, moved } = drag
+      drag = null
+      for (const r of branch) {
+        r.style.transform = ''
+        r.classList.remove('lifted')
+      }
+      host.classList.remove('arranging')
+      mark.hidden = true
+      mark.remove()
+      if (!moved || !at) return
+      const u = moveInto(id, at.parent, at.after)
+      // a move that changes nothing is not worth an undo bar
+      if (!u) return
+      landUndo(u)
+      rebuild()
+      paintAll()
+      redrawGroupPage()
+    }
+
+    host.addEventListener('pointerdown', down)
+    host.addEventListener('pointermove', move)
+    host.addEventListener('pointerup', up)
+    host.addEventListener('pointercancel', up)
+  }
+
   /**
    * Two taps for the ones that take things away.
    *
@@ -3197,6 +3358,9 @@ function mountSky(root: HTMLDivElement) {
       })
     }
   }
+
+  // Once, for every group list this page will ever show — see wireArrange.
+  wireArrange(pageA)
 
   // Leaving the name box is committing it, wherever you are going next.
   pageT.addEventListener('change', () => {
