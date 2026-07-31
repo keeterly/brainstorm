@@ -7,7 +7,8 @@ import { useEffect, useState } from 'react'
 import { useGraph } from '@/store/graph'
 import { humanDate } from '@/domain/human-date'
 import { todayISO } from '@/domain/prioritize-prepass'
-import { lookAgain, noticedIsStale, readNoticed, type Noticed } from './noticeFlow'
+import { Link } from 'react-router-dom'
+import { keepSuggestion, lookAgain, noticedIsStale, readNoticed, type Noticed } from './noticeFlow'
 
 export function NoticedPanel() {
   const offline = useGraph((s) => s.offline)
@@ -16,6 +17,7 @@ export function NoticedPanel() {
   const [busy, setBusy] = useState(false)
   const [open, setOpen] = useState(false)
   const [failed, setFailed] = useState(false)
+  const [kept, setKept] = useState<string | null>(null)
   const noticed = (settings?.noticed as Noticed | undefined) ?? readNoticed()
   // Counted here, the same way `lookAgain` counts it — every open thought of
   // any type. The Current used to hand down `prepass.visible.length`, which is
@@ -87,9 +89,18 @@ export function NoticedPanel() {
                 About to bite
               </div>
               <div style={{ display: 'grid', gap: 8, marginBottom: 14 }}>
+                {/* It resolves a real thought id and rendered it as plain
+                    text. Naming the thing about to bite and giving you no way
+                    to reach it is the app pointing at something across a room. */}
                 {noticed.pressing.map((p) => (
                   <div key={p.id} style={{ fontSize: 'var(--fs-label)' }}>
-                    <strong>{title(p.id) ?? '—'}</strong>
+                    {title(p.id) ? (
+                      <Link to={`/?open=${encodeURIComponent(p.id)}`} style={{ fontWeight: 560 }}>
+                        {title(p.id)}
+                      </Link>
+                    ) : (
+                      <strong>—</strong>
+                    )}
                     <span className="muted"> — {p.why}</span>
                   </div>
                 ))}
@@ -103,19 +114,38 @@ export function NoticedPanel() {
                 Worth doing
               </div>
               <div style={{ display: 'grid', gap: 10 }}>
+                {/* …and these had no button at all. "Moves worth making now"
+                    from an agent that cannot help you make any of them. */}
                 {noticed.suggestions.map((g, i) => (
                   <div key={i} style={{ fontSize: 'var(--fs-label)' }}>
                     <strong>{g.title}</strong>
                     <span className="muted"> — {g.why}</span>
-                    {g.from && title(g.from) && (
-                      <div className="faint" style={{ fontSize: 'var(--fs-caption)', marginTop: 2 }}>
-                        from “{title(g.from)}”
-                      </div>
-                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                      {g.from && title(g.from) && (
+                        <span className="faint" style={{ fontSize: 'var(--fs-caption)' }}>
+                          from “{title(g.from)}”
+                        </span>
+                      )}
+                      <button
+                        className="btn btn--ghost btn--sm"
+                        onClick={() => {
+                          const t = keepSuggestion(i)
+                          if (t) setKept(t.title || t.raw_content)
+                        }}
+                      >
+                        keep it
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             </>
+          )}
+
+          {kept && (
+            <p className="muted" style={{ fontSize: 'var(--fs-label)', marginTop: 12 }} role="status">
+              “{kept}” is in the sky
+            </p>
           )}
 
           <div

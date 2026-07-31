@@ -8,6 +8,8 @@ import { useGraph } from '@/store/graph'
 import { runAction } from '@/ai/client'
 import type { NoticeOutput } from '@shared/ai/actions/notice'
 import { learnFacts } from '@/ai/memoryFlow'
+import { isQuestion } from '@/domain/question'
+import type { Thought } from '@/domain/types'
 
 export interface Noticed extends NoticeOutput {
   /** when it looked, and at how much — so it can tell it has gone stale */
@@ -30,6 +32,43 @@ export function noticedIsStale(n: Noticed | null, openCount: number): boolean {
   if (!n) return true
   if (Math.abs(openCount - n.sawCount) >= DRIFT) return true
   return Date.now() - new Date(n.atISO).getTime() > AGE_MS
+}
+
+/**
+ * Take one of its suggestions, into the graph.
+ *
+ * Three of `notice`'s four output fields were write-only. Its suggestions are
+ * "moves worth making now — a thing to do, a connection they have not drawn, a
+ * question worth answering" and there was no button on any of them: an agent
+ * that says what you should do and cannot help you do it, on the surface you
+ * look at every day. Every other action in this app lands its output as real
+ * thoughts; this one wrote prose into a private blob.
+ *
+ * Taking it also removes it from the read, so the same suggestion is not still
+ * sitting there being suggested after you have acted on it.
+ */
+export function keepSuggestion(i: number): Thought | null {
+  const s = useGraph.getState()
+  const n = readNoticed()
+  const g = n?.suggestions[i]
+  if (!n || !g) return null
+  const t = s.addThought({
+    raw_content: g.title,
+    title: g.title,
+    summary: g.why || null,
+    // it decides what kind of thing it is the same way the rest of the app
+    // does, rather than by having its own opinion
+    type: isQuestion(g.title) ? 'question' : 'action',
+  })
+  // the thought it came off, if it came off one — a suggestion about the SS27
+  // campaign belongs in the SS27 campaign
+  if (g.from && s.thoughts.some((x) => x.id === g.from && x.status === 'open')) {
+    s.addRelationship(t.id, g.from, 'part_of', 'ai')
+  }
+  s.updateProfileSettings({
+    [KEY]: { ...n, suggestions: n.suggestions.filter((_, j) => j !== i) },
+  })
+  return t
 }
 
 export async function lookAgain(): Promise<Noticed | null> {
