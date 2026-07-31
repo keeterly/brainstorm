@@ -166,7 +166,11 @@
  * anyway: a modal surface should not be wearing the app's navigation.
  */
 body.on-paper .tabs,
-body.on-photo .tabs {
+body.on-photo .tabs,
+/* …and while something is being carried. The bar was painted over the drop in
+   your hand and across the line you were aiming for, which is the worst place
+   in the app for navigation to be. */
+body.sky-dragging .tabs {
   opacity: 0;
   transform: translateY(26px);
   pointer-events: none;
@@ -176,7 +180,8 @@ body.on-photo .tabs {
    Done button. Measured with elementFromPoint, which answered `.tabs-glass` at
    opacity 0. */
 body.on-paper .tabs-glass,
-body.on-photo .tabs-glass {
+body.on-photo .tabs-glass,
+body.sky-dragging .tabs-glass {
   pointer-events: none;
 }
 .tabs {

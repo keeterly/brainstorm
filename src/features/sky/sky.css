@@ -1252,22 +1252,7 @@ body.sky-resting .sky-tidy { right: calc(14px + var(--rest-w, 96px) + 8px); }
   transition: opacity 220ms ease;
 }
 .sky-tide.on { opacity: 1; }
-.sky-sea-word {
-  position: fixed;
-  left: 0;
-  right: 0;
-  z-index: 7;
-  text-align: center;
-  pointer-events: none;
-  font-size: 12.5px;
-  color: var(--ink-soft);
-  opacity: 0;
-  transform: translateY(8px);
-  transition: opacity 240ms ease, transform 340ms cubic-bezier(0.2, 0.8, 0.2, 1), color 200ms;
-}
-.sky-sea-word.on { opacity: 1; transform: none; }
-.sky-sea-word.ready { color: var(--water); font-weight: 600; }
-.skyb.sinking { border-color: rgba(160, 172, 190, 0.8); }
+.skyb.sinking { border-color: rgba(190, 200, 216, 0.85); box-shadow: 0 0 26px rgba(150, 162, 182, 0.34); }
 
 /* The other edge, and the better one.
    Up is finished — the thing evaporates and becomes the weather you think
@@ -1279,30 +1264,97 @@ body.sky-resting .sky-tidy { right: calc(14px + var(--rest-w, 96px) + 8px); }
   left: 0;
   right: 0;
   top: 0;
-  height: calc(var(--sat, 0px) + 230px);
   pointer-events: none;
   z-index: 2;
   opacity: 0;
   transition: opacity 220ms ease;
 }
 .sky-updraft.on { opacity: 1; }
-.sky-sky-word {
+
+/* Where the point of no return actually is.
+   A gradient alone says "something is over here" and not "let go past this",
+   so both bands carry a hairline at the exact threshold the release tests
+   against. It goes solid and bright once you are across it. */
+.sky-updraft .edge-line,
+.sky-tide .edge-line {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  height: 0;
+  border-top: 1px dashed rgba(205, 228, 255, calc(0.5 * var(--edge, 1)));
+  transition: border-color 180ms ease, left 220ms ease, right 220ms ease;
+}
+.sky-updraft .edge-line { bottom: 0; }
+.sky-tide .edge-line { top: 120px; }
+.sky-updraft.ready .edge-line,
+.sky-tide.ready .edge-line {
+  left: 3%;
+  right: 3%;
+  border-top-style: solid;
+  border-top-color: rgba(var(--accent-rgb), 0.95);
+}
+.sky-tide.ready .edge-line { border-top-color: rgba(190, 200, 216, 0.95); }
+
+/* The word, in something you can read it against.
+   It was bare 12.5px text over whatever happened to be behind it — a bubble,
+   the recommendation card, the tab bar — and on a dark sky at arm's length it
+   read as a smudge. */
+.sky-sky-word,
+.sky-sea-word {
   position: fixed;
   left: 0;
   right: 0;
-  top: calc(var(--sat, 0px) + 74px);
-  z-index: 7;
-  text-align: center;
+  z-index: 8;
   pointer-events: none;
-  font-size: 12.5px;
-  color: var(--ink-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   opacity: 0;
-  transform: translateY(-8px);
-  transition: opacity 240ms ease, transform 340ms cubic-bezier(0.2, 0.8, 0.2, 1), color 200ms;
+  transition: opacity 200ms ease, transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.sky-sky-word.on { opacity: 1; transform: none; }
-.sky-sky-word.ready { color: var(--water); font-weight: 600; }
-.skyb.rising { border-color: rgba(var(--accent-rgb), 0.8); }
+.sky-sky-word { top: calc(var(--sat, 0px) + 78px); transform: translateY(-10px); }
+.sky-sea-word { transform: translateY(10px); }
+.sky-sky-word.on,
+.sky-sea-word.on { opacity: 1; transform: none; }
+.sky-sky-word .lb,
+.sky-sea-word .lb,
+.sky-sky-word .arrow,
+.sky-sea-word .arrow {
+  display: inline-block;
+  padding: 6px 13px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  line-height: 1.1;
+  color: var(--ink-soft);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  background: rgba(14, 20, 30, 0.66);
+  border: 0.5px solid rgba(205, 228, 255, 0.18);
+  transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+.sky-sky-word .arrow,
+.sky-sea-word .arrow {
+  padding: 6px 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+/* across the line: it fills in, and says the verb rather than the instruction */
+.sky-sky-word.ready .lb,
+.sky-sky-word.ready .arrow {
+  background: rgba(var(--accent-rgb), 0.92);
+  border-color: rgba(var(--accent-rgb), 0.5);
+  color: #0b1220;
+  font-weight: 650;
+}
+.sky-sea-word.ready .lb,
+.sky-sea-word.ready .arrow {
+  background: rgba(206, 214, 228, 0.95);
+  border-color: rgba(206, 214, 228, 0.5);
+  color: #141a24;
+  font-weight: 650;
+}
+.skyb.rising { border-color: rgba(var(--accent-rgb), 0.9); box-shadow: 0 0 26px rgba(var(--accent-rgb), 0.4); }
 
 @media (prefers-reduced-motion: reduce) {
   .sky-ghost, .sky-join, .sky-tide, .sky-sea-word,

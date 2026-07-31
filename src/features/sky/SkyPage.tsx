@@ -52,11 +52,25 @@ export default function SkyPage() {
         </svg>
         <div data-sky="field" />
       </div>
-      <div className="sky-tide" data-sky="tide" aria-hidden="true" />
-      <div className="sky-sea-word" data-sky="seaword" aria-hidden="true" />
-      {/* The other edge. Up is finished, down is let go — see releaseUp. */}
-      <div className="sky-updraft" data-sky="updraft" aria-hidden="true" />
-      <div className="sky-sky-word" data-sky="skyword" aria-hidden="true" />
+      <div className="sky-tide" data-sky="tide" aria-hidden="true">
+        <div className="edge-line" />
+      </div>
+      <div className="sky-sea-word" data-sky="seaword" aria-hidden="true">
+        <span className="arrow">↓</span>
+        <span className="lb" />
+      </div>
+      {/* The other edge. Up is finished, down is let go — see riseDrop and
+          sinkDrop. Each is a band, a hairline where the point of no return
+          actually is, and a pill that says which it is; bare text floating in
+          the middle of a dark sky told you neither how far to go nor what
+          would happen when you got there. */}
+      <div className="sky-updraft" data-sky="updraft" aria-hidden="true">
+        <div className="edge-line" />
+      </div>
+      <div className="sky-sky-word" data-sky="skyword" aria-hidden="true">
+        <span className="arrow">↑</span>
+        <span className="lb" />
+      </div>
       <div className="sky-meter" data-sky="meter" aria-hidden="true" />
       <button className="sky-rest" data-sky="rest" aria-label="Resting thoughts">
         ☁
@@ -452,6 +466,7 @@ function mountSky(root: HTMLDivElement) {
   const tide = $('tide')
   const updraft = $('updraft')
   const skyWord = $('skyword')
+  const skyLb = skyWord.querySelector('.lb') as HTMLElement
   const goo = root.querySelector('[data-sky="goo"]') as unknown as SVGPathElement
   const oilG = root.querySelector('[data-sky="oil"]') as unknown as SVGGElement
   const echoG = root.querySelector('[data-sky="echo"]') as unknown as SVGGElement
@@ -554,6 +569,16 @@ function mountSky(root: HTMLDivElement) {
   /** How far down from it the updraft is felt, so it is not a hair trigger. */
   const SKY_REACH = 170
   const sat = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sat')) || 0
+  /** Where a drop actually is on the glass, which is what crosses an edge. */
+  const edgeAt = (id: string) => {
+    const p = posOf(id)
+    return { x: toScreenX(p.x), y: toScreenY(p.y) }
+  }
+
+  const seaLb = seaWord.querySelector('.lb') as HTMLElement
+  /** whether the finger is past the point of no return, so it is felt once */
+  let seaReady = false
+  let skyReady = false
 
   let seaNear = 0
   function showTide(near: number, ready: boolean) {
@@ -562,22 +587,35 @@ function mountSky(root: HTMLDivElement) {
     const line = waterlineY()
     tide.style.top = line - 120 + 'px'
     tide.style.height = 260 + 'px'
-    // Warmer and dimmer than it was, because this is no longer where good
-    // things go. Not alarming — letting an idea go is ordinary and often
-    // right — but plainly a different act from finishing one.
+    // Cooler and heavier than the updraft, because this is no longer where
+    // good things go. Not alarming — letting an idea go is ordinary and often
+    // right — but plainly a different act from finishing one, and strong
+    // enough to be seen: the old one was fifteen per cent grey on a navy sky,
+    // which is to say invisible on the phone it was drawn for.
     tide.style.background =
-      `linear-gradient(rgba(120, 130, 150, 0) 0%, rgba(120, 130, 150, ${(0.05 * near).toFixed(3)}) 44%,` +
-      ` rgba(140, 150, 170, ${(0.15 * near).toFixed(3)}) 47%, rgba(70, 80, 96, ${(0.12 * near).toFixed(3)}) 60%, transparent 100%)`
+      `linear-gradient(rgba(150, 162, 182, 0) 0%, rgba(150, 162, 182, ${(0.3 * near).toFixed(3)}) 38%,` +
+      ` rgba(176, 188, 206, ${(0.5 * near).toFixed(3)}) 46%, rgba(38, 46, 60, ${(0.66 * near).toFixed(3)}) 60%,` +
+      ` rgba(22, 28, 38, ${(0.78 * near).toFixed(3)}) 100%)`
+    tide.style.setProperty('--edge', (0.25 + 0.75 * near).toFixed(3))
     tide.classList.toggle('on', near > 0.02)
-    seaWord.style.top = line - 52 + 'px'
-    seaWord.textContent = ready ? 'let it go' : 'the deep keeps what didn’t work'
-    seaWord.classList.toggle('on', near > 0.25)
+    tide.classList.toggle('ready', ready)
+    // Well clear of the tab bar and of whatever the app is recommending, both
+    // of which live down here — the word was being printed straight over the
+    // top of them.
+    seaWord.style.top = line - 104 + 'px'
+    seaLb.textContent = ready ? 'let it go' : 'drag below the line to let go'
+    seaWord.classList.toggle('on', near > 0.18)
     seaWord.classList.toggle('ready', ready)
+    if (ready !== seaReady) {
+      seaReady = ready
+      if (ready) haptics.grab()
+    }
   }
   function hideTide() {
+    seaReady = false
     if (seaNear === 0 && !tide.classList.contains('on')) return
     seaNear = 0
-    tide.classList.remove('on')
+    tide.classList.remove('on', 'ready')
     seaWord.classList.remove('on', 'ready')
   }
 
@@ -587,17 +625,25 @@ function mountSky(root: HTMLDivElement) {
     if (near === skyNear) return
     skyNear = near
     updraft.style.background =
-      `linear-gradient(rgba(var(--accent-rgb), ${(0.14 * near).toFixed(3)}) 0%,` +
-      ` rgba(var(--accent-rgb), ${(0.06 * near).toFixed(3)}) 46%, transparent 100%)`
+      `linear-gradient(rgba(var(--accent-rgb), ${(0.4 * near).toFixed(3)}) 0%,` +
+      ` rgba(var(--accent-rgb), ${(0.2 * near).toFixed(3)}) 52%, rgba(var(--accent-rgb), 0) 100%)`
+    updraft.style.height = `${SKY_EDGE + sat()}px`
+    updraft.style.setProperty('--edge', (0.25 + 0.75 * near).toFixed(3))
     updraft.classList.toggle('on', near > 0.02)
-    skyWord.textContent = ready ? 'done' : 'let it rise — it’s finished'
-    skyWord.classList.toggle('on', near > 0.25)
+    updraft.classList.toggle('ready', ready)
+    skyLb.textContent = ready ? 'finished' : 'drag above the line to finish'
+    skyWord.classList.toggle('on', near > 0.18)
     skyWord.classList.toggle('ready', ready)
+    if (ready !== skyReady) {
+      skyReady = ready
+      if (ready) haptics.grab()
+    }
   }
   function hideUpdraft() {
+    skyReady = false
     if (skyNear === 0 && !updraft.classList.contains('on')) return
     skyNear = 0
-    updraft.classList.remove('on')
+    updraft.classList.remove('on', 'ready')
     skyWord.classList.remove('on', 'ready')
   }
   const S = () => useGraph.getState()
@@ -2061,7 +2107,11 @@ function mountSky(root: HTMLDivElement) {
     // place. Two things in one slot is a layout bug; the app suggesting
     // something and the app telling you something are one voice, so whichever
     // has something to say has it.
-    const hide = !!openPool || !!pageFor || !!moonsFor || voiceEl.classList.contains('show')
+    // …and it gets out of the way of a drag. It lives at the foot of the sky,
+    // which is exactly where the "let it go" pill has to be, so the two were
+    // printed on top of each other every time you carried something down.
+    const hide =
+      !!openPool || !!pageFor || !!moonsFor || voiceEl.classList.contains('show') || !!drag?.moved
     let n = hide ? null : nextAction(S().thoughts, S().relationships, todayISO())
     // If the agent has been asked to choose, its pick wins here too. Current
     // honours it; the sky did not, so the two could name different things at
@@ -4203,7 +4253,27 @@ function mountSky(root: HTMLDivElement) {
         }
       }
       joins.sort((a, b) => b.v - a.v)
-      for (const jn of joins.slice(0, most)) {
+      /*
+       * One neck per drop, and never a chain.
+       *
+       * The cap on how many joins to draw was not the thing that made a
+       * crowded ring look like a smear — chaining was. Four joins that happen
+       * to run A–B, B–C, C–D, D–E are not four couplings, they are one long
+       * ribbon dragged across five drops, and it reads as a wing or a spill
+       * rather than as anything about the drops. Taking the strongest first
+       * and skipping any whose ends are already spoken for turns the same
+       * budget into discrete pairs, which is what a coupling looks like.
+       */
+      const spoken = new Set<number>()
+      const matched: typeof joins = []
+      for (const jn of joins) {
+        if (matched.length >= most) break
+        if (spoken.has(jn.i) || spoken.has(jn.j)) continue
+        spoken.add(jn.i)
+        spoken.add(jn.j)
+        matched.push(jn)
+      }
+      for (const jn of matched) {
         const d = oilPath(bodies[jn.i], bodies[jn.j], jn.v)
         if (!d) continue
         const pair = oilPair(used)
@@ -4331,6 +4401,7 @@ function mountSky(root: HTMLDivElement) {
       }
       if (holdTimer) clearTimeout(holdTimer)
       if (drag) drag.el.classList.remove('dragging')
+    document.body.classList.remove('sky-dragging')
       drag = null
       bgDown = null
       panFrom = null
@@ -4459,6 +4530,10 @@ function mountSky(root: HTMLDivElement) {
       drag.moved = true
       if (holdTimer) clearTimeout(holdTimer)
       drag.el.classList.add('dragging')
+      // While you are carrying something, the app's navigation is noise — and
+      // worse than noise, it was drawn on top of the thing in your hand and
+      // across the line you were aiming for. See the tab bar's own rule.
+      document.body.classList.add('sky-dragging')
       closeMoons()
     }
     if (!drag.moved) return
@@ -4471,20 +4546,27 @@ function mountSky(root: HTMLDivElement) {
     p.y = ny
     // the closer to the water, the more the sea reaches up for it
     if (drag.tl.kind === 'drop') {
-      // against the water that is actually under it, which is not level with
-      // the screen once the phone is tilted
-      const line = seaLineAt(e.clientX, worldTilt(), W)
+      // The drop, not the finger.
+      //
+      // You pick a drop up by whatever part of it was under your thumb, so the
+      // two are as much as a radius apart — and it is the drop you are
+      // watching cross the line, not your hand. Reading the pointer meant the
+      // band lit at one moment and the release fired at another, and a gesture
+      // whose feedback and whose verdict disagree is a gesture you cannot
+      // learn.
+      const at = edgeAt(drag.id)
+      const line = seaLineAt(at.x, worldTilt(), W)
       const reach = 190
-      const near = Math.max(0, Math.min(1, (e.clientY - (line - reach)) / reach))
-      const ready = e.clientY > line - 12
+      const near = Math.max(0, Math.min(1, (at.y - (line - reach)) / reach))
+      const ready = at.y > line - 12
       showTide(Math.round(near * 20) / 20, ready)
       drag.el.classList.toggle('sinking', ready)
       // …and the other way. The top of the glass, under the clock, is where a
       // thing you have finished goes up. `--sat` because on an installed app
       // that strip is the status bar and nothing can be let go into it.
       const top = SKY_EDGE + sat()
-      const up = Math.max(0, Math.min(1, (top + SKY_REACH - e.clientY) / SKY_REACH))
-      const rising = e.clientY < top
+      const up = Math.max(0, Math.min(1, (top + SKY_REACH - at.y) / SKY_REACH))
+      const rising = at.y < top
       showUpdraft(Math.round(up * 20) / 20, rising)
       drag.el.classList.toggle('rising', rising)
     }
@@ -4606,6 +4688,7 @@ function mountSky(root: HTMLDivElement) {
     drag = null
     meter.classList.remove('on', 'zero')
     d.el.classList.remove('dragging', 'sinking', 'rising')
+    document.body.classList.remove('sky-dragging')
     clearFuse()
     hideTide()
     hideUpdraft()
@@ -4615,15 +4698,20 @@ function mountSky(root: HTMLDivElement) {
       else onTap(d.id, d.isMember, { x: e.clientX, y: e.clientY })
       return
     }
-    if (d.tl.kind === 'drop' && e.clientY < SKY_EDGE + sat()) {
-      riseDrop(d.tl.t)
-      persistLayout()
-      return
-    }
-    if (d.tl.kind === 'drop' && e.clientY > seaLineAt(e.clientX, worldTilt(), W) - 12) {
-      sinkDrop(d.tl.t)
-      persistLayout()
-      return
+    if (d.tl.kind === 'drop' && d.moved) {
+      // the same reading the bands were drawn from, so what you were shown and
+      // what happens are the same thing
+      const at = edgeAt(d.id)
+      if (at.y < SKY_EDGE + sat()) {
+        riseDrop(d.tl.t)
+        persistLayout()
+        return
+      }
+      if (at.y > seaLineAt(at.x, worldTilt(), W) - 12) {
+        sinkDrop(d.tl.t)
+        persistLayout()
+        return
+      }
     }
     if (d.isMember && d.memberPool && !d.target) {
       const gp = posOf(d.memberPool)
@@ -4654,6 +4742,7 @@ function mountSky(root: HTMLDivElement) {
     if (holdTimer) clearTimeout(holdTimer)
     endHold(false)
     if (drag) drag.el.classList.remove('dragging')
+    document.body.classList.remove('sky-dragging')
     drag = null
     meter.classList.remove('on', 'zero')
     clearFuse()
