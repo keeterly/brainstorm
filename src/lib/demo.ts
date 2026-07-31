@@ -80,6 +80,15 @@ export const DEMO_SEED = {
     // sit down and actually produce. The demo showed the app planning work and
     // researching work and never once making any.
     th({ id: 'm5', raw_content: 'Draft the buyer note for SS27', title: 'Draft the buyer note for SS27', type: 'action', created_at: days(3) }),
+    // A wall of references, so the demo can show the one act nothing else in
+    // this market performs. Four flat swatches rather than photographs — the
+    // point being demonstrated is that the app has an opinion about a wall,
+    // and a canned opinion needs no real pictures behind it.
+    th({ id: 'p1', raw_content: 'Photo', title: 'Photo', type: 'note', created_at: days(2), extra: { img: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGO4dmQFVsQwtCQAgZCQgTmmFq0AAAAASUVORK5CYII=', full: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGO4dmQFVsQwtCQAgZCQgTmmFq0AAAAASUVORK5CYII=' } }),
+    th({ id: 'p2', raw_content: 'Photo', title: 'Photo', type: 'note', created_at: days(2), extra: { img: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGPYtKAHK2IYWhIAuvp3gY99I/cAAAAASUVORK5CYII=', full: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGPYtKAHK2IYWhIAuvp3gY99I/cAAAAASUVORK5CYII=' } }),
+    th({ id: 'p3', raw_content: 'Photo', title: 'Photo', type: 'note', created_at: days(2), extra: { img: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGN4cecEVsQwtCQAuHmjAWIL0CIAAAAASUVORK5CYII=', full: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGN4cecEVsQwtCQAuHmjAWIL0CIAAAAASUVORK5CYII=' } }),
+    th({ id: 'p4', raw_content: 'Photo', title: 'Photo', type: 'note', created_at: days(2), extra: { img: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGOY1lWDFTEMLQkARaBnASbjtPgAAAAASUVORK5CYII=', full: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGOY1lWDFTEMLQkARaBnASbjtPgAAAAASUVORK5CYII=' } }),
+    th({ id: 'w1', raw_content: 'References', title: 'References', type: 'goal', created_at: days(2) }),
     // finished work — the ocean, and the light it brings
     th({ id: 'o1', raw_content: 'Book the photographer', title: 'Book the photographer', type: 'action', status: 'done', completed_at: days(1), created_at: days(7) }),
   ],
@@ -92,6 +101,11 @@ export const DEMO_SEED = {
     rel('q1', 'c1', 'relates_to'),
     rel('m4', 'q1', 'depends_on'),
     rel('m5', 'c1', 'part_of'),
+    rel('p1', 'w1', 'part_of'),
+    rel('p2', 'w1', 'part_of'),
+    rel('p3', 'w1', 'part_of'),
+    rel('p4', 'w1', 'part_of'),
+    rel('w1', 'c1', 'part_of'),
   ],
   roadmaps: [],
   // Three kinds, because the kinds are the point: a constraint and a pattern
@@ -193,6 +207,24 @@ export const DEMO_OUTPUT: Record<string, unknown> = {
     missing: [],
     learned: [],
     note: 'three things, and one of them settles the other two',
+  },
+  // The one act nothing else in this market performs: an opinion about the
+  // references you gathered. Every moodboard tool will hold them beautifully;
+  // none of them will tell you what is not on the wall.
+  look: {
+    read: 'Light doing the work the clothes are supposed to do',
+    threads: [
+      { what: 'Everything is back-lit, and nothing is lit from the front', where: 'the window shots, the veil, the last three on the roll' },
+      { what: 'Fabric is always moving', where: 'nothing is hanging still — it is caught mid-turn or mid-fall' },
+      { what: 'Nobody is looking at the camera', where: 'and in half of them there is no face at all' },
+    ],
+    missing: [
+      'Not one of these shows a garment you could describe to a buyer',
+      'No interiors — the whole wall is outdoors, in one kind of afternoon',
+    ],
+    name: 'Light through fabric',
+    learned: [],
+    note: 'the light is the idea — the clothes have not turned up yet',
   },
   // ⚡ itself — the action the whole app is shaped around, and the one the
   // demo could not show. Without this it was the single button here that

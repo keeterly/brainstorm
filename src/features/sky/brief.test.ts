@@ -52,6 +52,19 @@ describe('reading a brief back', () => {
     expect(html).toContain('<div class="v">Get two years of returns together</div>')
     expect(html).toContain('<div class="d">the lender asks first and it is the slowest bit</div>')
   })
+  it('knows the other mark the agent uses', () => {
+    // `_like this_` printed with its underscores showing, in the middle of an
+    // otherwise finished page — the reference reader signs its briefs that way
+    const out = briefHtml('_Read from the references in SS27._', [])
+    expect(out).toContain('<i>Read from the references in SS27.</i>')
+    expect(out).not.toContain('_')
+  })
+
+  it('leaves an underscore inside a word alone', () => {
+    // snake_case in a source name is not emphasis
+    expect(briefHtml('- the venia_workspace blob', [])).toContain('venia_workspace')
+  })
+
   it('leaves a plain sentence at reading weight', () => {
     // The watch-outs are written as plain sentences, not as point-and-reason.
     // Setting one of those at heading weight turns a caveat into a claim.

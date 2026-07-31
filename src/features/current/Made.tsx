@@ -9,7 +9,9 @@
 // Rendered by the same walker the brief reader uses, because a draft is
 // markdown that came off a model and the one thing that must never happen is
 // markup from a model reaching the page as markup.
+import { useState } from 'react'
 import { briefHtml } from '@/features/sky/SkyPage'
+import { sendWork, sentWord } from '@/lib/send'
 
 export function Made({
   title,
@@ -25,6 +27,7 @@ export function Made({
   done: boolean
   onDone?: () => void
 }) {
+  const [sent, setSent] = useState<string | null>(null)
   return (
     <div className="card" style={{ marginTop: 18, textAlign: 'left' }}>
       <div className="eyebrow" style={{ marginBottom: 8 }}>
@@ -34,17 +37,31 @@ export function Made({
           `.made` — the same shapes it makes on paper, read in this room's
           light rather than the sky page's. */}
       <div className="made" dangerouslySetInnerHTML={{ __html: briefHtml(md, sources) }} />
-      {onDone && (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+        {onDone && (
+          <button className={done ? 'btn btn--primary btn--sm' : 'btn btn--ghost btn--sm'} onClick={onDone}>
+            {/* It said the work is finished. Offered, never taken: the agent
+                does not get to tick your list. */}
+            {done ? '✓ That’s it — done' : 'Mark it done'}
+          </button>
+        )}
+        {/* …and out. A draft that can only be read inside the app that wrote it
+            is not a deliverable, it is a demo. Called straight from the tap:
+            iOS refuses a share sheet that is one await away from its gesture. */}
         <button
-          className={done ? 'btn btn--primary btn--sm' : 'btn btn--ghost btn--sm'}
-          style={{ marginTop: 14 }}
-          onClick={onDone}
+          className="btn btn--ghost btn--sm"
+          onClick={() => {
+            void sendWork(title, md).then((how) => setSent(sentWord(how)))
+          }}
         >
-          {/* It said the work is finished. Offered, never taken: the agent does
-              not get to tick your list. */}
-          {done ? '✓ That’s it — done' : 'Mark it done'}
+          Send it
         </button>
-      )}
+        {sent && (
+          <span className="muted" style={{ fontSize: 'var(--fs-caption)' }} role="status">
+            {sent}
+          </span>
+        )}
+      </div>
     </div>
   )
 }

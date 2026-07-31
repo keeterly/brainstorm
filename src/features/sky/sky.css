@@ -705,6 +705,7 @@ body.sky-held {
 }
 .sky-page .pans .src:active { opacity: 0.55; }
 .sky-page .pans b { font-weight: 600; color: var(--paper-ink, #3d4b5c); }
+.sky-page .pans i { font-style: italic; color: var(--paper-soft, #8fa3b6); }
 
 /* What to do about it.
    The end of a brief, and the only part of one that is not reading. A step and

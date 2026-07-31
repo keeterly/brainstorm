@@ -260,3 +260,74 @@ describe('ticking something off', () => {
     expect(membersOf(g.id, true).map((m) => m.id)).toContain(a.id)
   })
 })
+
+function nested() {
+  const s = S()
+  const campaign = s.addThought({ raw_content: 'SS27 campaign', title: 'SS27 campaign', type: 'goal' })
+  const wall = s.addThought({ raw_content: 'References', title: 'References', type: 'goal' })
+  s.addRelationship(wall.id, campaign.id, 'part_of')
+  const pics = [1, 2, 3].map((i) => s.addThought({ raw_content: `Photo ${i}`, title: `Photo ${i}` }))
+  for (const pic of pics) s.addRelationship(pic.id, wall.id, 'part_of')
+  return { campaign, wall, pics }
+}
+const statusOf = (id: string) => S().thoughts.find((t) => t.id === id)?.status
+
+describe('ticking a group off', () => {
+  it('takes what was inside it', () => {
+    // It marked only the group. Everything under it stayed open — and the sky
+    // draws what is open — so the three references inside a finished wall
+    // popped straight back out as loose drops with nothing to say where they
+    // had come from.
+    const { wall, pics } = nested()
+    complete(wall.id)
+    expect(statusOf(wall.id)).toBe('done')
+    for (const pic of pics) expect(statusOf(pic.id)).toBe('done')
+  })
+
+  it('goes all the way down, not one level', () => {
+    const { campaign, wall, pics } = nested()
+    complete(campaign.id)
+    expect(statusOf(wall.id)).toBe('done')
+    for (const pic of pics) expect(statusOf(pic.id)).toBe('done')
+  })
+
+  it('says how many went with it', () => {
+    const { wall } = nested()
+    expect(complete(wall.id)?.note).toContain('3 inside it')
+  })
+
+  it('puts every one of them back', () => {
+    const { campaign, wall, pics } = nested()
+    complete(campaign.id)?.undo()
+    expect(statusOf(campaign.id)).toBe('open')
+    expect(statusOf(wall.id)).toBe('open')
+    for (const pic of pics) expect(statusOf(pic.id)).toBe('open')
+  })
+
+  it('leaves alone what was already finished before you ticked the group', () => {
+    // it was done for its own reasons; undoing the group must not reopen it
+    const { wall, pics } = nested()
+    useGraph.getState().toggleDone(pics[0].id)
+    const undone = complete(wall.id)
+    expect(statusOf(pics[0].id)).toBe('done')
+    undone?.undo()
+    expect(statusOf(pics[0].id)).toBe('done')
+    expect(statusOf(pics[1].id)).toBe('open')
+  })
+
+  it('reopens only the thing itself when you untick it', () => {
+    const { wall, pics } = nested()
+    complete(wall.id)
+    const again = complete(wall.id)
+    expect(statusOf(wall.id)).toBe('open')
+    expect(again?.note).toContain('open again')
+    // its contents stay where the tick put them — unticking is one act, and
+    // the offer to put the whole thing back is the undo on the tick
+    expect(statusOf(pics[0].id)).toBe('done')
+  })
+
+  it('behaves as it always did for a thing with nothing inside it', () => {
+    const { pics } = nested()
+    expect(complete(pics[0].id)?.note).toBe('“Photo 1” is done')
+  })
+})

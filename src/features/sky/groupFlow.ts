@@ -167,9 +167,50 @@ export function complete(id: string): Undone | null {
   if (!t) return null
   const wasDone = t.status === 'done'
   S().toggleDone(id)
+  /*
+   * And whatever was inside it.
+   *
+   * A group ticked off used to mark only the group. Everything under it stayed
+   * open — and the sky draws what is open, so the four references inside a
+   * finished wall popped straight back out as loose drops, orphaned, with
+   * nothing to say where they had come from. It has always been possible to
+   * write that; it only became *reachable* when a group could be a member of
+   * another group and so appear as a row with a tick beside it.
+   *
+   * Down the whole tree, not one level: a wall inside a wall is still inside
+   * the thing you just finished.
+   */
+  const swept: string[] = []
+  if (!wasDone) {
+    const seen = new Set<string>([id])
+    let front = [id]
+    while (front.length) {
+      const next: string[] = []
+      for (const parent of front) {
+        for (const r of S().relationships) {
+          if (r.type !== 'part_of' || r.to_id !== parent || seen.has(r.from_id)) continue
+          seen.add(r.from_id)
+          const kid = S().thoughts.find((x) => x.id === r.from_id)
+          if (!kid || kid.status !== 'open') continue
+          swept.push(kid.id)
+          next.push(kid.id)
+        }
+      }
+      front = next
+    }
+    for (const kid of swept) S().toggleDone(kid)
+  }
+  const note = wasDone
+    ? `“${label(t)}” is open again`
+    : swept.length
+      ? `“${label(t)}” is done — and the ${swept.length} inside it`
+      : `“${label(t)}” is done`
   return {
-    note: wasDone ? `“${label(t)}” is open again` : `“${label(t)}” is done`,
-    undo: () => S().toggleDone(id),
+    note,
+    undo: () => {
+      S().toggleDone(id)
+      for (const kid of swept) S().toggleDone(kid)
+    },
   }
 }
 

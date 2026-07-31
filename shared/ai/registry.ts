@@ -14,6 +14,7 @@ import { draft } from './actions/draft'
 import { remember } from './actions/remember'
 import { rain } from './actions/rain'
 import { evaporate } from './actions/evaporate'
+import { look } from './actions/look'
 
 // Six actions came out of here at once: summarize, clarify_question,
 // find_related, to_goal, make_mind_map and generate_roadmap.
@@ -48,6 +49,7 @@ export const ACTION_REGISTRY: Record<string, ActionDef<any, any>> = {
   [remember.name]: remember,
   [rain.name]: rain,
   [evaporate.name]: evaporate,
+  [look.name]: look,
 }
 
 export type ActionName = keyof typeof ACTION_REGISTRY

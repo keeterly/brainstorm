@@ -29,6 +29,15 @@ function sampleInput(name: string): never {
     remember: { text: 'I prefer mornings', known: [] },
     rain: { name: 'SS27 campaign', inside: ['shoot on expired film'], known: [], already: [] },
     evaporate: { finished: 'SS27 campaign', inside: ['shoot on expired film'], lately: [], open: [] },
+    look: {
+      name: 'SS27 references',
+      images: [
+        { mediaType: 'image/jpeg', dataB64: 'AAAA' },
+        { mediaType: 'image/jpeg', dataB64: 'BBBB' },
+      ],
+      alongside: ['shoot on expired film'],
+      known: [],
+    },
     absorb: { text: 'the buyer moved our meeting to friday', thoughts: [ref] },
     organize: { text: 'a long messy dump about the campaign and the pop-up', thoughts: [ref], spoken: true },
     name_pool: { members: ['shoot on expired film', 'letters sealed with wax'] },

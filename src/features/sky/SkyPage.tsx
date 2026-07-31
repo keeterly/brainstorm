@@ -19,6 +19,7 @@ import { applyDeepen, deepenThought } from './deepenFlow'
 import { applyAnswer, answerThought } from './answerFlow'
 import { applyDraft, draftThought } from './draftFlow'
 import { rainThought } from './rainFlow'
+import { faceOf, isWall, lookAtWall } from './lookFlow'
 import { closeGoal, evaporateGoal } from './finishFlow'
 import { emptiedGroup, wouldCircle } from '@/domain/finished'
 import { fullDepth, sizeUp, waitingWord, type Sizing } from './gaugeFlow'
@@ -27,6 +28,7 @@ import { addTo, bin, complete, groupInto, membersOf, rename, takeOut, ungroup, t
 import { awaitRun, markApplied, pendingRuns, subjectOf } from '@/ai/pending'
 import { reshapeTally, reshapeThought } from './reshapeFlow'
 import { haptics } from '@/lib/haptics'
+import { sendWork, sentWord } from '@/lib/send'
 import { holdReload } from '@/lib/sw'
 import { noteTrail } from '@/lib/trail'
 import { echoRing, wabiBlob, wabiPill, wabiSeed } from '@/world/echo'
@@ -97,6 +99,12 @@ export default function SkyPage() {
             >
               <Ico d="M12 3.2c.7 4.2 1.9 5.4 6.1 6.1-4.2.7-5.4 1.9-6.1 6.1-.7-4.2-1.9-5.4-6.1-6.1 4.2-.7 5.4-1.9 6.1-6.1ZM17.6 15.2c.35 2 .95 2.6 2.95 2.95-2 .35-2.6.95-2.95 2.95-.35-2-.95-2.6-2.95-2.95 2-.35 2.6-.95 2.95-2.95Z" />
             </button>
+            {/* The way out. See src/lib/send.ts — the funnel ran a thought all
+                the way to a finished buyer note and then had nowhere to put
+                it. */}
+            <button className="tool" data-sky="pageSend" aria-label="Send this">
+              <Ico d="M12 16.4V4.2M7.6 8.6 12 4.2l4.4 4.4M4.6 14.6v3.4a1.8 1.8 0 0 0 1.8 1.8h11.2a1.8 1.8 0 0 0 1.8-1.8v-3.4" />
+            </button>
             <button className="tool" data-sky="pageLater" aria-label="Let it rest">
               <Ico d="M7.2 18.4a4.2 4.2 0 0 1-.5-8.37 5.6 5.6 0 0 1 10.75-1.2 3.8 3.8 0 0 1 .35 7.55 4 4 0 0 1-.6.04H7.2Z" />
             </button>
@@ -137,7 +145,12 @@ export function briefHtml(
   const esc = (t: string) =>
     t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
   // **lead** — the rest, which is the one bit of inline markup it uses
-  const inline = (t: string) => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+  const inline = (t: string) =>
+    esc(t)
+      .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+      // …and `_like this_`, which the walker did not know and so printed with
+      // its underscores showing, in the middle of an otherwise finished page
+      .replace(/(^|\s)_([^_]+)_(?=$|[\s.,;:!?])/g, '$1<i>$2</i>')
   /*
    * `**the point** — why it matters` is the one shape the agent writes, in
    * every bullet and every step, and it was being rendered as one run-on line
@@ -283,6 +296,9 @@ const MOON_ICONS: Record<string, string> = {
   list: 'M4.4 6.6h1.2M4.4 12h1.2M4.4 17.4h1.2M9 6.6h10.6M9 12h10.6M9 17.4h10.6',
   // making the thing: a nib, and the line it has just drawn
   make: 'M20.1 4.2a2.1 2.1 0 0 0-3 0l-8.5 8.5-1.2 4.2 4.2-1.2 8.5-8.5a2.1 2.1 0 0 0 0-3ZM14.6 6.7l2.7 2.7M4 20.4h11',
+  // reading a wall of references: an eye, because that is the whole act — the
+  // app looking at the pictures you gathered and telling you what it sees
+  look: 'M2.6 12s3.4-6 9.4-6 9.4 6 9.4 6-3.4 6-9.4 6-9.4-6-9.4-6ZM14.4 12a2.4 2.4 0 1 1-4.8 0 2.4 2.4 0 0 1 4.8 0Z',
   // the picture you kept, at the size you kept it: a frame with a horizon in it
   photo:
     'M3.6 6.8a2 2 0 0 1 2-2h12.8a2 2 0 0 1 2 2v10.4a2 2 0 0 1-2 2H5.6a2 2 0 0 1-2-2V6.8ZM3.9 16l4.6-4.3a1.7 1.7 0 0 1 2.3 0l4 3.7M14 13.4l1.6-1.5a1.7 1.7 0 0 1 2.3 0l2.2 2M9 9.4a1.2 1.2 0 1 1-2.4 0 1.2 1.2 0 0 1 2.4 0Z',
@@ -453,6 +469,7 @@ function mountSky(root: HTMLDivElement) {
   const pageMic = $('pageMic')
   const pagePic = $('pagePic')
   const pageAbsorb = $('pageAbsorb')
+  const pageSend = $('pageSend')
   const pageLater = $('pageLater')
   const pageFile = root.querySelector('[data-sky="pageFile"]') as HTMLInputElement
   const lightbox = $('lightbox')
@@ -1986,6 +2003,27 @@ function mountSky(root: HTMLDivElement) {
   type PageMode = 'capture' | 'say' | 'ask' | 'brief' | 'open' | 'aside'
   /** The brief ⚡ brought back for this thought, if it went out for one. */
   const briefOf = (id: string) => S().artifacts.find((a) => a.thought_id === id) ?? null
+  /**
+   * A brief as something you could paste into a mail.
+   *
+   * The stored markdown plus its sources, which live in a column of their own
+   * because the page renders them as real links — so the copy that leaves the
+   * app has to put them back or it arrives as an argument with no evidence.
+   */
+  function sendable(art: { title: string; content_md: string; sources: { title: string; url: string }[] }): string {
+    const body = art.content_md.trim()
+    const head = body.startsWith('# ') ? '' : `# ${art.title}\n\n`
+    const cited = /^##\s*sources/im.test(body)
+    const tail =
+      !cited && art.sources.length
+        ? '\n\n## Sources\n\n' +
+          art.sources
+            .filter((x) => isWebUrl(x.url))
+            .map((x) => `- [${x.title.trim() || x.url}](${x.url})`)
+            .join('\n')
+        : ''
+    return head + body + tail + '\n'
+  }
   /** `into` is the group a capture belongs to — see the long press. */
   let pageFor: { mode: PageMode; tl?: TL; ox: number; oy: number; into?: string | null } | null = null
   /**
@@ -2113,6 +2151,11 @@ function mountSky(root: HTMLDivElement) {
         .relationships.filter((r) => r.type === 'part_of' && r.to_id === tl.t.id)
         .map((r) => view.byId.get(r.from_id))
         .filter((n): n is TL => !!n && n.t.status === 'open')
+        // Not the pictures. A reference wall's brief listed its own four
+        // photographs with "work it" beside each one, which is the app
+        // offering to go away and research a photograph. What follows from a
+        // wall is what rain makes of it, and those arrive here as real steps.
+        .filter((n) => !faceOf(n.t))
         .slice(0, 8)
       const rows = next.map((n) => ({ tl: n, act: getOnWithIt(n) }))
       const todo = rows.length
@@ -2568,6 +2611,9 @@ function mountSky(root: HTMLDivElement) {
     pageMic.classList.remove('live')
     pagePic.classList.toggle('show', mode === 'capture' || mode === 'say')
     pageAbsorb.classList.toggle('show', mode === 'capture' && !S().offline)
+    // Only where there is finished work to send. A group page and a capture
+    // page have nothing yet; a brief is the whole point of this button.
+    pageSend.classList.toggle('show', mode === 'brief' && !!tl && !!briefOf(tl.t.id))
     pageLater.classList.toggle('show', mode === 'open')
     page.classList.add('show')
     // the strip of screen below the glass turns to paper with the page — see
@@ -3001,6 +3047,23 @@ function mountSky(root: HTMLDivElement) {
     if (rec) stopMic()
     else startMic()
   })
+  /**
+   * Out of the app and into the world.
+   *
+   * Straight from the tap, with no await in front of it: iOS only opens the
+   * share sheet from inside a real gesture, and one `await` before the call is
+   * enough for it to refuse silently.
+   */
+  pageSend.addEventListener('click', () => {
+    const tl = pageFor?.tl
+    const art = tl ? briefOf(tl.t.id) : null
+    if (!art) return
+    const md = sendable(art)
+    void sendWork(art.title || label(tl!.t), md).then((how) => {
+      const word = sentWord(how)
+      if (word) say(word)
+    })
+  })
   pagePic.addEventListener('click', () => pageFile.click())
   pageFile.addEventListener('change', () => {
     const f = pageFile.files && pageFile.files[0]
@@ -3133,6 +3196,19 @@ function mountSky(root: HTMLDivElement) {
     const ready = isKept(tl.t) || isRipe(tl.t) || !!briefOf(tl.t.id)
     const canRain = tl.kind === 'drop' || tl.members.length >= 1
     /*
+     * A wall of references is not a pile of ideas, and asking it what to *do*
+     * gets you nothing: rain reads titles, and a moodboard's titles are twelve
+     * lines that say "Photo". What a wall wants first is to be read — what
+     * runs through it, and what is conspicuously not on it — and only then is
+     * there anything to rain.
+     *
+     * Two or more pictures under one thing is a wall. Once it has been read it
+     * behaves like anything else with a brief on it, which is how a moodboard
+     * gets to be rained into the work that follows from what it turned out to
+     * be about.
+     */
+    const wall = tl.kind === 'pool' && !ex(tl.t).looked_at && isWall(tl.t.id)
+    /*
      * A step somebody could sit down and produce, that the funnel put here.
      *
      * Three things at once, and it needs all three. Makeable, so the agent is
@@ -3151,6 +3227,14 @@ function mountSky(root: HTMLDivElement) {
     // question you asked *about* this step also leaves one, and that is not the
     // same as the step being written.
     const made = doable && !!ex(tl.t).drafted_at && !!briefOf(tl.t.id)
+    if (wall) {
+      return {
+        icon: 'look',
+        lb: 'look at them',
+        dim: S().offline,
+        run: () => void runLook(tl),
+      }
+    }
     return {
       icon: made ? 'brief' : asking ? 'ask' : doable ? 'make' : ready && canRain ? 'rain' : 'work',
       // Always 'rain', never 'path'. A cloud that has rained once and been
@@ -3376,6 +3460,48 @@ function mountSky(root: HTMLDivElement) {
    * lands about as the splash finishes. Going away for a minute is `work it`,
    * one moon over.
    */
+  /**
+   * Read the wall.
+   *
+   * The one act in this app that no competitor in its market can perform:
+   * every moodboard tool there is will hold your references beautifully and
+   * none of them has an opinion about them. What comes back lands as a brief,
+   * so it can be read again from the moon that reads briefs — and so `rain`
+   * picks it up as `found` and can turn a reading into the work that follows.
+   */
+  async function runLook(tl: TL) {
+    if (working || S().offline) return
+    closeMoons()
+    setWorking(tl.t.id)
+    hold('reading them across…', trim(label(tl.t), 34))
+    const res = await lookAtWall(tl.t.id)
+    setWorking(null)
+    if (dead) return
+    if (res.kind === 'thin') {
+      hold('two pictures or more, and there is something to read across', trim(label(tl.t), 34))
+      return
+    }
+    if (res.kind === 'failed') {
+      hold(res.why ?? 'could not read them just now', trim(label(tl.t), 34))
+      offerAction('tap to try again', 'again', () => {
+        hold(null)
+        void runLook(tl)
+      })
+      return
+    }
+    rebuild()
+    paintAll()
+    haptics.arrive()
+    hold(res.note || res.output.read, trim(label(tl.t), 34))
+    record(`looked · ${trim(res.output.read, 46)}`, trim(label(tl.t), 40))
+    offerAction(trim(res.output.read, 42), 'read it', () => {
+      hold(null)
+      const q = posOf(tl.t.id)
+      const now = view.byId.get(tl.t.id)
+      if (now) openPage('brief', now, toScreenX(q.x), toScreenY(q.y))
+    })
+  }
+
   async function rain(tl: TL) {
     if (working || S().offline) return
     closeMoons()
