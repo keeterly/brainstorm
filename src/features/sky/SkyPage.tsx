@@ -20,6 +20,7 @@ import { applyAnswer, answerThought } from './answerFlow'
 import { applyDraft, draftThought } from './draftFlow'
 import { rainThought } from './rainFlow'
 import { faceOf, isWall, lookAtWall } from './lookFlow'
+import { learnFromLettingGo } from './letGoFlow'
 import { closeGoal, evaporateGoal } from './finishFlow'
 import { emptiedGroup, wouldCircle } from '@/domain/finished'
 import { fullDepth, sizeUp, waitingWord, type Sizing } from './gaugeFlow'
@@ -53,6 +54,9 @@ export default function SkyPage() {
       </div>
       <div className="sky-tide" data-sky="tide" aria-hidden="true" />
       <div className="sky-sea-word" data-sky="seaword" aria-hidden="true" />
+      {/* The other edge. Up is finished, down is let go — see releaseUp. */}
+      <div className="sky-updraft" data-sky="updraft" aria-hidden="true" />
+      <div className="sky-sky-word" data-sky="skyword" aria-hidden="true" />
       <div className="sky-meter" data-sky="meter" aria-hidden="true" />
       <button className="sky-rest" data-sky="rest" aria-label="Resting thoughts">
         ☁
@@ -446,6 +450,8 @@ function mountSky(root: HTMLDivElement) {
   const voiceLb = $('voiceLb')
   const meter = $('meter')
   const tide = $('tide')
+  const updraft = $('updraft')
+  const skyWord = $('skyword')
   const goo = root.querySelector('[data-sky="goo"]') as unknown as SVGPathElement
   const oilG = root.querySelector('[data-sky="oil"]') as unknown as SVGGElement
   const echoG = root.querySelector('[data-sky="echo"]') as unknown as SVGGElement
@@ -523,7 +529,32 @@ function mountSky(root: HTMLDivElement) {
 
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
   document.body.classList.add('sky-held')
-  // how close a dragged drop is to the sea, 0 → 1, and whether it would go
+  /*
+   * The two edges, and what they mean.
+   *
+   * Up is finished. Down is let go.
+   *
+   * It used to be that down was finished and the top edge meant nothing at
+   * all, which left the app with no gesture for *no* — the commonest verdict
+   * anyone has about their own ideas, and the one that was only reachable
+   * through a button behind a fold on a group page, three taps in, next to the
+   * word "danger". So the app could see everything you finished and almost
+   * nothing you dropped, and half of what it could have learned about you was
+   * in the half it could not see.
+   *
+   * The cycle reads better this way round, too. Water that has done its work
+   * evaporates and rises and comes back as weather — which is exactly what
+   * `evaporate` already does off a completed thing, and exactly what finishing
+   * something ought to feel like. What sinks and does not rise again is
+   * sediment. Nothing is destroyed either way: `archived` is recoverable from
+   * the aside page, and always was.
+   */
+  /** How far under the top of the glass the finishing edge starts. */
+  const SKY_EDGE = 66
+  /** How far down from it the updraft is felt, so it is not a hair trigger. */
+  const SKY_REACH = 170
+  const sat = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sat')) || 0
+
   let seaNear = 0
   function showTide(near: number, ready: boolean) {
     if (near === seaNear) return
@@ -531,12 +562,15 @@ function mountSky(root: HTMLDivElement) {
     const line = waterlineY()
     tide.style.top = line - 120 + 'px'
     tide.style.height = 260 + 'px'
+    // Warmer and dimmer than it was, because this is no longer where good
+    // things go. Not alarming — letting an idea go is ordinary and often
+    // right — but plainly a different act from finishing one.
     tide.style.background =
-      `linear-gradient(rgba(var(--accent-rgb), 0) 0%, rgba(var(--accent-rgb), ${(0.05 * near).toFixed(3)}) 44%,` +
-      ` rgba(150,215,255,${(0.16 * near).toFixed(3)}) 47%, rgba(90,170,230,${(0.1 * near).toFixed(3)}) 60%, transparent 100%)`
+      `linear-gradient(rgba(120, 130, 150, 0) 0%, rgba(120, 130, 150, ${(0.05 * near).toFixed(3)}) 44%,` +
+      ` rgba(140, 150, 170, ${(0.15 * near).toFixed(3)}) 47%, rgba(70, 80, 96, ${(0.12 * near).toFixed(3)}) 60%, transparent 100%)`
     tide.classList.toggle('on', near > 0.02)
     seaWord.style.top = line - 52 + 'px'
-    seaWord.textContent = ready ? 'let go' : 'the ocean keeps what’s done'
+    seaWord.textContent = ready ? 'let it go' : 'the deep keeps what didn’t work'
     seaWord.classList.toggle('on', near > 0.25)
     seaWord.classList.toggle('ready', ready)
   }
@@ -545,6 +579,26 @@ function mountSky(root: HTMLDivElement) {
     seaNear = 0
     tide.classList.remove('on')
     seaWord.classList.remove('on', 'ready')
+  }
+
+  /** How close a dragged drop is to the top of the sky, and whether it would go. */
+  let skyNear = 0
+  function showUpdraft(near: number, ready: boolean) {
+    if (near === skyNear) return
+    skyNear = near
+    updraft.style.background =
+      `linear-gradient(rgba(var(--accent-rgb), ${(0.14 * near).toFixed(3)}) 0%,` +
+      ` rgba(var(--accent-rgb), ${(0.06 * near).toFixed(3)}) 46%, transparent 100%)`
+    updraft.classList.toggle('on', near > 0.02)
+    skyWord.textContent = ready ? 'done' : 'let it rise — it’s finished'
+    skyWord.classList.toggle('on', near > 0.25)
+    skyWord.classList.toggle('ready', ready)
+  }
+  function hideUpdraft() {
+    if (skyNear === 0 && !updraft.classList.contains('on')) return
+    skyNear = 0
+    updraft.classList.remove('on')
+    skyWord.classList.remove('on', 'ready')
   }
   const S = () => useGraph.getState()
   const todayISO = () => new Date().toISOString().slice(0, 10)
@@ -1527,7 +1581,7 @@ function mountSky(root: HTMLDivElement) {
   /**
    * Say something and keep saying it.
    *
-   * A four-second message is right for "returned to the ocean" and wrong for
+   * A four-second message is right for "finished — it's gone up" and wrong for
    * anything you might have walked away from. ⚡ is out for the best part of a
    * minute; a line that vanishes after four seconds of that reads as the
    * button having done nothing at all.
@@ -1574,11 +1628,14 @@ function mountSky(root: HTMLDivElement) {
     undoGo.textContent = go
     undoFn = fn
     undoEl.classList.add('show')
+    // so the app's own sentence can step up out from under it — see .sky-voice
+    document.body.classList.add('sky-offering')
     if (undoT) clearTimeout(undoT)
     undoT = ms ? setTimeout(() => hideUndo(), ms) : null
   }
   function hideUndo() {
     undoEl.classList.remove('show')
+    document.body.classList.remove('sky-offering')
     undoFn = null
   }
   undoGo.addEventListener('click', () => {
@@ -1589,10 +1646,61 @@ function mountSky(root: HTMLDivElement) {
     f()
   })
 
-  function completeDrop(t: Thought) {
+  /**
+   * Up and out: it is finished.
+   *
+   * A thing that has done its work evaporates. It thins, it lifts, it is gone
+   * from the sky — and what it becomes is the weather you think under, which
+   * is the light `world/engine.ts` already draws from recently-finished work.
+   * `evaporate` runs off exactly this moment when the thing that finished was
+   * the last of a goal, so the seventh stage of the cycle now begins where the
+   * gesture ends. Completing something should feel like release, and letting
+   * go of the phone at the top of the screen is what release feels like.
+   */
+  function riseDrop(t: Thought) {
     const el = els.get(t.id)
     const p = posOf(t.id)
     S().updateThought(t.id, { status: 'done', completed_at: new Date().toISOString() })
+    if (el) {
+      els.delete(t.id)
+      const r = el.clientWidth / 2 || 40
+      // it stretches as it goes, the way a droplet does leaving a surface
+      el.style.transition = 'transform 720ms cubic-bezier(0.3, 0, 0.4, 1), opacity 640ms ease-out 120ms'
+      el.style.transform = `translate3d(${p.rx - r}px, ${toWorldY(-120) - r}px, 0) scale(0.62, 1.22)`
+      el.style.opacity = '0'
+      setTimeout(() => el.remove(), reduced ? 0 : 900)
+    }
+    if (!reduced) {
+      // and it leaves vapour behind it
+      const x = p.rx * cam.k + cam.x
+      for (let k = 0; k < 3; k++) setTimeout(() => evaporateAt(x + (Math.random() - 0.5) * 60), k * 130)
+    }
+    haptics.arrive()
+    say('finished — it’s gone up')
+    offerUndo(`“${trim(label(t), 26)}” is finished`, () => {
+      S().updateThought(t.id, { status: 'open', completed_at: null })
+      say('back in the sky')
+    })
+    finishedIt(t.id)
+  }
+
+  /**
+   * Down and under: you are letting it go.
+   *
+   * Not deleted — `archived`, which the aside page has always been able to
+   * bring back, and which the empty-group sweep has always used. What is new
+   * is that it is a *gesture*, and therefore something you will actually do.
+   * Saying no to your own ideas is the commonest verdict anybody has about
+   * them and the app could barely see it happen: it lived on a button behind
+   * a fold on a group page, three taps in, next to the word danger.
+   *
+   * Which means half of what this app could learn about you was in the half it
+   * could not see. See `learnFromLettingGo`.
+   */
+  function sinkDrop(t: Thought) {
+    const el = els.get(t.id)
+    const p = posOf(t.id)
+    S().updateThought(t.id, { status: 'archived' })
     if (el) {
       els.delete(t.id)
       const r = el.clientWidth / 2 || 40
@@ -1609,12 +1717,12 @@ function mountSky(root: HTMLDivElement) {
     }
     setTimeout(() => splash(p.rx * cam.k + cam.x), reduced ? 0 : 420)
     haptics.sink()
-    say('returned to the ocean')
-    offerUndo(`“${trim(label(t), 26)}” returned to the ocean`, () => {
-      S().updateThought(t.id, { status: 'open', completed_at: null })
-      say('back from the ocean')
+    say('let go — the deep keeps it')
+    offerUndo(`“${trim(label(t), 26)}” let go`, () => {
+      S().updateThought(t.id, { status: 'open' })
+      say('back in the sky')
     })
-    finishedIt(t.id)
+    void learnFromLettingGo(t)
   }
 
   /**
@@ -4371,9 +4479,23 @@ function mountSky(root: HTMLDivElement) {
       const ready = e.clientY > line - 12
       showTide(Math.round(near * 20) / 20, ready)
       drag.el.classList.toggle('sinking', ready)
+      // …and the other way. The top of the glass, under the clock, is where a
+      // thing you have finished goes up. `--sat` because on an installed app
+      // that strip is the status bar and nothing can be let go into it.
+      const top = SKY_EDGE + sat()
+      const up = Math.max(0, Math.min(1, (top + SKY_REACH - e.clientY) / SKY_REACH))
+      const rising = e.clientY < top
+      showUpdraft(Math.round(up * 20) / 20, rising)
+      drag.el.classList.toggle('rising', rising)
     }
     drag.target = null
-    // at the water you are letting go, not merging — one signal at a time
+    // at either edge you are letting go, not merging — one signal at a time
+    if (skyNear > 0.55) {
+      meter.classList.remove('on', 'zero')
+      clearFuse()
+      drag.touching = false
+      return
+    }
     if (seaNear > 0.55) {
       meter.classList.remove('on', 'zero')
       clearFuse()
@@ -4483,17 +4605,23 @@ function mountSky(root: HTMLDivElement) {
     const d = drag
     drag = null
     meter.classList.remove('on', 'zero')
-    d.el.classList.remove('dragging', 'sinking')
+    d.el.classList.remove('dragging', 'sinking', 'rising')
     clearFuse()
     hideTide()
+    hideUpdraft()
     if (!d.moved) {
       const again = doubleHit(e.clientX, e.clientY)
       if (again) openThing(again)
       else onTap(d.id, d.isMember, { x: e.clientX, y: e.clientY })
       return
     }
+    if (d.tl.kind === 'drop' && e.clientY < SKY_EDGE + sat()) {
+      riseDrop(d.tl.t)
+      persistLayout()
+      return
+    }
     if (d.tl.kind === 'drop' && e.clientY > seaLineAt(e.clientX, worldTilt(), W) - 12) {
-      completeDrop(d.tl.t)
+      sinkDrop(d.tl.t)
       persistLayout()
       return
     }
@@ -4522,6 +4650,7 @@ function mountSky(root: HTMLDivElement) {
     panFrom = null
     bgDown = null
     hideTide()
+    hideUpdraft()
     if (holdTimer) clearTimeout(holdTimer)
     endHold(false)
     if (drag) drag.el.classList.remove('dragging')
@@ -5321,6 +5450,7 @@ function mountSky(root: HTMLDivElement) {
     document.body.classList.remove('on-paper')
     document.body.classList.remove('on-photo')
     document.body.classList.remove('sky-resting')
+    document.body.classList.remove('sky-offering')
     stopMic()
     if (layoutT) clearTimeout(layoutT)
     if (undoT) clearTimeout(undoT)

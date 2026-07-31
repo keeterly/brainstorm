@@ -28,6 +28,17 @@ const Input = z.object({
   pools: z.array(z.object({ name: z.string().max(80), members: z.array(z.string().max(160)).max(20) })).max(40),
   /** what has been finished lately, which says as much as what is open */
   recentlyDone: z.array(z.string().max(200)).max(20),
+  /**
+   * …and what they let go of, which says more than either.
+   *
+   * A preference is far easier to read off refusals than off acceptances.
+   * That someone finished a thing says it was worth finishing; that they
+   * dropped four ideas in a row that all involved travelling says something
+   * they would never have thought to write down. Until the sea meant "let go"
+   * this was almost never recorded, so every read on this person was made from
+   * their yeses alone.
+   */
+  letGo: z.array(z.string().max(200)).max(20).optional(),
 })
 
 const Output = z.object({
@@ -75,6 +86,9 @@ export const notice: ActionDef<NoticeInput, NoticeOutput> = {
     const done = input.recentlyDone.length
       ? `\nFinished lately:\n${input.recentlyDone.map((d) => `- ${d}`).join('\n')}`
       : ''
+    const dropped = input.letGo?.length
+      ? `\nLet go of, without acting on any of them:\n${input.letGo.map((d) => `- ${d}`).join('\n')}`
+      : ''
     return {
       system:
         baseSystem(ctx) +
@@ -82,9 +96,10 @@ export const notice: ActionDef<NoticeInput, NoticeOutput> = {
         `them and you are not cheerleading. Say the true thing a sharp friend would say after looking at this for ` +
         `a minute — and if there is not much to say yet, say little.`,
       user:
-        `Everything currently open:\n${refLines(input.thoughts as ThoughtRef[])}\n${pools}${done}\n\n` +
+        `Everything currently open:\n${refLines(input.thoughts as ThoughtRef[])}\n${pools}${done}${dropped}\n\n` +
         `read: what you notice about how *they* work, from the shape of all this together — what they keep ` +
-        `circling, what they start and do not finish, where their attention actually goes. One or two sentences, ` +
+        `circling, what they start and do not finish, where their attention actually goes — and what they keep saying `+
+        `no to, which is usually the sharper signal. One or two sentences, ` +
         `plainly, second person. Not a summary of the list; they can see the list. If nothing honest stands out ` +
         `yet, say so in a few words rather than inventing a pattern.\n` +
         `pressing: up to three that will bite soonest, by id, each with one line of why. Look at dates, at what ` +

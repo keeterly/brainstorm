@@ -15,7 +15,19 @@ Positioning: Notion = Information OS · Figma = Design OS · Linear = Product OS
 ## The water cycle IS the operating system
 
 ```
-Thought → Droplet → Condensation → Cloud → Saturation → Rain → Current → Ocean Memory → Evaporation → New Thought
+Thought → Droplet → Condensation → Cloud → Saturation → Rain → Current → Evaporation → New Thought
+
+The two edges of the sky are the two verdicts. **Up is finished** — the thing has
+done its work, it evaporates, and what it becomes is the weather you think under
+(the light in `world/engine.ts` is drawn from recently-finished work, and
+`evaporate` fires from exactly this moment). **Down is let go** — it sinks, and
+the deep keeps it, recoverable but out of sight.
+
+That second edge is the one that was missing. Saying no is the commonest verdict
+anyone has about their own ideas, and until it was a gesture it lived on a button
+behind a fold, three taps in — so the graph held everything you finished and
+almost nothing you rejected, and a preference is far easier to read off refusals
+than off acceptances.
 ```
 
 Water physics govern every interaction: thoughts rise, ideas condense, themes float,

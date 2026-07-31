@@ -9,6 +9,7 @@ import { runAction } from '@/ai/client'
 import type { NoticeOutput } from '@shared/ai/actions/notice'
 import { learnFacts } from '@/ai/memoryFlow'
 import { isQuestion } from '@/domain/question'
+import { recentlyLetGo } from '@/features/sky/letGoFlow'
 import type { Thought } from '@/domain/types'
 
 export interface Noticed extends NoticeOutput {
@@ -109,6 +110,8 @@ export async function lookAgain(): Promise<Noticed | null> {
       })),
       pools,
       recentlyDone,
+      // and the refusals, which say more about a person than the finishes
+      letGo: recentlyLetGo(12),
     })
     // it only points at things that exist
     const alive = new Set(open.map((t) => t.id))

@@ -380,6 +380,7 @@ body.sky-held {
   bottom: calc(var(--water-line-up, 86px) + 44px);
   display: none;
   flex-direction: column;
+  transition: bottom 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
   align-items: flex-start;
   gap: 3px;
   padding: 11px 15px 12px;
@@ -399,6 +400,13 @@ body.sky-held {
   transition: opacity 380ms ease, transform 380ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .sky-voice.show { display: flex; opacity: 1; transform: none; }
+/* Out of the way of the undo bar.
+   Both live at the foot of the sky and both appear on the same act — you let
+   something go, and the app says so *and* offers to put it back — so the
+   sentence was printed underneath the offer and could not be read. The offer
+   is the more useful of the two because you can act on it, so it keeps the
+   spot and the voice steps up. */
+body.sky-offering .sky-voice { bottom: calc(var(--water-line-up, 86px) + 106px); }
 /* what it is about, when it is about something in particular */
 .sky-voice .who {
   font-size: 9.5px;
@@ -1259,9 +1267,46 @@ body.sky-resting .sky-tidy { right: calc(14px + var(--rest-w, 96px) + 8px); }
 }
 .sky-sea-word.on { opacity: 1; transform: none; }
 .sky-sea-word.ready { color: var(--water); font-weight: 600; }
-.skyb.sinking { border-color: rgba(var(--accent-rgb), 0.75); }
+.skyb.sinking { border-color: rgba(160, 172, 190, 0.8); }
+
+/* The other edge, and the better one.
+   Up is finished — the thing evaporates and becomes the weather you think
+   under, which is where the world's light already comes from. It sits under
+   the clock rather than at the very top, because on an installed app the top
+   of the screen belongs to iOS and nothing can be let go into it. */
+.sky-updraft {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: calc(var(--sat, 0px) + 230px);
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+.sky-updraft.on { opacity: 1; }
+.sky-sky-word {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: calc(var(--sat, 0px) + 74px);
+  z-index: 7;
+  text-align: center;
+  pointer-events: none;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 240ms ease, transform 340ms cubic-bezier(0.2, 0.8, 0.2, 1), color 200ms;
+}
+.sky-sky-word.on { opacity: 1; transform: none; }
+.sky-sky-word.ready { color: var(--water); font-weight: 600; }
+.skyb.rising { border-color: rgba(var(--accent-rgb), 0.8); }
+
 @media (prefers-reduced-motion: reduce) {
-  .sky-ghost, .sky-join, .sky-tide, .sky-sea-word { transition: none; animation: none; }
+  .sky-ghost, .sky-join, .sky-tide, .sky-sea-word,
+  .sky-updraft, .sky-sky-word { transition: none; animation: none; }
 }
 
 /* the neck of water between two drops reaching for each other */

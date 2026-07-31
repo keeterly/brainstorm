@@ -274,13 +274,16 @@ export default function MemoryPage() {
       <section className="card" style={{ marginBottom: 16 }}>
         <details>
           <summary style={{ cursor: 'pointer', listStyle: 'none' }}>
-            <h2 style={{ fontSize: 'var(--fs-md)', display: 'inline' }}>The ocean</h2>
+            <h2 style={{ fontSize: 'var(--fs-md)', display: 'inline' }}>What you finished</h2>
             <span className="faint" style={{ fontSize: 'var(--fs-label)', marginLeft: 8 }}>
               {oceanCount === 0 ? 'still empty' : `${oceanCount} finished`}
             </span>
           </summary>
           <p className="muted" style={{ fontSize: 'var(--fs-label)', margin: '10px 0' }}>
-            Finished work settles here. Tap the mark to bring one back.
+            {/* The sea is where you let things go now — see the two edges in
+                the sky — so this list can no longer call itself the ocean.
+                What it holds has not changed: everything you finished. */}
+            Everything you have finished. Tap the mark to bring one back.
           </p>
           {oceanDays.map(([day, items]) => (
             <div key={day} style={{ marginBottom: 14 }}>
