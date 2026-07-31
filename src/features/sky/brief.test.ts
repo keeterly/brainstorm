@@ -39,9 +39,30 @@ describe('reading a brief back', () => {
     expect(ks).toEqual(['1', '2'])
     expect(html).toContain('class="step first"')
   })
-  it('turns the lead of a bullet bold and leaves the rest alone', () => {
-    expect(html).toContain('<b>7(a) is the right programme</b>')
+  it('separates what a finding is from why it matters', () => {
+    // `**the point** — why it matters` is the one shape the agent writes, in
+    // every bullet and every step, and it used to come out as a single 13.5px
+    // run-on with a bold bit at the front. Two different weights of
+    // information, set identically, on a phone.
+    expect(html).toContain('<div class="h">7(a) is the right programme</div>')
+    expect(html).toContain('<div class="d">504 is for property, and you are funding inventory</div>')
     expect(html).not.toContain('**')
+  })
+  it('does the same for a step, into the two rows the grid has always had', () => {
+    expect(html).toContain('<div class="v">Get two years of returns together</div>')
+    expect(html).toContain('<div class="d">the lender asks first and it is the slowest bit</div>')
+  })
+  it('leaves a plain sentence at reading weight', () => {
+    // The watch-outs are written as plain sentences, not as point-and-reason.
+    // Setting one of those at heading weight turns a caveat into a claim.
+    expect(html).toContain('<div class="a">Applying before the LLC is registered</div>')
+  })
+  it('slots what to do about it in before the sources, never after', () => {
+    // a brief that ends in a bibliography is a document; one that ends in a
+    // button is the agent finishing the job it started
+    const withTodo = briefHtml(MD, SOURCES, '<div class="todo">DO</div>')
+    expect(withTodo.indexOf('class="todo"')).toBeGreaterThan(withTodo.indexOf('The way through'))
+    expect(withTodo.indexOf('class="todo"')).toBeLessThan(withTodo.indexOf('where this came from'))
   })
   it('makes every source a real target, with where it came from', () => {
     expect(html).toContain('href="https://www.sba.gov/funding-programs/loans/7a"')

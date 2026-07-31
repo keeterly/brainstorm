@@ -150,3 +150,38 @@
   .tab.dip { animation: none; }
   .tabs-echo { display: none; }
 }
+
+/* Out of the way of a full-screen page.
+ *
+ * The sky's page and its photo viewer cover the whole screen and carry their
+ * own way out — a × at the top and a Done at the bottom. The tab bar sat on
+ * top of both, over the Done button, and *took the tap*: `.view` runs the
+ * between-tabs dissolve with `animation-fill-mode: both`, which keeps a
+ * stacking context alive for ever, so the page's `z-index: 120` is scoped
+ * inside `.view` and this bar's 100 wins against it in the root. Measured with
+ * `elementFromPoint` over the Done button; it answered `.tab`.
+ *
+ * Raising numbers would not fix it — nothing inside a stacking context can
+ * out-rank something outside it. Getting out of the way is the right answer
+ * anyway: a modal surface should not be wearing the app's navigation.
+ */
+body.on-paper .tabs,
+body.on-photo .tabs {
+  opacity: 0;
+  transform: translateY(26px);
+  pointer-events: none;
+}
+/* …and the glass turns its own pointer-events back on, so `none` on the parent
+   is not enough: an invisible bar was still swallowing the tap on the page's
+   Done button. Measured with elementFromPoint, which answered `.tabs-glass` at
+   opacity 0. */
+body.on-paper .tabs-glass,
+body.on-photo .tabs-glass {
+  pointer-events: none;
+}
+.tabs {
+  transition: opacity 280ms ease, transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tabs { transition: none; }
+}

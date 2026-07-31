@@ -12,6 +12,7 @@ import type { PromptImage } from '@shared/ai/types'
 import { markApplied } from '@/ai/pending'
 import type { Sizing } from './gaugeFlow'
 import { learnFacts } from '@/ai/memoryFlow'
+import { alreadyThere, sameAs } from './dedupe'
 
 export type DeepenResult =
   | { kind: 'deepened'; note: string; added: number; output: DeepenOutput }
@@ -80,8 +81,15 @@ export function applyDeepen(subjectId: string, output: DeepenOutput, runId: stri
   // a thing with work under it is a goal, whatever it started life as
   if (subject.type !== 'goal') s.updateThought(subject.id, { type: 'goal' })
 
+  // The prompt asks it not to repeat what is already under there. This is what
+  // makes sure. Two runs on the same goal — or one background run collected
+  // twice — used to leave every step sitting under its own duplicate, with no
+  // undo and no way to tell the copies apart.
+  const have = alreadyThere(subject.id)
   const made = new Map<string, string>()
+  let added = 0
   for (const step of output.steps) {
+    if (sameAs(have, step.title)) continue
     const t = s.addThought({
       raw_content: step.title,
       title: step.title,
@@ -89,6 +97,8 @@ export function applyDeepen(subjectId: string, output: DeepenOutput, runId: stri
       type: 'action',
       effort: step.effort,
     })
+    have.add(step.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim())
+    added++
     made.set(step.tempId, t.id)
     s.addRelationship(t.id, subject.id, 'part_of', 'ai', runId)
   }
@@ -120,7 +130,7 @@ export function applyDeepen(subjectId: string, output: DeepenOutput, runId: stri
 
   // claimed: whoever comes back for it next will not land it a second time
   if (runId) void markApplied(runId)
-  return { kind: 'deepened', note: output.note, added: output.steps.length, output }
+  return { kind: 'deepened', note: output.note, added, output }
 }
 
 /** The brief, kept as something a person can read later. */

@@ -128,11 +128,35 @@ export default function SkyPage() {
  * walks the lines it actually writes and escapes everything else, so nothing
  * that came back off the open web can put markup into the page.
  */
-export function briefHtml(md: string, sources: { title: string; url: string }[]): string {
+export function briefHtml(
+  md: string,
+  sources: { title: string; url: string }[],
+  /** Live rows to slot in ahead of the sources — see whatToDoNext. */
+  extra = '',
+): string {
   const esc = (t: string) =>
     t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
   // **lead** — the rest, which is the one bit of inline markup it uses
   const inline = (t: string) => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+  /*
+   * `**the point** — why it matters` is the one shape the agent writes, in
+   * every bullet and every step, and it was being rendered as one run-on line
+   * with a bold bit at the front. On a phone that is a wall: the thing itself
+   * and the reason for it are different weights of information and they were
+   * the same size, the same colour, on the same line, at 13.5px.
+   *
+   * Split at the dash. What it is goes on top at reading size; why it matters
+   * goes underneath, quieter. `.d` has been styled for exactly this since the
+   * page was written and nothing has ever produced one.
+   */
+  const lead = (t: string): { head: string; why: string } | null => {
+    const m = /^\*\*(.+?)\*\*\s*(?:[—–-]\s*)?(.*)$/.exec(t)
+    // No bold lead means it is not a point-and-reason at all — the watch-outs
+    // are written as plain sentences — and setting one of those at heading
+    // weight turns a caveat into a claim.
+    if (!m) return null
+    return { head: esc(m[1]), why: inline(m[2].trim()) }
+  }
   const out: string[] = []
   let n = 0
   let inSources = false
@@ -155,17 +179,29 @@ export function briefHtml(md: string, sources: { title: string; url: string }[])
     } else if (line.startsWith('- ')) {
       // a source list is rendered from the sources array instead, with links
       if (/^- \[.+\]\(.+\)$/.test(line)) continue
-      out.push(`<div class="a">${inline(line.slice(2))}</div>`)
+      const l = lead(line.slice(2))
+      out.push(
+        l
+          ? `<div class="a"><div class="h">${l.head}</div>${l.why ? `<div class="d">${l.why}</div>` : ''}</div>`
+          : `<div class="a">${inline(line.slice(2))}</div>`,
+      )
     } else if (/^\d+\.\s/.test(line)) {
       n++
+      const body = line.replace(/^\d+\.\s*/, '')
+      const l = lead(body)
       out.push(
         `<div class="step${n === 1 ? ' first' : ''}"><div class="k">${n}</div>` +
-          `<div class="v">${inline(line.replace(/^\d+\.\s*/, ''))}</div></div>`,
+          `<div class="v">${l ? l.head : inline(body)}</div>` +
+          `${l?.why ? `<div class="d">${l.why}</div>` : ''}</div>`,
       )
     } else {
       out.push(`<div class="a">${inline(line)}</div>`)
     }
   }
+  // Before the sources, after the reading: what you might actually do about
+  // any of it. A brief that ends in a bibliography is a document; a brief that
+  // ends in a button is the agent finishing the job it started.
+  if (extra) out.push(extra)
   if (sources.length) {
     out.push(`<div class="lab">where this came from</div>`)
     for (const s of sources) {
@@ -1989,6 +2025,9 @@ function mountSky(root: HTMLDivElement) {
     // long press is the same gesture wherever you do it, and doing it inside a
     // group and getting a loose drop somewhere else in the sky is the app
     // ignoring where you were standing.
+    // Whatever the last close still had coming, it is not coming for this one.
+    if (closeT) clearTimeout(closeT)
+    closeT = null
     pageFor = { mode, tl, ox, oy, into: mode === 'capture' ? (into ?? openPool) : null }
     nameFor = null
     pageA.style.display = 'none'
@@ -2021,7 +2060,56 @@ function mountSky(root: HTMLDivElement) {
       const when = art ? humanDate(art.created_at.slice(0, 10), todayISO()) : ''
       pageN.textContent = when ? `found ${when}` : ''
       pageA.style.display = 'block'
-      pageA.innerHTML = briefHtml(art?.content_md ?? '', art?.sources ?? [])
+      /*
+       * …and what to do about it.
+       *
+       * ⚡ goes away for the best part of a minute, comes back with a good
+       * reading and a set of real steps — and the brief was where the trail
+       * went cold. It said what to do and gave you no way to do any of it:
+       * close the page, find the drop it belongs to in a sky that has moved,
+       * open its moons, and only then does the agent offer to help. Four moves
+       * between a recommendation and acting on it, and the agent had just
+       * spent a minute earning the right to be believed.
+       *
+       * Each row carries the one act the app would take on that step, decided
+       * by the same `getOnWithIt` the moons use — `answer it` on a question,
+       * `do it` on something makeable, `work it` on anything that has to be
+       * worked out first. It is the funnel, one tap from where you read it.
+       */
+      const next = S()
+        .relationships.filter((r) => r.type === 'part_of' && r.to_id === tl.t.id)
+        .map((r) => view.byId.get(r.from_id))
+        .filter((n): n is TL => !!n && n.t.status === 'open')
+        .slice(0, 8)
+      const rows = next.map((n) => ({ tl: n, act: getOnWithIt(n) }))
+      const todo = rows.length
+        ? `<div class="lab">what to do about it</div>` +
+          rows
+            .map(
+              (_r, i) =>
+                `<div class="todo" data-i="${i}"><div class="v"></div>` +
+                `<button class="ctl go" data-i="${i}"></button></div>`,
+            )
+            .join('')
+        : ''
+      pageA.innerHTML = briefHtml(art?.content_md ?? '', art?.sources ?? [], todo)
+      // textContent, always: these are the user's own words and the model's,
+      // and neither belongs in innerHTML
+      ;[...pageA.querySelectorAll('.todo')].forEach((row, i) => {
+        const r = rows[i]
+        ;(row.querySelector('.v') as HTMLElement).textContent = label(r.tl.t)
+        const go = row.querySelector('.go') as HTMLButtonElement
+        go.textContent = r.act.lb
+        go.disabled = r.act.dim
+        go.addEventListener('click', (e) => {
+          e.stopPropagation()
+          // the brief is a reading surface; acting on it means leaving it, and
+          // the act itself says what it is doing from the sky
+          closePage(false)
+          focusOn(posOf(r.tl.t.id))
+          setTimeout(() => getOnWithIt(r.tl).run(), reduced ? 0 : 160)
+        })
+      })
       // sources are the point of a brief — they open, and they open out
       for (const a of [...pageA.querySelectorAll('a')]) {
         a.setAttribute('target', '_blank')
@@ -2085,7 +2173,12 @@ function mountSky(root: HTMLDivElement) {
                 (_m, i) =>
                   `<div class="row" data-i="${i}">` +
                   `<button class="tick" role="checkbox" aria-checked="false" aria-label="Done"></button>` +
-                  `<input class="t" aria-label="What this is called" enterkeyhint="done" />` +
+                  // A textarea, because these are sentences now. ⚡ writes real
+                  // steps — "Work backward from your SS27 production schedule
+                  // to a funding date" — and an input shows the first thirty
+                  // characters of that and hides the rest behind a button. A
+                  // list of your work you cannot read is not a list.
+                  `<textarea class="t" rows="1" aria-label="What this is called" enterkeyhint="done"></textarea>` +
                   `<button class="ctl out" aria-label="Take it out of this group">take out</button></div>`,
               )
               .join('')
@@ -2171,8 +2264,15 @@ function mountSky(root: HTMLDivElement) {
       // not markup
       ;[...pageA.querySelectorAll('.row:not(.add)')].forEach((row, i) => {
         const m = inside[i]
-        const field = row.querySelector('.t') as HTMLInputElement
+        const field = row.querySelector('.t') as HTMLTextAreaElement
         field.value = label(m)
+        // as tall as what it holds, measured rather than guessed
+        const fit = () => {
+          field.style.height = 'auto'
+          field.style.height = field.scrollHeight + 'px'
+        }
+        field.addEventListener('input', fit)
+        requestAnimationFrame(fit)
         row.classList.toggle('ticked', S().thoughts.find((t) => t.id === m.id)?.status === 'done')
         // No edit mode, no pencil, no second screen: the row is the field, so
         // fixing a name is typing over it. Committed when you leave it or press
@@ -2507,6 +2607,9 @@ function mountSky(root: HTMLDivElement) {
   // anybody can find — the whole thing is the way out.
   lightbox.addEventListener('click', closePhoto)
 
+  /** The tidy-up armed by the last close — see closePage. */
+  let closeT: ReturnType<typeof setTimeout> | null = null
+
   function closePage(commit: boolean) {
     if (!pageFor) return
     // Whatever is in the fields goes in now, read straight from them, whether
@@ -2530,7 +2633,17 @@ function mountSky(root: HTMLDivElement) {
     page.classList.remove('on')
     page.style.clipPath = `circle(0px at ${pf.ox}px ${pf.oy}px)`
     document.body.classList.remove('on-paper')
-    setTimeout(() => page.classList.remove('show', 'path', 'reading'), reduced ? 0 : 580)
+    // Held, so opening another page can cancel it.
+    //
+    // This is what made "Read what it brought back" flicker and die. That
+    // button closes the group page and opens the brief 120ms later — and this
+    // timer, armed by the close, was still coming: at 580ms it stripped
+    // `show`, `path` and `reading` off the brief that had opened in the
+    // meantime, so the page you had just asked for turned itself off halfway
+    // through arriving. It was never about the brief; any page opened inside
+    // 580ms of closing another one lost its classes.
+    if (closeT) clearTimeout(closeT)
+    closeT = setTimeout(() => page.classList.remove('show', 'path', 'reading'), reduced ? 0 : 580)
     if (!commit) return
     const v = pageT.value
     if (pf.mode === 'capture') {
@@ -2633,13 +2746,24 @@ function mountSky(root: HTMLDivElement) {
     paintAll()
     haptics.join()
     record(u.note)
-    offerAction(u.note, 'put it back', () => {
-      u.undo()
-      rebuild()
-      paintAll()
-      redrawGroupPage()
-      say('back the way it was')
-    })
+    // With a lifetime. It had none — `offerAction` keeps the bar up for ever
+    // when it is not given one — so every rename, every take-out, every tick
+    // on the group page left a black bar parked across the page's own buttons
+    // until something else replaced it. Three of them were unreachable behind
+    // the last thing you happened to do. An offer to reverse something is
+    // worth having for as long as you might still mean it, and no longer.
+    offerAction(
+      u.note,
+      'put it back',
+      () => {
+        u.undo()
+        rebuild()
+        paintAll()
+        redrawGroupPage()
+        say('back the way it was')
+      },
+      9000,
+    )
   }
 
   /**
@@ -2951,6 +3075,66 @@ function mountSky(root: HTMLDivElement) {
   const MOON_STEP = 76
   let moonsFor: string | null = null
   const moonEls: HTMLDivElement[] = []
+  /**
+   * "Get on with it", read off the thing rather than asked of you.
+   *
+   * A question wants an answer. A step somebody could sit down and produce
+   * wants producing. Something already worked out wants to become work.
+   * Anything else has to be worked out first.
+   *
+   * This used to live inline in the moon that offered it, which was fine while
+   * the moon was the only place you could act. The brief now lists the steps ⚡
+   * came back with and offers the same act on each one, and two copies of a
+   * decision this load-bearing would be two different apps within a week.
+   */
+  function getOnWithIt(tl: TL): { icon: string; lb: string; dim: boolean; run: () => void } {
+    const asking = tl.kind === 'drop' && isQuestion(label(tl.t))
+    const ready = isKept(tl.t) || isRipe(tl.t) || !!briefOf(tl.t.id)
+    const canRain = tl.kind === 'drop' || tl.members.length >= 1
+    /*
+     * A step somebody could sit down and produce, that the funnel put here.
+     *
+     * Three things at once, and it needs all three. Makeable, so the agent is
+     * not offering to write an aeroplane ticket. A leaf, because a thing with
+     * work under it is a goal and goals get planned, not drafted. And under
+     * something — a leaf at the top of the sky is a loose idea, and the answer
+     * to an idea is to grow it, not to write it up.
+     */
+    const doable =
+      tl.kind === 'drop' &&
+      !tl.members.length &&
+      isMakeable(label(tl.t)) &&
+      !!S().relationships.find((r) => r.type === 'part_of' && r.from_id === tl.t.id)
+    // …and once it has been made, the thing to do with it is read it. Keyed on
+    // the stamp the draft leaves rather than on there being a brief at all: a
+    // question you asked *about* this step also leaves one, and that is not the
+    // same as the step being written.
+    const made = doable && !!ex(tl.t).drafted_at && !!briefOf(tl.t.id)
+    return {
+      icon: made ? 'brief' : asking ? 'ask' : doable ? 'make' : ready && canRain ? 'rain' : 'work',
+      // Always 'rain', never 'path'. A cloud that has rained once and been
+      // added to since has more to give; the old second label opened a page of
+      // five template rows that had already been produced, which is the one
+      // thing a second press should never do.
+      lb: made ? 'read it' : asking ? 'answer it' : doable ? 'do it' : ready && canRain ? 'rain' : 'work it',
+      // reading what is already written is the only one of these that needs
+      // nothing from the network — rain goes out to condense now
+      dim: !made && S().offline,
+      run: () => {
+        if (made) {
+          const q = posOf(tl.t.id)
+          openPage('brief', tl, toScreenX(q.x), toScreenY(q.y))
+        } else if (asking) void runAnswer(tl)
+        // before rain, deliberately: a step that has been drafted has a brief,
+        // which would otherwise make it "ready" and offer to rain a single
+        // action into the current, which is not a thing that means anything
+        else if (doable) void runDraft(tl)
+        else if (ready && canRain) void rain(tl)
+        else void runDeepen(tl)
+      },
+    }
+  }
+
   function closeMoons() {
     moonEls.forEach((m) => m.remove())
     moonEls.length = 0
@@ -2992,28 +3176,6 @@ function mountSky(root: HTMLDivElement) {
      * add to it, and get on with it.
      */
     const acts: { icon: string; lb: string; dim?: boolean; run: () => void }[] = []
-    const asking = tl.kind === 'drop' && isQuestion(label(tl.t))
-    const ready = isKept(tl.t) || isRipe(tl.t) || !!briefOf(tl.t.id)
-    const canRain = tl.kind === 'drop' || tl.members.length >= 1
-    /*
-     * A step somebody could sit down and produce, that the funnel put here.
-     *
-     * Three things at once, and it needs all three. Makeable, so the agent is
-     * not offering to write an aeroplane ticket. A leaf, because a thing with
-     * work under it is a goal and goals get planned, not drafted. And under
-     * something — a leaf at the top of the sky is a loose idea, and the answer
-     * to an idea is to grow it, not to write it up.
-     */
-    const doable =
-      tl.kind === 'drop' &&
-      !tl.members.length &&
-      isMakeable(label(tl.t)) &&
-      !!S().relationships.find((r) => r.type === 'part_of' && r.from_id === tl.t.id)
-    // …and once it has been made, the thing to do with it is read it. Keyed on
-    // the stamp the draft leaves rather than on there being a brief at all: a
-    // question you asked *about* this step also leaves one, and that is not the
-    // same as the step being written.
-    const made = doable && !!ex(tl.t).drafted_at && !!briefOf(tl.t.id)
 
     // 1. Words into it. Yours, kept, no round trip.
     acts.push({
@@ -3037,34 +3199,9 @@ function mountSky(root: HTMLDivElement) {
       },
     })
 
-    // 3. Get on with it — and what that means is read off the thing rather
-    //    than asked of you. A question wants an answer. Something that has
-    //    already been worked out wants to become work, and that costs nothing
-    //    and needs no connection. Anything else has to be worked out first.
-    acts.push({
-      icon: made ? 'brief' : asking ? 'ask' : doable ? 'make' : ready && canRain ? 'rain' : 'work',
-      // Always 'rain', never 'path'. A cloud that has rained once and been
-      // added to since has more to give; the old second label opened a page of
-      // five template rows that had already been produced, which is the one
-      // thing a second press should never do.
-      lb: made ? 'read it' : asking ? 'answer it' : doable ? 'do it' : ready && canRain ? 'rain' : 'work it',
-      // reading what is already written is the only one of these that needs
-      // nothing from the network — rain goes out to condense now
-      dim: !made && S().offline,
-      run: () => {
-        closeMoons()
-        if (made) {
-          const q = posOf(tl.t.id)
-          openPage('brief', tl, toScreenX(q.x), toScreenY(q.y))
-        } else if (asking) void runAnswer(tl)
-        // before rain, deliberately: a step that has been drafted has a brief,
-        // which would otherwise make it "ready" and offer to rain a single
-        // action into the current, which is not a thing that means anything
-        else if (doable) void runDraft(tl)
-        else if (ready && canRain) void rain(tl)
-        else void runDeepen(tl)
-      },
-    })
+    // 3. Get on with it — see getOnWithIt, which is the only place that
+    //    decision is made now, because the brief makes it too.
+    acts.push({ ...getOnWithIt(tl), run: () => { closeMoons(); getOnWithIt(tl).run() } })
     acts.forEach((a, i) => {
       const m = document.createElement('div')
       m.className = 'sky-moon' + (a.dim ? ' dim' : '')
@@ -3443,7 +3580,10 @@ function mountSky(root: HTMLDivElement) {
     // the new steps arrive around the thing they belong to
     const gp = posOf(tl.t.id)
     const kids = S().relationships.filter((r) => r.type === 'part_of' && r.to_id === tl.t.id)
-    kids.slice(-res.added).forEach((r, i, all) => {
+    // `slice(-0)` is `slice(0)` — the whole list — so a run that added nothing
+    // new would pick every child up and fling it into a fresh ring around the
+    // goal, undoing wherever you had put them.
+    ;(res.added ? kids.slice(-res.added) : []).forEach((r, i, all) => {
       const p = posOf(r.from_id)
       const a = -Math.PI / 2 + (i / Math.max(1, all.length)) * Math.PI * 2
       p.x = p.rx = gp.x + Math.cos(a) * 150

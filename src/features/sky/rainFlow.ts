@@ -17,6 +17,7 @@ import { runAction } from '@/ai/client'
 import type { RainOutput } from '@shared/ai/actions/rain'
 import { markApplied } from '@/ai/pending'
 import { learnFacts } from '@/ai/memoryFlow'
+import { alreadyThere, sameAs } from './dedupe'
 
 export type RainResult =
   | { kind: 'rained'; note: string; added: number; output: RainOutput }
@@ -81,8 +82,14 @@ export function applyRain(subjectId: string, output: RainOutput, runId: string |
     s.updateThought(subject.id, { summary: output.read.trim().slice(0, 280) })
   }
 
+  // `already` tells it what is under there; this makes sure. Raining a cloud
+  // twice is a thing people do — you add three more ideas and ask again — and
+  // it must add what is new rather than everything over again.
+  const have = alreadyThere(subject.id)
   const made = new Map<string, string>()
+  let added = 0
   for (const step of output.steps) {
+    if (sameAs(have, step.title)) continue
     const t = s.addThought({
       raw_content: step.title,
       title: step.title,
@@ -90,6 +97,8 @@ export function applyRain(subjectId: string, output: RainOutput, runId: string |
       type: 'action',
       effort: step.effort,
     })
+    have.add(step.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim())
+    added++
     made.set(step.tempId, t.id)
     s.addRelationship(t.id, subject.id, 'part_of', 'ai', runId)
   }
@@ -122,6 +131,9 @@ export function applyRain(subjectId: string, output: RainOutput, runId: string |
   void learnFacts(output.learned, `raining ${subject.title || subject.raw_content.slice(0, 80)}`, runId)
   if (runId) void markApplied(runId)
 
-  if (!output.steps.length) return { kind: 'thin', missing: output.missing }
-  return { kind: 'rained', note: output.note, added: output.steps.length, output }
+  // Nothing new. Either it genuinely found no next action, or everything it
+  // named is already hanging under there — and from where you are standing
+  // those are the same answer.
+  if (!added) return { kind: 'thin', missing: output.missing }
+  return { kind: 'rained', note: output.note, added, output }
 }

@@ -155,3 +155,32 @@ describe('what falls out of a full cloud', () => {
     expect(kids(pool.id)).toHaveLength(members.length)
   })
 })
+
+describe('raining the same cloud twice', () => {
+  it('adds only what is new, and calls a repeat of everything thin', () => {
+    // You add three more ideas to a cloud and ask again. It must bring back
+    // what follows from the new ones, not lay a second copy of the first
+    // answer underneath the first.
+    const { pool } = seed()
+    applyRain(pool.id, OUT, 'r1')
+    const first = kids(pool.id).length
+    const res = applyRain(pool.id, OUT, 'r2')
+    expect(kids(pool.id)).toHaveLength(first)
+    expect(res.kind).toBe('thin')
+  })
+
+  it('lands the one it had not said before', () => {
+    const { pool } = seed()
+    applyRain(pool.id, OUT, 'r1')
+    const first = kids(pool.id).length
+    const res = applyRain(
+      pool.id,
+      { ...OUT, steps: [...OUT.steps, { tempId: 's9', title: 'Write the migration off the back of it', why: 'it is the only thing left', effort: 2, dependsOn: [] }] },
+      'r2',
+    )
+    expect(kids(pool.id)).toHaveLength(first + 1)
+    expect(res.kind).toBe('rained')
+    if (res.kind !== 'rained') return
+    expect(res.added).toBe(1)
+  })
+})

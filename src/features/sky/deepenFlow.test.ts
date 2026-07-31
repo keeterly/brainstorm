@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useGraph } from '@/store/graph'
-import { briefMarkdown, deepenThought } from './deepenFlow'
+import { applyDeepen, briefMarkdown, deepenThought } from './deepenFlow'
 import type { DeepenOutput } from '@shared/ai/actions/deepen'
 
 const run = vi.hoisted(() => vi.fn())
@@ -127,5 +127,52 @@ describe('the brief it leaves behind', () => {
     expect(md).not.toContain('## Where this goes wrong')
     expect(md).not.toContain('## Sources')
     expect(md).not.toContain('## What I found')
+  })
+})
+
+const kids = (id: string) => {
+  const s = useGraph.getState()
+  return s.relationships.filter((r) => r.type === 'part_of' && r.to_id === id)
+}
+
+describe('running it twice on the same thing', () => {
+  it('adds what is new and not what is already under there', () => {
+    // The prompt asks it not to repeat what it was shown. Nothing checked, so
+    // a second run — or one background run collected twice — left every step
+    // sitting under its own duplicate, with no undo and no way to tell the
+    // copies apart. Three of five, in the screenshot that found this.
+    const goal = seed()
+    applyDeepen(goal.id, OUT, 'r1')
+    const first = kids(goal.id).length
+    const res = applyDeepen(goal.id, OUT, 'r2')
+    expect(kids(goal.id)).toHaveLength(first)
+    if (res.kind !== 'deepened') throw new Error('expected deepened')
+    expect(res.added).toBe(0)
+  })
+
+  it('does not care about the punctuation it happened to use the second time', () => {
+    const goal = seed()
+    applyDeepen(goal.id, OUT, 'r1')
+    const before = kids(goal.id).length
+    const reworded = {
+      ...OUT,
+      steps: OUT.steps.map((st) => ({ ...st, title: st.title.toUpperCase() + '.' })),
+    }
+    applyDeepen(goal.id, reworded, 'r2')
+    expect(kids(goal.id)).toHaveLength(before)
+  })
+
+  it('still lands the ones it had not thought of before', () => {
+    const goal = seed()
+    applyDeepen(goal.id, OUT, 'r1')
+    const before = kids(goal.id).length
+    const res = applyDeepen(
+      goal.id,
+      { ...OUT, steps: [...OUT.steps, { tempId: 'sX', title: 'Ring the lender back on Monday', why: 'they said to', effort: 1, dependsOn: [] }] },
+      'r2',
+    )
+    expect(kids(goal.id)).toHaveLength(before + 1)
+    if (res.kind !== 'deepened') throw new Error('expected deepened')
+    expect(res.added).toBe(1)
   })
 })
