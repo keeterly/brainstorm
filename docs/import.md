@@ -20,7 +20,7 @@ Supabase project “VENIA CC” → table `venia_workspace` → row `id = 'main'
 | item with children | `goal` thought + `action` steps via `part_of` edges (nesting preserved) |
 | mind-map branches (`web.branches`) | `concept` themes between goal and steps |
 | free map ideas (`web.extra`) | `idea` thoughts, `relates_to` the goal |
-| map positions (`web.pos`, master map) | Visual Brain layouts (ids remapped) |
+| map positions (`web.pos`, master map) | sky layouts (ids remapped) |
 | Eni delegate briefs (`work.md`) | research artifacts on the thought |
 | Eni memory | memory entries (source `import`) |
 | plans, schedules, board, prefs | not modeled — kept verbatim in `import_archives` |

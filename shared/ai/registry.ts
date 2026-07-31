@@ -1,11 +1,5 @@
 import type { ActionDef } from './types'
 import { classifyThought } from './actions/classify-thought'
-import { summarize } from './actions/summarize'
-import { clarifyQuestion } from './actions/clarify-question'
-import { findRelated } from './actions/find-related'
-import { toGoal } from './actions/to-goal'
-import { makeMindMap } from './actions/make-mind-map'
-import { generateRoadmap } from './actions/generate-roadmap'
 import { prioritize } from './actions/prioritize'
 import { absorb } from './actions/absorb'
 import { organize } from './actions/organize'
@@ -20,15 +14,25 @@ import { draft } from './actions/draft'
 import { remember } from './actions/remember'
 import { rain } from './actions/rain'
 
+// Six actions came out of here at once: summarize, clarify_question,
+// find_related, to_goal, make_mind_map and generate_roadmap.
+//
+// Four of them existed to serve one screen — a thought detail page reachable
+// from a single link, behind a fold, in a list of *finished* work — and the sky
+// had already replaced every one of them. `to_goal` happens by dragging things
+// together; `generate_roadmap` is `rain` and `deepen`, which produce real
+// thoughts rather than a second, parallel model of what work is; `find_related`
+// is the kinship threading the sky draws continuously; `clarify_question` is
+// the ask moon. The other two, `make_mind_map` and `summarize`, had no caller
+// at all outside this file and its test.
+//
+// An action that nothing calls is not free. It is a schema to keep valid, a
+// prompt to keep true, and a thing a reader has to understand before they can
+// be sure it is not the one they are looking for.
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const ACTION_REGISTRY: Record<string, ActionDef<any, any>> = {
   [classifyThought.name]: classifyThought,
-  [summarize.name]: summarize,
-  [clarifyQuestion.name]: clarifyQuestion,
-  [findRelated.name]: findRelated,
-  [toGoal.name]: toGoal,
-  [makeMindMap.name]: makeMindMap,
-  [generateRoadmap.name]: generateRoadmap,
   [prioritize.name]: prioritize,
   [absorb.name]: absorb,
   [organize.name]: organize,

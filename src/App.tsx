@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { AuthGate } from '@/features/auth/AuthGate'
 import { installWaterTouch } from '@/lib/touch-water'
 import { TabBar } from '@/components/TabBar'
@@ -8,7 +8,6 @@ import { Atmosphere, WorldHem } from '@/world/Atmosphere'
 import SkyPage from '@/features/sky/SkyPage'
 import CurrentPage from '@/features/current/CurrentPage'
 import MemoryPage from '@/features/memory/MemoryPage'
-import ThoughtPage from '@/features/thought/ThoughtPage'
 import RunsPage from '@/features/runs/RunsPage'
 import ImportPage from '@/features/importer/ImportPage'
 
@@ -50,7 +49,11 @@ export default function App() {
             <Route path="/think" element={<Navigate to="/" replace />} />
             <Route path="/current" element={<CurrentPage />} />
             <Route path="/memory" element={<MemoryPage />} />
-            <Route path="/thought/:id" element={<ThoughtPage />} />
+            {/* The thought detail page is gone — see the registry. Old links
+                still arrive though: a notification, a bookmark, the ocean list
+                before this deploy. They land on the thing itself, in the sky,
+                which is where everything else in the app opens. */}
+            <Route path="/thought/:id" element={<ToTheSky />} />
             <Route path="/runs" element={<RunsPage />} />
             <Route path="/import" element={<ImportPage />} />
             {/* pre-v2 paths */}
@@ -66,4 +69,10 @@ export default function App() {
       <WorldHem />
     </>
   )
+}
+
+/** An old /thought/:id link, pointed at the drop it was always about. */
+function ToTheSky() {
+  const { id } = useParams()
+  return <Navigate to={id ? `/?open=${encodeURIComponent(id)}` : '/'} replace />
 }

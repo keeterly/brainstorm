@@ -41,17 +41,25 @@ No CRDT, no realtime channels — one user on a few devices does not need them y
   for proposed nodes). The model never round-trips free text that must be re-matched.
 - Validation failure → one repair retry (the model sees its own output + the Zod errors) →
   otherwise the run is marked `invalid_output` and the UI offers retry.
-- Transport: one retry on 429/5xx. Long actions (`generate_roadmap`) stream over SSE so
-  Netlify's buffered-function window is never the ceiling.
+- Transport: one retry on 429/5xx. Actions that cannot finish inside a request (`deepen`,
+  `answer`, `draft`) are marked `background: true` and run in a background function; the page
+  names the run and watches the `agent_runs` row for it.
 - Every run inserts an `agent_runs` row (running → succeeded/failed/invalid_output) with
   token counts and cost from `shared/ai/pricing.ts`. A daily per-user cap guards spend.
 - The provider is isolated behind `LLMProvider` (`netlify/functions/_lib/provider.ts`);
   swapping vendors means one new class.
 
-Actions: `classify_thought`, `summarize`, `clarify_question`, `find_related`, `to_goal`,
-`make_mind_map`, `generate_roadmap` (streamed), `prioritize`, `absorb`, `organize`,
-`name_pool`, `cluster`, `gauge`, `deepen`, `answer`, `draft`, `rain`, `reshape`, `notice`,
-`remember`.
+Actions: `classify_thought`, `prioritize`, `absorb`, `organize`, `name_pool`, `cluster`,
+`gauge`, `deepen`, `answer`, `draft`, `rain`, `reshape`, `notice`, `remember`.
+
+Six were retired together: `summarize`, `clarify_question`, `find_related`, `to_goal`,
+`make_mind_map` and `generate_roadmap`. Four served one screen — a thought detail page
+reachable from a single link, behind a fold, in a list of finished work — and the sky had
+already replaced each of them: `to_goal` happens by dragging things together, `find_related`
+is the kinship threading, `clarify_question` is the ask moon, and `generate_roadmap` is
+`rain` plus `deepen`, which produce real thoughts instead of a second parallel model of what
+work is. The other two had no caller at all. The `roadmaps` table is still read (existing
+rows still export); nothing writes new ones.
 
 **The funnel.** A thought becomes an idea; ideas gather into a cloud; `rain` condenses the
 cloud into real actions *under* it; and each of those leaves is then read by the sky's third
@@ -89,15 +97,18 @@ and has a *What it changed its mind about* section — because something that ca
 revise what it knows about you, with no way to see that it did, is not something you would
 let near what it knows about you.
 
-## Visual Brain
+## The sky
 
-No graph library. Absolutely-positioned HTML nodes over one SVG edge layer inside a single
-pan/zoom transform (`src/features/brain/BrainPage.tsx`) — the interaction model proven in the
-original VENIA implementation, rebuilt in React. Viewport and drags live in refs and mutate
-styles directly; React re-renders only on gesture end. Edges are real `relationships` rows
-styled by type. Unpositioned nodes get a radial default layout (`layout.ts`); dragged
-positions persist (debounced) to `layouts` per scope. An outline view renders the same graph
-as an indented list.
+No graph library, and no canvas. Absolutely-positioned HTML drops over one SVG edge layer
+inside a single pan/zoom transform (`src/features/sky/SkyPage.tsx`) — an imperative render
+engine mounted by a thin React shell, which returns its own cleanup. Position and drags live
+in refs and mutate styles directly; React re-renders nothing during a gesture. Edges are real
+`relationships` rows styled by type. Unpositioned drops get a radial default; dragged
+positions persist (debounced) to `layouts` per scope, and now survive an offline launch.
+
+There is no separate detail screen. `/thought/:id` redirects to `/?open=<id>`, which focuses
+the drop and opens its page in the world — the same page every other route into a thought
+opens.
 
 ## Prioritization
 
@@ -110,6 +121,12 @@ applies it.
 
 ## Failure posture
 
-Brainstorm stays fully usable with `/api/ai` down: manual type picker, manual edges, manual
-lanes, capture never blocks on AI. Every AI surface has loading / error+retry / partial-apply
-states (e.g. a mind map applies whatever validated and reports what was skipped).
+Brainstorm stays fully usable with `/api/ai` down: hold the sky and write, drag things
+together, tick things off — capture never blocks on AI. Every AI surface has loading /
+error+retry / partial-apply states, and says what it did rather than reporting success.
+
+Writes are durable. Mutations land in the store immediately and go out through an offline
+queue (`src/lib/outbox.ts`) that retries by default, gives up only on errors that provably
+cannot succeed, and parks anything hopeless where the banner can offer to try again. `offline`
+clears on its own — on `online`, on coming back to the app, and on a slow tick — because iOS
+gives none of the three reliably.

@@ -40,6 +40,15 @@ interface GraphState {
   offline: boolean
   thoughts: Thought[]
   relationships: Relationship[]
+  /**
+   * Read-only now.
+   *
+   * `generate_roadmap` wrote these: a second, parallel model of what work is,
+   * living beside the thoughts and edges that are the real one. It is gone —
+   * `rain` and `deepen` produce actual thoughts you can tick, focus, draft and
+   * count. Existing rows are still loaded and still export, so nothing anyone
+   * generated has been taken away; nothing new is written.
+   */
   roadmaps: Roadmap[]
   /** Everything, believed and archived. Readers that feed a prompt use live(). */
   memories: Memory[]
@@ -72,7 +81,6 @@ interface GraphState {
   /** One line in the record of how it came to believe something. */
   noteMemory(e: Omit<MemoryEvent, 'id' | 'user_id' | 'created_at'>): void
 
-  addRoadmap(r: Omit<Roadmap, 'user_id' | 'created_at' | 'updated_at'>): void
   addArtifact(a: Omit<ResearchArtifact, 'user_id' | 'created_at'>): void
 
   saveLayout(scope: string, positions: Record<string, { x: number; y: number }>): void
@@ -414,34 +422,6 @@ export const useGraph = create<GraphState>((set, get) => ({
     if (gone) get().noteMemory({ memory_id: id, op: 'delete', before: gone.content, after: null, why: null, agent_run_id: null })
     set((s) => ({ memories: s.memories.filter((m) => m.id !== id) }))
     void write({ table: 'memories', op: 'delete', pk: { id } })
-    scheduleSnapshot(get)
-  },
-
-  addRoadmap(r) {
-    const full: Roadmap = {
-      ...r,
-      user_id: get().userId ?? '',
-      created_at: nowISO(),
-      updated_at: nowISO(),
-    }
-    set((s) => ({
-      roadmaps: [
-        full,
-        ...s.roadmaps.map((x) =>
-          x.goal_thought_id === full.goal_thought_id && x.status === 'active'
-            ? { ...x, status: 'archived' as const }
-            : x,
-        ),
-      ],
-    }))
-    // Archive any previous active roadmap for the same goal, then insert.
-    const prev = get().roadmaps.filter(
-      (x) => x.goal_thought_id === full.goal_thought_id && x.id !== full.id && x.status === 'archived',
-    )
-    for (const p of prev) {
-      void write({ table: 'roadmaps', op: 'update', pk: { id: p.id }, payload: { status: 'archived' } })
-    }
-    void write({ table: 'roadmaps', op: 'insert', payload: full as unknown as Record<string, unknown> })
     scheduleSnapshot(get)
   },
 

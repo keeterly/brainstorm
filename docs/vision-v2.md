@@ -26,16 +26,17 @@ Nothing is filed. Everything cycles.
 
 | Surface | Replaces | Is |
 | --- | --- | --- |
-| **Collect** | inbox/capture | capture anything, zero decisions |
-| **Think** | projects/board | the spatial world: droplets, clouds, relationships |
+| **Sky** | inbox/capture + projects/board | the world itself: hold anywhere and write, and what you write lands where you were standing. Droplets, clouds, relationships. Collect and Think were two screens onto this one thing; both redirect here. |
 | **Current** | tasks/today | only today's meaningful flow |
 | **Memory** | archive/settings-adjacent | everything learned (ocean) |
 
 ## The three engines (build these, not screens)
 
 1. **Thinking Engine** — captures, classifies, connects, reasons.
-   *Exists today:* `shared/ai/` action registry + `/api/ai` (classify, find_related,
-   make_mind_map, generate_roadmap, prioritize, remember) over the thought graph.
+   *Exists today:* `shared/ai/` action registry + `/api/ai` — classify, organize, cluster,
+   gauge, deepen, answer, draft, rain, reshape, notice, prioritize, remember — over the
+   thought graph. (`find_related`, `make_mind_map` and `generate_roadmap` were retired: the
+   sky's kinship threading, `cluster` and `rain` do that work on real thoughts.)
 2. **World Engine** — generates the adaptive atmosphere from semantic tokens. *New.*
    Never hardcode themes; derive the environment:
    ```
@@ -49,7 +50,9 @@ Nothing is filed. Everything cycles.
    ```
 3. **Interaction Engine** — decides what the user sees, the ONE question to ask,
    and the single most meaningful next action. *Partially exists:* prioritize +
-   recommended-next + clarify_question; must become the governing layer.
+   recommended-next + the sky's third moon, which reads a leaf on its own terms —
+   `answer it` for a question, `do it` for something makeable, `work it` for anything
+   needing research. Must become the governing layer.
 
 Every future module (Marketing, Product, Fashion…) is another expression of these
 three engines — never a bolted-on feature.
@@ -100,5 +103,5 @@ atmosphere drifts with the state of thinking. Port its interaction model into
 - World Engine: new `src/world/` — tokens computed from graph state (and later AI mood
   extraction via a `world_tokens` action), rendered as layered atmosphere (CSS
   custom properties + canvas water), slow-lerped.
-- Interaction Engine: elevate `clarify_question` + `prioritize` into a single
+- Interaction Engine: elevate the third moon + `prioritize` into a single
   "what should the user see/do next" service; surface exactly one question or one action.

@@ -175,8 +175,8 @@ export default function ImportPage() {
             <strong>Done.</strong> Your brain is loaded — the original VENIA data was untouched, and
             a raw archive copy is stored for safekeeping.
           </p>
-          <button className="btn btn--primary" onClick={() => navigate('/brain')}>
-            Open the Visual Brain
+          <button className="btn btn--primary" onClick={() => navigate('/')}>
+            Open the sky
           </button>
         </div>
       )}

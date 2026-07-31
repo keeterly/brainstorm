@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ACTION_REGISTRY } from './registry'
 import { classifyThought } from './actions/classify-thought'
-import { findRelated } from './actions/find-related'
-import { makeMindMap } from './actions/make-mind-map'
-import { generateRoadmap } from './actions/generate-roadmap'
 import { prioritize } from './actions/prioritize'
 
 describe('action registry', () => {
@@ -28,12 +25,6 @@ function sampleInput(name: string): never {
   const ref = { id: 'aaaa', title: 'Sample thought', type: 'idea', summary: null }
   const inputs: Record<string, unknown> = {
     classify_thought: { raw_content: 'need to email supplier by friday' },
-    summarize: { raw_content: 'a long rambling thought about the collection' },
-    clarify_question: { raw_content: 'maybe a pop-up?' },
-    find_related: { subject: ref, candidates: [{ ...ref, id: 'bbbb' }] },
-    to_goal: { raw_content: 'launch the campaign' },
-    make_mind_map: { thoughts: [ref, { ...ref, id: 'bbbb' }] },
-    generate_roadmap: { goal: ref, raw_content: 'launch the campaign' },
     prioritize: { actions: [{ id: 'aaaa', title: 'do a thing' }] },
     remember: { text: 'I prefer mornings', known: [] },
     rain: { name: 'SS27 campaign', inside: ['shoot on expired film'], known: [], already: [] },
@@ -125,59 +116,6 @@ describe('classify_thought output schema', () => {
         clarifyingQuestion: null,
       }).success,
     ).toBe(false)
-  })
-})
-
-describe('find_related output schema', () => {
-  it('rejects invalid relationship types', () => {
-    expect(
-      findRelated.outputSchema.safeParse({
-        related: [{ id: 'x', relType: 'reminds_me_of', reason: 'nope' }],
-      }).success,
-    ).toBe(false)
-  })
-})
-
-describe('make_mind_map output schema', () => {
-  it('accepts mixed id/tempId edges', () => {
-    const r = makeMindMap.outputSchema.safeParse({
-      newNodes: [{ tempId: 'n1', title: 'Theme', type: 'concept' }],
-      edges: [
-        { from: { id: 'existing-1' }, to: { tempId: 'n1', title: 'Theme', type: 'concept' }, relType: 'part_of' },
-      ],
-      insight: 'Two clusters emerged',
-    })
-    expect(r.success).toBe(true)
-  })
-  it('rejects new nodes of disallowed type', () => {
-    expect(
-      makeMindMap.outputSchema.safeParse({
-        newNodes: [{ tempId: 'n1', title: 'Theme', type: 'goal' }],
-        edges: [],
-        insight: '',
-      }).success,
-    ).toBe(false)
-  })
-})
-
-describe('generate_roadmap output schema', () => {
-  it('requires at least one phase with actions and an immediateNext', () => {
-    const good = generateRoadmap.outputSchema.safeParse({
-      title: 'Launch',
-      phases: [
-        {
-          title: 'Prep',
-          why: 'Foundation',
-          milestones: ['brief done'],
-          actions: [{ tempId: 'a1', title: 'Write brief', effort: 2, dependsOn: [] }],
-          risks: [],
-        },
-      ],
-      immediateNext: { tempId: 'a1', why: 'Unblocks everything and takes 30 minutes' },
-    })
-    expect(good.success).toBe(true)
-    const empty = generateRoadmap.outputSchema.safeParse({ title: 'x', phases: [], immediateNext: { tempId: 'a1', why: 'y' } })
-    expect(empty.success).toBe(false)
   })
 })
 

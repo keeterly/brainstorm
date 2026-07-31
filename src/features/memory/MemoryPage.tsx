@@ -304,8 +304,12 @@ export default function MemoryPage() {
                         flexShrink: 0,
                       }}
                     />
-                    <Link
-                      to={`/thought/${t.id}`}
+                    {/* text, not a link. This is a record of what is
+                        finished; the mark beside it is the way back in, which
+                        is what the line above this list says. It used to open
+                        a detail screen that no longer exists — the only place
+                        in the whole app that reached it. */}
+                    <span
                       style={{
                         // flex items refuse to shrink below their content
                         // without this, which is what pushed long titles off
@@ -321,7 +325,7 @@ export default function MemoryPage() {
                       }}
                     >
                       {t.title || t.raw_content.slice(0, 80)}
-                    </Link>
+                    </span>
                     <TypeBadge type={t.type} />
                   </div>
                 ))}

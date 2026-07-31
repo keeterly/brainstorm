@@ -4846,7 +4846,26 @@ function mountSky(root: HTMLDivElement) {
     openPage('brief', tl, W / 2, innerHeight / 2)
     return true
   }
-  const wanted = openArrivedBrief()
+  /**
+   * A link to one thought, from outside the sky.
+   *
+   * `/thought/:id` used to be a screen of its own — its own editor, its own
+   * relationship list, its own four actions, its own model of what a thought
+   * was. It is one link now, and it lands here: the drop itself, in the world,
+   * with everything the app can do to it hanging off it.
+   */
+  function openArrivedThought(): boolean {
+    if (dead || pageFor) return false
+    const want = new URLSearchParams(location.search).get('open')
+    if (!want) return false
+    history.replaceState(null, '', location.pathname)
+    const tl = view.byId.get(want)
+    if (!tl) return false
+    focusOn(posOf(want))
+    openPage('open', tl, W / 2, innerHeight / 2)
+    return true
+  }
+  const wanted = openArrivedBrief() || openArrivedThought()
   // and anything the agent finished while this page did not exist
   void collectOwed().then(() => {
     if (!wanted) openArrivedBrief()

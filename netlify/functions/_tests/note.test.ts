@@ -65,7 +65,7 @@ describe('what goes on a lock screen', () => {
 
   it('stays quiet about work nobody is waiting on', () => {
     // only the long-running background actions are worth waking a phone for
-    for (const a of ['classify_thought', 'summarize', 'organize', 'notice', 'reshape']) {
+    for (const a of ['classify_thought', 'remember', 'organize', 'notice', 'reshape']) {
       expect(runNote(a, INPUT, OUTPUT, 'r1'), a).toBeNull()
     }
   })
