@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { baseSystem, type ActionDef } from '../types'
+import { sourceList } from '../url'
 
 // Deepen — the ⚡ from the first Brainstorm, rebuilt.
 //
@@ -65,7 +66,7 @@ const Output = z.object({
     .max(10),
   // where it would trip you up
   watchOuts: z.array(z.string().max(220)).max(4),
-  sources: z.array(z.object({ title: z.string().max(180), url: z.string().max(600) })).max(10),
+  sources: sourceList(10),
   // durable facts about this person, worth remembering next time
   learned: z.array(z.string().max(200)).max(3),
   note: z.string().max(240),

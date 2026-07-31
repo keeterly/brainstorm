@@ -15,6 +15,7 @@
 // from than a blank page.
 import { z } from 'zod'
 import { baseSystem, type ActionDef } from '../types'
+import { sourceList } from '../url'
 
 const Ref = z.object({
   id: z.string().min(1).max(64),
@@ -61,9 +62,7 @@ const Output = z.object({
   blocked: z.array(z.string().max(200)).max(3),
   /** durable facts about them that came out of doing this */
   learned: z.array(z.string().max(200)).max(4),
-  sources: z
-    .array(z.object({ title: z.string().max(200), url: z.string().max(500) }))
-    .max(8),
+  sources: sourceList(8, 200, 500),
   /** true if this task is now finished and can be ticked off */
   done: z.boolean(),
 })

@@ -6,6 +6,7 @@ import { useEffect, useRef } from 'react'
 import { useGraph } from '@/store/graph'
 import { parseCapture } from '@/domain/parse-blocks'
 import { runAction } from '@/ai/client'
+import { isWebUrl } from '@shared/ai/url'
 import type { ClassifyOutput } from '@shared/ai/actions/classify-thought'
 import { nameThePool, organizeText, tidySky } from './absorbFlow'
 import { seaLineAt, waterlineY } from '@/world/water'
@@ -173,7 +174,7 @@ export function briefHtml(md: string, sources: { title: string; url: string }[])
       }
       // only ever http(s): a brief comes off the open web and a url is the one
       // thing in it that the page hands back to the operating system
-      if (!/^https?:\/\//i.test(s.url)) continue
+      if (!isWebUrl(s.url)) continue
       const name = s.title.trim()
       out.push(
         `<a class="src" href="${esc(s.url)}"><span class="t">${esc(name || host || s.url)}</span>` +

@@ -6,8 +6,15 @@
 // already open. Nobody waits a minute for a number and then wants to go and
 // find where the number was filed.
 import type { AnswerOutput } from '@shared/ai/actions/answer'
+import { isWebUrl } from '@shared/ai/url'
 
 export function Answered({ out, onDone }: { out: AnswerOutput; onDone?: () => void }) {
+  // The schema drops anything that is not a plain http(s) link, but this
+  // component is also handed answers stored months ago, before it did — and
+  // React puts `javascript:` in an href without complaint in a production
+  // build. `briefHtml` has always guarded this; the same data had two
+  // renderers and only one of them was careful. Now they share the check.
+  const sources = out.sources.filter((s) => isWebUrl(s.url))
   return (
     <div className="card" style={{ marginTop: 18, textAlign: 'left' }}>
       <p style={{ fontSize: 17, lineHeight: 1.5, fontWeight: 400 }}>{out.answer}</p>
@@ -53,9 +60,9 @@ export function Answered({ out, onDone }: { out: AnswerOutput; onDone?: () => vo
         </>
       )}
 
-      {out.sources.length > 0 && (
+      {sources.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 18 }}>
-          {out.sources.map((s, i) => (
+          {sources.map((s, i) => (
             <a
               key={i}
               className="chip"

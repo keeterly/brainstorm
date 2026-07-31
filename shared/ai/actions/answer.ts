@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { baseSystem, type ActionDef } from '../types'
+import { sourceList } from '../url'
 
 // Answer — for the things on your map that are not work, they are questions.
 //
@@ -95,7 +96,7 @@ const Output = z.object({
       }),
     )
     .max(3),
-  sources: z.array(z.object({ title: z.string().max(180), url: z.string().max(600) })).max(10),
+  sources: sourceList(10),
   /** durable facts about this person, worth remembering next time */
   learned: z.array(z.string().max(200)).max(3),
   /** whether asking this is now finished — the answer is in hand and there is
