@@ -34,7 +34,18 @@ export default function CurrentPage() {
   const ai = useAction<PrioritizeOutput>('prioritize')
   const [suggestion, setSuggestion] = useState<PrioritizeOutput | null>(null)
   const [focusId, setFocusId] = useState<string | null>(null)
-  const [showAll, setShowAll] = useState(false)
+  /*
+   * Open.
+   *
+   * The rest of the current used to sit behind a fold, and the fold sat in the
+   * middle of a screen whose lower half was empty — so the page showed you one
+   * action, two closed disclosures floating in the void, and nothing else. The
+   * one big thing is right; the emptiness under it was not. What is flowing
+   * belongs on the screen where you can glance at it, quietly, under the thing
+   * you are meant to do first. It still folds, for the days when one thing is
+   * all you want to see.
+   */
+  const [showAll, setShowAll] = useState(true)
   // Asking the one thing on this screen, when the one thing is a question.
   const [asking, setAsking] = useState<string | null>(null)
   const [askedFor, setAskedFor] = useState<{ id: string; out: AnswerOutput } | null>(null)
@@ -374,8 +385,14 @@ export default function CurrentPage() {
           {/* Counts the held ones too. A day where everything but the first
               thing is blocked is a real day, and the fold used not to open on
               it at all — you got one action and a silent page. */}
-          <button className="faint" style={{ fontSize: 'var(--fs-label)' }} onClick={() => setShowAll((s) => !s)}>
-            {showAll ? '▴ fold the current' : `▾ ${rest.length + held.length} more in the current`}
+          <button
+            className="faint"
+            style={{ fontSize: 'var(--fs-label)', letterSpacing: '0.06em' }}
+            onClick={() => setShowAll((s) => !s)}
+          >
+            {showAll
+              ? `also in the current · ${rest.length + held.length}`
+              : `▾ ${rest.length + held.length} more in the current`}
           </button>
           {showAll && (
             <div style={{ display: 'grid', gap: 6, marginTop: 14, textAlign: 'left' }}>

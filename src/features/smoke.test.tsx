@@ -48,7 +48,10 @@ function action(over: Partial<Thought> & { id: string; title: string }): Thought
 beforeEach(seedStore)
 
 describe('CurrentPage', () => {
-  it('surfaces exactly one primary action; the rest stay folded', () => {
+  it('names one thing to do first, and shows the rest of the current under it', () => {
+    // The rest used to be folded away, which left the lower half of the screen
+    // empty under a closed disclosure. One thing is still *the* thing; what is
+    // flowing sits quietly below it rather than nowhere.
     useGraph.setState({
       thoughts: [
         action({ id: 'a', title: 'Overdue thing', due_date: '2020-01-01' }),
@@ -62,9 +65,10 @@ describe('CurrentPage', () => {
     )
     expect(screen.getByText('This first')).toBeInTheDocument()
     expect(screen.getByText('Overdue thing')).toBeInTheDocument()
-    expect(screen.queryByText('Soon thing')).not.toBeInTheDocument() // folded
-    fireEvent.click(screen.getByText(/1 more in the current/))
     expect(screen.getByText('Soon thing')).toBeInTheDocument()
+    // …and it still folds away, for a day when one thing is all you want
+    fireEvent.click(screen.getByText(/also in the current/))
+    expect(screen.queryByText('Soon thing')).not.toBeInTheDocument()
   })
 
   it('Focus opens the one-drop overlay', () => {

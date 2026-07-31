@@ -1,0 +1,91 @@
+/* The first breath — see Opening.tsx.
+
+   Over everything, including the tab bar, because for its second and a half it
+   is the whole app. Under nothing: there is nothing else on screen yet. */
+.opening {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  /* the same night the sky is, so the dissolve reveals rather than switches */
+  background:
+    radial-gradient(ellipse 120% 70% at 50% 18%, rgba(var(--accent-rgb), 0.1), transparent 62%),
+    var(--bg, #0b1017);
+  opacity: 1;
+  transition: opacity 620ms cubic-bezier(0.4, 0, 0.7, 1);
+}
+.opening.leaving {
+  opacity: 0;
+}
+
+/* The grain, the same as everywhere else in this world — a little heavier
+   here, because this is the one moment with nothing else in it. */
+.opening::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.09;
+  background-size: 160px 160px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.opening-in {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 14px;
+  padding: 0 32px;
+}
+
+/* Each line arrives after the one above it. Not a flourish: three numbers
+   appearing at once is a dashboard, and three arriving in turn is somebody
+   telling you where things stand. */
+.opening-line {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  opacity: 0;
+  transform: translateY(6px);
+}
+.opening.lit .opening-line {
+  animation: opening-line 620ms cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+  animation-delay: calc(var(--i) * 130ms);
+}
+@keyframes opening-line {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.opening-line .n {
+  font-size: 34px;
+  font-weight: 300;
+  line-height: 1;
+  /* tabular, so three numbers of different widths still line up their words */
+  font-variant-numeric: tabular-nums;
+  min-width: 1.6em;
+  text-align: right;
+  color: var(--ink, #e8eef6);
+}
+.opening-line .w {
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft, #8fa3b6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opening {
+    transition-duration: 1ms;
+  }
+  .opening.lit .opening-line {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

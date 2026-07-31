@@ -8,6 +8,8 @@ import { Atmosphere, WorldHem } from '@/world/Atmosphere'
 import SkyPage from '@/features/sky/SkyPage'
 import CurrentPage from '@/features/current/CurrentPage'
 import MemoryPage from '@/features/memory/MemoryPage'
+import SettingsPage from '@/features/settings/SettingsPage'
+import Opening from '@/features/opening/Opening'
 import RunsPage from '@/features/runs/RunsPage'
 import ImportPage from '@/features/importer/ImportPage'
 
@@ -25,6 +27,9 @@ export default function App() {
       {/* the world is painted before anything asks who you are, so launching
           the app opens onto the sky rather than onto a loading state */}
       <Atmosphere />
+      {/* the half-second before the sky, saying what state your thinking is in
+          — it fades itself out, there is nothing to dismiss */}
+      <Opening />
       <AuthGate>
         <OfflineBanner />
         {/* Opacity and nothing else in here. A transform or a filter would
@@ -59,7 +64,7 @@ export default function App() {
             {/* pre-v2 paths */}
             <Route path="/brain" element={<Navigate to="/" replace />} />
             <Route path="/focus" element={<Navigate to="/current" replace />} />
-            <Route path="/settings" element={<Navigate to="/memory" replace />} />
+            <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>

@@ -1,112 +1,33 @@
-// Memory — everything the water keeps: what the app has done to your thinking,
-// the ocean of finished work, the editable facts the AI knows about you, and
-// the app's few quiet controls.
-import { useEffect, useState } from 'react'
+// Memory — what the water keeps: the editable facts the AI knows about you,
+// what it has changed its mind about, and the ocean of finished work.
+//
+// It used to also hold the app's controls: a notification card above the
+// memories, then autonomy, export, import, the account and Sign out below. All
+// of those are things you go looking for on purpose, once — and every one of
+// them was in the way of the thing you actually come here to read. They live
+// behind the ⚙ now; see features/settings.
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { supabase } from '@/lib/supabase'
 import { useGraph } from '@/store/graph'
-import { exportMarkdown } from '@/domain/export-markdown'
-import { clearSnapshot } from '@/lib/idb'
-import { clearTrail, readTrail, trailWhen } from '@/lib/trail'
-import { disable as pushOff, enable as pushOn, explain as pushWhy, readiness, subscribed } from '@/lib/push'
-import {
-  available as passkeyAvailable,
-  enroll as enrollPasskey,
-  forget as forgetPasskey,
-  isEnrolled as isPasskeyEnrolled,
-} from '@/lib/passkey'
 import { TypeBadge } from '@/components/TypeBadge'
 import { humanDate } from '@/domain/human-date'
 import { todayISO } from '@/domain/prioritize-prepass'
 import { learn, type Learned } from '@/ai/memoryFlow'
-import { Screen } from './Screen'
 import type { Memory, MemoryEvent } from '@/domain/types'
 
-// Account — set a password (this is where a reset finishes), and choose
-// whether this device opens with Face ID.
-function AccountSection() {
-  const [pw, setPw] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<string | null>(null)
-  const [face, setFace] = useState(isPasskeyEnrolled())
-  const [canFace, setCanFace] = useState(false)
-  useEffect(() => {
-    void passkeyAvailable().then(setCanFace)
-  }, [])
-  return (
-    <section style={{ marginBottom: 'var(--sp-6)' }}>
-      <h2 className="eyebrow" style={{ marginBottom: 10 }}>Account</h2>
-      <form
-        style={{ display: 'flex', gap: 8, marginBottom: 10 }}
-        onSubmit={async (e) => {
-          e.preventDefault()
-          setBusy(true)
-          setMsg(null)
-          const { error } = await supabase.auth.updateUser({ password: pw })
-          setBusy(false)
-          setMsg(error ? error.message : 'Password set.')
-          if (!error) setPw('')
-        }}
-      >
-        <input
-          type="password"
-          minLength={8}
-          required
-          placeholder="New password"
-          autoComplete="new-password"
-          value={pw}
-          onChange={(e) => setPw(e.target.value)}
-          className="field"
-          style={inputStyle}
-        />
-        <button className="btn btn--ghost" type="submit" disabled={busy || pw.length < 8}>
-          {busy ? 'Saving…' : 'Set'}
-        </button>
-      </form>
-      {canFace && (
-        <button
-          className="btn btn--ghost"
-          onClick={async () => {
-            if (face) {
-              forgetPasskey()
-              setFace(false)
-              setMsg('Face ID turned off on this device.')
-            } else {
-              const ok = await enrollPasskey('Brainstorm')
-              setFace(ok)
-              setMsg(ok ? 'Face ID will open Brainstorm on this device.' : 'Face ID setup was cancelled.')
-            }
-          }}
-        >
-          {face ? 'Turn off Face ID on this device' : 'Open with Face ID on this device'}
-        </button>
-      )}
-      {msg && (
-        <p className="muted" style={{ fontSize: 'var(--fs-label)', marginTop: 10 }} role="status">
-          {msg}
-        </p>
-      )}
-    </section>
-  )
-}
 
 export default function MemoryPage() {
-  const profile = useGraph((s) => s.profile)
   const memories = useGraph((s) => s.memories)
   const thoughts = useGraph((s) => s.thoughts)
-  const relationships = useGraph((s) => s.relationships)
-  const roadmaps = useGraph((s) => s.roadmaps)
   const offline = useGraph((s) => s.offline)
   const addMemory = useGraph((s) => s.addMemory)
   const updateMemory = useGraph((s) => s.updateMemory)
   const deleteMemory = useGraph((s) => s.deleteMemory)
-  const updateProfileSettings = useGraph((s) => s.updateProfileSettings)
   const toggleDone = useGraph((s) => s.toggleDone)
 
   const memoryEvents = useGraph((s) => s.memoryEvents)
   const [newMem, setNewMem] = useState('')
   const [distillText, setDistillText] = useState('')
-  const [spend, setSpend] = useState<number | null>(null)
   const [learning, setLearning] = useState(false)
   const [learnt, setLearnt] = useState<Learned | null>(null)
 
@@ -117,7 +38,6 @@ export default function MemoryPage() {
   const live = memories.filter((m) => !m.archived_at)
   const shelved = memories.filter((m) => m.archived_at)
 
-  const autonomy = profile?.settings.autonomy ?? 'suggest'
   const finished = thoughts
     .filter((t) => t.status === 'done')
     .sort((a, b) => ((a.completed_at ?? '') < (b.completed_at ?? '') ? 1 : -1))
@@ -133,18 +53,6 @@ export default function MemoryPage() {
     }, {}),
   )
 
-  useEffect(() => {
-    const since = new Date()
-    since.setDate(1)
-    since.setHours(0, 0, 0, 0)
-    void supabase
-      .from('agent_runs')
-      .select('cost_usd')
-      .gte('created_at', since.toISOString())
-      .then(({ data }) => {
-        if (data) setSpend(data.reduce((s, r) => s + (Number(r.cost_usd) || 0), 0))
-      })
-  }, [])
 
   async function runDistill() {
     setLearning(true)
@@ -157,26 +65,28 @@ export default function MemoryPage() {
     if (res.added || res.updated || res.archived) setDistillText('')
   }
 
-  function download() {
-    const md = exportMarkdown({ thoughts, relationships, roadmaps, memories })
-    const blob = new Blob([md], { type: 'text/markdown' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `brainstorm-export-${new Date().toISOString().slice(0, 10)}.md`
-    a.click()
-    URL.revokeObjectURL(a.href)
-  }
 
   return (
     <div className="page">
       {/* No eyebrow saying "Memory" above it: the tab you pressed to get here
           already says Memory, and labelling a room with its own name is the
           kind of thing a page does when it is not sure of itself. */}
-      <h1 className="page-title">What the water keeps</h1>
-
-      <TellMe />
-
-      <WhatItDid />
+      {/* What the water keeps, and nothing else.
+          Four sections used to bracket this one: a notification card above it,
+          then autonomy, data and the account below. All of them are things you
+          go looking for on purpose, once; this is the page you read. They are
+          behind the ⚙ now — see SettingsPage. */}
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+        <h1 className="page-title">What the water keeps</h1>
+        <Link
+          to="/settings"
+          aria-label="Settings"
+          className="btn btn--ghost"
+          style={{ textDecoration: 'none', flexShrink: 0, padding: '4px 10px' }}
+        >
+          ⚙
+        </Link>
+      </div>
 
       <section className="card" style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>Known about you</h2>
@@ -343,53 +253,6 @@ export default function MemoryPage() {
         </details>
       </section>
 
-      <section className="card" style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>How much the AI does</h2>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            className={`chip ${autonomy === 'suggest' ? 'chip--on' : ''}`}
-            onClick={() => updateProfileSettings({ autonomy: 'suggest' })}
-          >
-            Suggest only
-          </button>
-          <button
-            className={`chip ${autonomy === 'organize' ? 'chip--on' : ''}`}
-            onClick={() => updateProfileSettings({ autonomy: 'organize' })}
-          >
-            Organize automatically
-          </button>
-        </div>
-      </section>
-
-      <section className="card" style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>Data</h2>
-        <div style={{ display: 'grid', gap: 8 }}>
-          <button className="btn btn--ghost" onClick={download}>
-            ⬇ Export everything as Markdown
-          </button>
-          <Link to="/import" className="btn btn--ghost" style={{ textDecoration: 'none' }}>
-            ⇪ Import from VENIA Brainstorm
-          </Link>
-          <Link to="/runs" className="btn btn--ghost" style={{ textDecoration: 'none' }}>
-            ⚙ AI activity{' '}
-            {spend != null && <span className="mono faint">(${spend.toFixed(2)} this month)</span>}
-          </Link>
-        </div>
-        <Screen />
-      </section>
-
-      <AccountSection />
-
-      <button
-        className="btn btn--danger"
-        onClick={async () => {
-          await clearSnapshot()
-          forgetPasskey()
-          await supabase.auth.signOut()
-        }}
-      >
-        Sign out
-      </button>
     </div>
   )
 }
@@ -562,53 +425,6 @@ function ChangedItsMind({ shelved, events }: { shelved: Memory[]; events: Memory
  * Local to this device, because it is a record of what you were shown rather
  * than data about you, and it goes when you clear it.
  */
-function WhatItDid() {
-  const [trail, setTrail] = useState(() => readTrail())
-  if (!trail.length) return null
-  return (
-    <section className="card" style={{ marginBottom: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-        <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>What it did</h2>
-        <button
-          className="btn btn--ghost"
-          style={{ fontSize: 'var(--fs-label)', padding: '2px 8px' }}
-          onClick={() => {
-            clearTrail()
-            setTrail([])
-          }}
-        >
-          Clear
-        </button>
-      </div>
-      <p className="muted" style={{ fontSize: 'var(--fs-label)', marginBottom: 10 }}>
-        Changes it made to your sky, on this device.
-      </p>
-      <div style={{ display: 'grid', gap: 2 }}>
-        {trail.map((e, i) => (
-          <div
-            key={`${e.at}-${i}`}
-            style={{
-              display: 'flex',
-              alignItems: 'baseline',
-              justifyContent: 'space-between',
-              gap: 12,
-              padding: '7px 0',
-              borderTop: i ? '0.5px solid var(--line)' : 'none',
-            }}
-          >
-            <span style={{ fontSize: 'var(--fs-sm)', minWidth: 0 }}>
-              {e.what}
-              {e.subject ? <span className="muted"> · {e.subject}</span> : null}
-            </span>
-            <span className="muted" style={{ fontSize: 'var(--fs-label)', whiteSpace: 'nowrap' }}>
-              {trailWhen(e.at)}
-            </span>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
 
 /**
  * Being told when the agent finishes.
@@ -617,52 +433,3 @@ function WhatItDid() {
  * whether it can reach you. Off by default and never asked for in passing —
  * a permission prompt you did not go looking for is one you say no to.
  */
-function TellMe() {
-  const [on, setOn] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [why, setWhy] = useState('')
-  const ready = readiness()
-
-  useEffect(() => {
-    void subscribed().then(setOn)
-  }, [])
-
-  async function toggle() {
-    setBusy(true)
-    setWhy('')
-    if (on) {
-      await pushOff()
-      setOn(false)
-    } else {
-      const res = await pushOn()
-      if (res.ok) setOn(true)
-      else setWhy(res.why)
-    }
-    setBusy(false)
-  }
-
-  return (
-    <section className="card" style={{ marginBottom: 16 }}>
-      <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>Tell me when it lands</h2>
-      <p className="muted" style={{ fontSize: 'var(--fs-label)', marginBottom: 10 }}>
-        ⚡ already runs on the server, so it keeps going with your phone locked. Turn this on and it
-        will say so when it comes back, instead of waiting for you to look.
-      </p>
-      {ready.can ? (
-        <button className="btn" onClick={toggle} disabled={busy}>
-          {busy ? '…' : on ? 'Stop telling me' : 'Tell me on this device'}
-        </button>
-      ) : (
-        <p className="muted" style={{ fontSize: 'var(--fs-label)' }}>{pushWhy(ready)}</p>
-      )}
-      {on && !busy ? (
-        <p className="muted" style={{ fontSize: 'var(--fs-label)', marginTop: 8 }}>
-          On for this device. Each device you want telling you has to be turned on where it is.
-        </p>
-      ) : null}
-      {why ? (
-        <p style={{ fontSize: 'var(--fs-label)', marginTop: 8, color: 'var(--warn, #e0a05a)' }}>{why}</p>
-      ) : null}
-    </section>
-  )
-}
