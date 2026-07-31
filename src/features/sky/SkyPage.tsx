@@ -585,17 +585,26 @@ function mountSky(root: HTMLDivElement) {
     if (near === seaNear) return
     seaNear = near
     const line = waterlineY()
-    tide.style.top = line - 120 + 'px'
-    tide.style.height = 260 + 'px'
+    // Above the water only.
+    //
+    // It used to run 140px past the waterline as well, and once the fill was
+    // strong enough to see the part below the line stopped reading as water
+    // reaching up and started reading as a grey slab laid over the bottom of
+    // the screen. The sea below the line is already dark; it needs no help.
+    tide.style.top = line - 190 + 'px'
+    tide.style.height = 200 + 'px'
     // Cooler and heavier than the updraft, because this is no longer where
     // good things go. Not alarming — letting an idea go is ordinary and often
     // right — but plainly a different act from finishing one, and strong
     // enough to be seen: the old one was fifteen per cent grey on a navy sky,
     // which is to say invisible on the phone it was drawn for.
     tide.style.background =
-      `linear-gradient(rgba(150, 162, 182, 0) 0%, rgba(150, 162, 182, ${(0.3 * near).toFixed(3)}) 38%,` +
-      ` rgba(176, 188, 206, ${(0.5 * near).toFixed(3)}) 46%, rgba(38, 46, 60, ${(0.66 * near).toFixed(3)}) 60%,` +
-      ` rgba(22, 28, 38, ${(0.78 * near).toFixed(3)}) 100%)`
+      // The bright part sits *on* the line, not a hundred points above it. The
+      // glow is what the eye reads as the edge, so putting it anywhere else
+      // means the thing you are aiming at and the thing you can see are in two
+      // different places.
+      `linear-gradient(rgba(150, 162, 182, 0) 0%, rgba(150, 162, 182, ${(0.07 * near).toFixed(3)}) 55%,` +
+      ` rgba(168, 180, 200, ${(0.16 * near).toFixed(3)}) 84%, rgba(196, 208, 226, ${(0.34 * near).toFixed(3)}) 100%)`
     tide.style.setProperty('--edge', (0.25 + 0.75 * near).toFixed(3))
     tide.classList.toggle('on', near > 0.02)
     tide.classList.toggle('ready', ready)
@@ -5107,6 +5116,16 @@ function mountSky(root: HTMLDivElement) {
       for (const tl of view.tls) {
         const p = posOf(tl.t.id)
         coast(p)
+        // Not the one under your finger.
+        //
+        // The world has edges and everything inside it is held away from them
+        // — which is right for a sky that settles, and exactly wrong for the
+        // two gestures whose whole purpose is to carry something *out*. The
+        // ceiling sits at the drop's own radius in world space, and once the
+        // camera has moved (framing an open pool, say) that lands well below
+        // the finishing line on the glass: you drag up, the drop stops dead
+        // short of a line it can never reach, and the app looks broken.
+        if (drag?.id === tl.t.id) continue
         const r = radiusOf(tl)
         p.x = Math.max(r + 8, Math.min(worldW() - r - 8, p.x))
         p.y = Math.max(r + 8, Math.min(worldH() - r - 8, p.y))
@@ -5227,8 +5246,13 @@ function mountSky(root: HTMLDivElement) {
             const sh = shapes.get(m.id)
             const hx = sh ? sh.hw : memberRadiusOf(m.id, n)
             const hy = sh ? sh.hh : memberRadiusOf(m.id, n)
-            if (worldW() > hx * 2) mp.x = Math.max(hx, Math.min(worldW() - hx, mp.x))
-            if (worldH() > hy * 2) mp.y = Math.max(hy, Math.min(worldH() - hy, mp.y))
+            // …and the same exemption. Most drops live inside a group, so a
+            // member that cannot leave the world is a member that can never be
+            // finished or let go — which is to say most of them.
+            if (drag?.id !== m.id) {
+              if (worldW() > hx * 2) mp.x = Math.max(hx, Math.min(worldW() - hx, mp.x))
+              if (worldH() > hy * 2) mp.y = Math.max(hy, Math.min(worldH() - hy, mp.y))
+            }
           }
         }
         // Now let the shapes settle against each other. A ring is only a

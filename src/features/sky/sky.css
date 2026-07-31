@@ -535,6 +535,15 @@ body.sky-offering .sky-voice { bottom: calc(var(--water-line-up, 86px) + 106px);
   transition: transform 460ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 320ms;
 }
 .sky-undo.show { transform: translateX(-50%) translateY(0); opacity: 1; pointer-events: auto; }
+/* …but not while something is being carried. An offer to reverse the *last*
+   thing you did is not what you need while deciding the next one, and it sits
+   exactly where "let it go" has to be. Hidden, not cancelled: let go anywhere
+   but an edge and it is still there, still counting down. */
+body.sky-dragging .sky-undo.show {
+  transform: translateX(-50%) translateY(70px);
+  opacity: 0;
+  pointer-events: none;
+}
 /* The verb is the point — done, taken out, put away all end the sentence, and
    clipping from the right is exactly where it lands. Room first, and a shorter
    name in the note, so what happened survives. */
@@ -1285,7 +1294,7 @@ body.sky-resting .sky-tidy { right: calc(14px + var(--rest-w, 96px) + 8px); }
   transition: border-color 180ms ease, left 220ms ease, right 220ms ease;
 }
 .sky-updraft .edge-line { bottom: 0; }
-.sky-tide .edge-line { top: 120px; }
+.sky-tide .edge-line { top: 190px; }
 .sky-updraft.ready .edge-line,
 .sky-tide.ready .edge-line {
   left: 3%;
@@ -1355,6 +1364,9 @@ body.sky-resting .sky-tidy { right: calc(14px + var(--rest-w, 96px) + 8px); }
   font-weight: 650;
 }
 .skyb.rising { border-color: rgba(var(--accent-rgb), 0.9); box-shadow: 0 0 26px rgba(var(--accent-rgb), 0.4); }
+/* the thing in your hand is the subject — it goes in front of the label that
+   is describing what will happen to it, not behind it */
+.skyb.dragging { z-index: 9; }
 
 @media (prefers-reduced-motion: reduce) {
   .sky-ghost, .sky-join, .sky-tide, .sky-sea-word,
