@@ -45,6 +45,29 @@ self.addEventListener('message', (e) => {
   if ((e.data as { type?: string })?.type === 'SKIP_WAITING') void self.skipWaiting()
 })
 
+/**
+ * The browser changed this device's push address.
+ *
+ * Browsers rotate an endpoint whenever they like — a push service migration, a
+ * long silence, an OS update — and nothing listened for it. The row on the
+ * server keeps the dead address, every send to it fails, and the settings
+ * screen goes on saying notifications are on because it was asking the local
+ * PushManager rather than the server.
+ *
+ * The worker cannot write the new row itself: it has no Supabase session, and
+ * that write goes out as the user under RLS. So it tells whichever page is
+ * open, and `push.ts` does it. If no page is open, the next launch does —
+ * `subscribed()` now reconciles against the row.
+ */
+self.addEventListener('pushsubscriptionchange', (event) => {
+  const e = event as ExtendableEvent
+  e.waitUntil(
+    self.clients.matchAll({ includeUncontrolled: true, type: 'window' }).then((cs) => {
+      for (const c of cs) c.postMessage({ type: 'PUSH_RESUBSCRIBE' })
+    }),
+  )
+})
+
 // ---------- being told something finished ----------
 interface Payload {
   title?: string

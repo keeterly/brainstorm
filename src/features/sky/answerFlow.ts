@@ -65,7 +65,7 @@ export async function answerThought(
         image: opts.image,
       },
       // a question whose answer needs nothing looked up comes back in seconds
-      opts.sizing ? { searches: opts.sizing.searches, background: !opts.sizing.quick } : {},
+      opts.sizing ? { searches: opts.sizing.searches } : {},
     )
     return applyAnswer(subjectId, output, runId)
   } catch (e) {

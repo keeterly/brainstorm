@@ -117,8 +117,17 @@ export function mapLegacy(
     ...over,
   })
 
+  // Every edge already drawn, so the same one is not drawn twice. There is a
+  // unique index on (from_id, to_id, type) and nothing here respected it: two
+  // paths through a dump that both connect the same pair — a child listed
+  // under a goal *and* carrying that goal as its parentId — produced two rows,
+  // and the second one aborted the whole import with a 23505 partway through.
+  const drawn = new Set<string>()
   const edge = (fromId: string, toId: string, type: Relationship['type']) => {
     if (fromId === toId) return
+    const key = `${fromId}|${toId}|${type}`
+    if (drawn.has(key)) return
+    drawn.add(key)
     relationships.push({
       id: newId(),
       user_id: userId,
@@ -289,5 +298,17 @@ export function mapLegacy(
     counts.memories++
   }
 
-  return { thoughts, relationships, layouts, memories, artifacts, counts }
+  // Nothing hanging off a thought that never arrived.
+  //
+  // `mapId` mints a new uuid for any old id it is given, whether or not that
+  // id ever becomes a thought — so a dump item whose `parentId` points at
+  // something that was skipped (no text, filtered out, simply absent) produced
+  // an edge to a row that does not exist. Postgres refuses it with a foreign
+  // key violation, and the import aborts with the thoughts already written and
+  // the relationships half in. One missing parent should cost one edge.
+  const real = new Set(thoughts.map((t) => t.id))
+  const kept = relationships.filter((r) => real.has(r.from_id) && real.has(r.to_id))
+  counts.edges = kept.length
+
+  return { thoughts, relationships: kept, layouts, memories, artifacts, counts }
 }

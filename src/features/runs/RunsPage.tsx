@@ -12,9 +12,15 @@ const STATUS_COLOR: Record<AgentRun['status'], string> = {
 export default function RunsPage() {
   const [runs, setRuns] = useState<AgentRun[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // an error with no way past it is a dead end; every other AI surface in the
+  // app offers the retry, and this one printed the message in the faintest
+  // class it has and left you there
+  const [tries, setTries] = useState(0)
 
   useEffect(() => {
     let live = true
+    setError(null)
+    setRuns(null)
     // Somewhere to stop. A query that never answers — no signal, no account,
     // a deployment without a database behind it — used to leave a placeholder
     // shimmering on the screen for as long as you cared to look at it.
@@ -36,12 +42,19 @@ export default function RunsPage() {
       live = false
       clearTimeout(giveUp)
     }
-  }, [])
+  }, [tries])
 
   return (
     <div className="page">
       <h1 className="page-title">AI activity</h1>
-      {error && <p className="faint">{error}</p>}
+      {error && (
+        <p className="muted" style={{ fontSize: 'var(--fs-label)' }} role="status">
+          {error}{' '}
+          <button className="btn btn--ghost btn--sm" onClick={() => setTries((n) => n + 1)}>
+            try again
+          </button>
+        </p>
+      )}
       {!runs && !error && <div className="skeleton" style={{ height: 200 }} />}
       {runs && runs.length === 0 && <p className="faint">No AI runs yet.</p>}
       <div style={{ display: 'grid', gap: 8 }}>

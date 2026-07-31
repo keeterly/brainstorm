@@ -62,14 +62,20 @@ export interface RunOptions {
    *  less. */
   searches?: number
   /**
-   * Override the route for this one run.
+   * Ask for the long route on a run that would not otherwise take it.
    *
-   * ⚡ is a background job because research does not fit inside a request. But
-   * "research" is a property of the question, not of the button: an ask that
-   * turns out to need nothing looked up is an ordinary model call that lands in
-   * seconds, and sending it the long way round costs a spare Netlify
-   * invocation and several seconds of polling for an answer that was already
-   * ready. So when the caller knows, it says.
+   * It can only ever add. It used to be able to take one away, and that was
+   * wrong in a way that cost whole runs: `deepen`, `answer` and `draft` all
+   * pass `background: !sizing.quick`, so a `gauge` reading of "nothing to look
+   * up" sent a nine-thousand-token Sonnet call to a ten-second wall. It is
+   * killed there, and the `agent_runs` row it had already opened stays at
+   * `running` for ever — shown as running, counted against the daily cap,
+   * re-polled on every load.
+   *
+   * `background: true` on the action means the work does not fit inside a
+   * request. That is a fact about the work, not a preference of the caller's,
+   * and no amount of the question being easy makes nine thousand tokens
+   * arrive in ten seconds.
    */
   background?: boolean
 }
@@ -138,7 +144,7 @@ export async function runAction<O = unknown>(
     return { runId: null, output: DEMO_OUTPUT[action] as O }
   }
   const auth = await authHeader()
-  const long = opts.background ?? !!ACTION_REGISTRY[action]?.background
+  const long = !!ACTION_REGISTRY[action]?.background || opts.background === true
   if (long) return runInBackground<O>(action, input, auth, opts)
   const res = await fetch('/api/ai', {
     method: 'POST',

@@ -1,6 +1,17 @@
 // Model-provider isolation. The rest of the engine talks to LLMProvider only,
 // so swapping vendors means one new implementation of this interface.
 import { zodToJsonSchema } from 'zod-to-json-schema'
+
+/**
+ * The longest a single upstream call may hang.
+ *
+ * Chosen against the background function's fifteen-minute ceiling rather than
+ * against how long a good answer takes: the point is to leave the function
+ * enough life to record the failure, not to cut a slow answer short. The
+ * slowest real run in this app — a deep `deepen` with four searches — is well
+ * under two minutes.
+ */
+const UPSTREAM_TIMEOUT_MS = 8 * 60 * 1000
 import type { z } from 'zod'
 
 export interface Usage {
@@ -162,15 +173,35 @@ export class AnthropicProvider implements LLMProvider {
   }
 
   private async post(body: unknown): Promise<Response> {
-    const r = await fetch(ANTHROPIC_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': this.apiKey,
-        'anthropic-version': ANTHROPIC_VERSION,
-      },
-      body: JSON.stringify(body),
-    })
+    // Nothing bounded this. A connection to Anthropic that opens and then
+    // stops saying anything is a spinner with no exit: the sync function is
+    // killed at the wall and leaves its `agent_runs` row at `running` for ever,
+    // and the background one holds an invocation for fifteen minutes doing
+    // nothing. This is well inside the background wall on purpose, so the
+    // function is still alive to write down that it failed.
+    let r: Response
+    try {
+      r = await fetch(ANTHROPIC_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.apiKey,
+          'anthropic-version': ANTHROPIC_VERSION,
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+      })
+    } catch (e) {
+      const err = new Error(
+        (e as Error)?.name === 'TimeoutError' || (e as Error)?.name === 'AbortError'
+          ? 'The model stopped answering partway through.'
+          : ((e as Error)?.message ?? 'Could not reach the model.'),
+      ) as Error & { status?: number }
+      // a stalled upstream is exactly the shape of a 504, and the transport
+      // retry above already knows what to do with one
+      err.status = 504
+      throw err
+    }
     if (!r.ok) {
       let msg = `HTTP ${r.status}`
       try {

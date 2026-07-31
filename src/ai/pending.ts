@@ -137,6 +137,22 @@ export async function awaitRun(
     // the row's own words are for the record; this is what a person is told
     return { ok: false, why: whyItFailed(data.status as string, (data.error as string) ?? null) }
   }
+  // Fifteen minutes on and still `running` is a crash, not a job: the function
+  // was killed at the wall, or the connection to the model stalled and took
+  // the invocation with it. The row used to sit there for ever — shown as
+  // running, counted against the daily cap, re-polled on every single load —
+  // because the only thing that could have written to it is the thing that
+  // died. So the page says what happened instead.
+  void write({
+    table: 'agent_runs',
+    op: 'update',
+    pk: { id: runId },
+    payload: {
+      status: 'failed',
+      error: 'It never came back — the run was cut off before it finished.',
+      finished_at: new Date().toISOString(),
+    },
+  })
   return { ok: false, why: 'it never came back' }
 }
 

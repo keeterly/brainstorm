@@ -63,6 +63,20 @@ export default function ImportPage() {
           if (error) throw new Error(`${table}: ${error.message}`)
         }
       }
+      // The archive first, not last.
+      //
+      // It was written after everything else, so a run that failed partway
+      // through left a half-imported graph *and* no record that an import had
+      // been attempted — which disarms the "you have already imported this"
+      // warning at exactly the moment it matters, and the second attempt
+      // duplicates whatever the first one managed to write. Recording the
+      // intent before acting on it is the wrong order for undo and the right
+      // order for not doing something twice.
+      setProgress('archiving original blob')
+      const { error: archErr } = await supabase
+        .from('import_archives')
+        .insert({ user_id: userId, blob: blob as Record<string, unknown> })
+      if (archErr) throw new Error(`archive: ${archErr.message}`)
       await chunk('thoughts', mapped.thoughts)
       await chunk('relationships', mapped.relationships)
       if (mapped.memories.length) await chunk('memories', mapped.memories)
@@ -72,11 +86,6 @@ export default function ImportPage() {
           .from('layouts')
           .upsert({ user_id: userId, scope: l.scope, positions: l.positions, updated_at: new Date().toISOString() })
       }
-      setProgress('archiving original blob')
-      const { error: archErr } = await supabase
-        .from('import_archives')
-        .insert({ user_id: userId, blob: blob as Record<string, unknown> })
-      if (archErr) throw new Error(`archive: ${archErr.message}`)
       await hydrate(userId)
       setStep('done')
     } catch (e) {

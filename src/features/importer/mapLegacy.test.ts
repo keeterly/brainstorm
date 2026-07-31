@@ -99,3 +99,36 @@ function idFactory() {
   let i = 0
   return () => `00000000-0000-4000-8000-${String(i++).padStart(12, '0')}`
 }
+
+describe('what the importer refuses to write', () => {
+  it('draws each connection once, however many ways the dump implies it', () => {
+    // There is a unique index on (from_id, to_id, type). A child listed under
+    // a goal *and* carrying that goal as its parentId produced two identical
+    // rows, and the second aborted the whole import partway through.
+    const out = mapLegacy(
+      {
+        dump: [
+          { id: 'g1', t: 'SS27 campaign', children: [{ id: 'c1', t: 'Shoot the roll', parentId: 'g1' }] },
+          { id: 'c1', t: 'Shoot the roll', parentId: 'g1' },
+        ],
+      },
+      'u1',
+      idFactory(),
+    )
+    const pairs = out.relationships.map((r) => `${r.from_id}|${r.to_id}|${r.type}`)
+    expect(pairs.length).toBeGreaterThan(0)
+    expect(new Set(pairs).size).toBe(pairs.length)
+  })
+
+  it('drops an edge to a parent that never became a thought', () => {
+    // `mapId` mints a uuid for any old id it is handed, whether or not that id
+    // ever becomes a row. An edge to one is a foreign key violation, and it
+    // used to abort the import with the thoughts already written and the
+    // relationships half in.
+    const out = mapLegacy({ dump: [{ id: 'a1', t: 'A loose thought', parentId: 'ghost' }] }, 'u1', idFactory())
+    expect(out.thoughts).toHaveLength(1)
+    // the thought survives; only the edge to the parent that is not there goes
+    expect(out.relationships).toHaveLength(0)
+    expect(out.counts.edges).toBe(0)
+  })
+})

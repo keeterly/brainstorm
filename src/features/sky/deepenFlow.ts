@@ -53,7 +53,7 @@ export async function deepenThought(
       // Nothing to look up is an ordinary call: it lands in seconds, and going
       // the long way round would spend a background invocation and several
       // seconds of polling on an answer that was already sitting there.
-      opts.sizing ? { searches: opts.sizing.searches, background: !opts.sizing.quick } : {},
+      opts.sizing ? { searches: opts.sizing.searches } : {},
     )
 
     return applyDeepen(subjectId, output, runId)

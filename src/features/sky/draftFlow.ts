@@ -78,7 +78,7 @@ export async function draftThought(
         found: found ? found.slice(0, 4000) : undefined,
         intent: opts.intent?.trim() || undefined,
       },
-      opts.sizing ? { searches: opts.sizing.searches, background: !opts.sizing.quick } : {},
+      opts.sizing ? { searches: opts.sizing.searches } : {},
     )
     return applyDraft(subjectId, output, runId)
   } catch (e) {

@@ -41,6 +41,9 @@ export interface RunOutcome {
   stopReason?: string
   /** What was clipped to make it fit, if anything. */
   trimmed?: string[]
+  /** How many times it went out to the web — the part of the bill that was
+   *  not being counted at all. */
+  searches: number
   /** How long each phase took, so "it feels slow" can be a number. */
   timings: Record<string, number>
   /** Kept only when it failed: what came back, and what Zod said about it. */
@@ -81,7 +84,12 @@ export async function runToValidated(req: RunRequest): Promise<RunOutcome> {
       const status = (e as { status?: number }).status
       if (status === 429 || (status && status >= 500)) {
         await new Promise((res) => setTimeout(res, 1500))
-        return call(false)
+        // With the images. It used to retry without them, which turns a rate
+        // limit into a wrong answer: the model describes a picture it cannot
+        // see, the output validates, and it is written into the graph as
+        // correct. A failed run you can retry; a confident answer about a
+        // photograph nobody showed it is not recoverable by anything.
+        return call(true)
       }
       throw e
     }
@@ -111,8 +119,15 @@ export async function runToValidated(req: RunRequest): Promise<RunOutcome> {
   let { parsed, trimmed } = validate(result.json)
   let totalIn = result.usage.inputTokens
   let totalOut = result.usage.outputTokens
+  let searches = result.searched?.length ?? 0
 
-  if (!parsed.success) {
+  // A repair retry after `max_tokens` is the one case where asking again is
+  // worse than not. The output failed because it ran out of room, and the
+  // repair prompt is the original *plus* its own truncated output *plus* the
+  // validation errors — a longer ask against the same ceiling. It fails the
+  // same way, for twice the tokens and twice the wait.
+  const truncated = result.stopReason === 'max_tokens'
+  if (!parsed.success && !truncated) {
     // Repair retry: show the model its own output and the validation errors.
     const repair =
       `\n\nYour previous attempt produced output that failed validation.\n` +
@@ -124,6 +139,7 @@ export async function runToValidated(req: RunRequest): Promise<RunOutcome> {
     timings.repair_ms = Date.now() - t1
     totalIn += result.usage.inputTokens
     totalOut += result.usage.outputTokens
+    searches += result.searched?.length ?? 0
     ;({ parsed, trimmed } = validate(result.json))
   }
 
@@ -134,6 +150,7 @@ export async function runToValidated(req: RunRequest): Promise<RunOutcome> {
     model: result.model,
     stopReason: result.stopReason,
     trimmed,
+    searches,
     timings,
     raw: parsed.success ? undefined : result.json,
   }
@@ -172,7 +189,7 @@ export async function recordOutcome(req: RunRequest, out: RunOutcome): Promise<v
     error: out.parsed.success ? undefined : failureReason(out),
     input_tokens: out.totalIn,
     output_tokens: out.totalOut,
-    cost_usd: costUSD(model, out.totalIn, out.totalOut),
+    cost_usd: costUSD(model, out.totalIn, out.totalOut, out.searches),
     latency_ms: Date.now() - req.startedAt,
     timings: {
       ...out.timings,

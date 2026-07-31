@@ -20,8 +20,7 @@ import { corsHeaders, originAllowed } from './_lib/guard'
 import { verifyUser } from './_lib/auth'
 import { recordFailure, recordOutcome, runToValidated, type RunRequest } from './_lib/engine'
 import { insertRun, runsToday } from './_lib/runs'
-
-const DAILY_RUN_CAP = 400
+import { DAILY_RUN_CAP } from '../../shared/ai/pricing'
 
 const BodySchema = z.object({
   action: z.string(),

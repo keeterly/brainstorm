@@ -82,6 +82,14 @@ export function keepFresh(): void {
     go()
   })
 
+  // …and the other thing the worker cannot do for itself. It has no Supabase
+  // session, so when the browser rotates this device's push address it asks
+  // whichever page is open to write the new row. See src/sw.ts.
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if ((e.data as { type?: string })?.type !== 'PUSH_RESUBSCRIBE') return
+    void import('./push').then((m) => m.refresh())
+  })
+
   const start = async () => {
     try {
       const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' })

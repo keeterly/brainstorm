@@ -44,8 +44,17 @@ No CRDT, no realtime channels — one user on a few devices does not need them y
 - Transport: one retry on 429/5xx. Actions that cannot finish inside a request (`deepen`,
   `answer`, `draft`) are marked `background: true` and run in a background function; the page
   names the run and watches the `agent_runs` row for it.
+- Every upstream call is bounded by an `AbortSignal` well inside the background function's
+  wall, so a stalled connection surfaces as a failed run rather than a spinner with no exit.
+- The transport retry keeps the images. Dropping them turned a rate limit into a confident
+  answer about a picture the model could not see, which validates and is written as correct.
+- The schema-repair retry is skipped after `max_tokens`: re-asking with a *longer* prompt
+  against the same ceiling fails the same way for twice the tokens.
 - Every run inserts an `agent_runs` row (running → succeeded/failed/invalid_output) with
-  token counts and cost from `shared/ai/pricing.ts`. A daily per-user cap guards spend.
+  token counts, search count, and cost from `shared/ai/pricing.ts` — which prices searching,
+  the part of the bill that dominates a deep run and was not being counted at all. A daily
+  per-user cap (`DAILY_RUN_CAP`, one definition) guards spend. A run that never comes back is
+  marked failed by the page watching it, rather than sitting at `running` for ever.
 - The provider is isolated behind `LLMProvider` (`netlify/functions/_lib/provider.ts`);
   swapping vendors means one new class.
 

@@ -11,11 +11,10 @@ import { corsHeaders, originAllowed } from './_lib/guard'
 import { verifyUser } from './_lib/auth'
 import { actionFor, recordFailure, recordOutcome, runToValidated, type RunRequest } from './_lib/engine'
 import { insertRun, runsToday } from './_lib/runs'
+import { DAILY_RUN_CAP } from '../../shared/ai/pricing'
 import { MODEL_FOR_TIER } from '../../shared/ai/pricing'
 import { notifyUser } from './_lib/notify'
 import { runNote } from './_lib/note'
-
-const DAILY_RUN_CAP = 400
 
 const BodySchema = z.object({
   action: z.string(),
