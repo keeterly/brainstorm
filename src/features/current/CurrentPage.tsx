@@ -17,6 +17,8 @@ import { answerThought } from '@/features/sky/answerFlow'
 import { draftMarkdown, draftThought } from '@/features/sky/draftFlow'
 import { fullDepth, sizeUp, waitingWord, type Sizing } from '@/features/sky/gaugeFlow'
 import type { AnswerOutput } from '@shared/ai/actions/answer'
+import { emptiedGroup } from '@/domain/finished'
+import { closeGoal, evaporateGoal } from '@/features/sky/finishFlow'
 import type { Thought } from '@/domain/types'
 
 export default function CurrentPage() {
@@ -134,7 +136,15 @@ export default function CurrentPage() {
     toggleDone(t.id)
     evaporateAt()
     if (rec?.id === t.id) updateProfileSettings({ recommended_action: null })
+    // Ticking the last thing under a goal is the commonest way a goal actually
+    // gets finished, and this screen is where most ticking happens. It used to
+    // leave the goal open with nothing in it — an orphan drop in the sky, and
+    // no moment anywhere in the app where you had completed something.
+    const emptied = emptiedGroup(t.id, useGraph.getState().thoughts, relationships)
+    if (emptied) setFinished(emptied)
   }
+  const [finished, setFinished] = useState<Thought | null>(null)
+  const [rose, setRose] = useState<{ title: string; why: string } | null>(null)
 
   // Half of what a real map holds is not work — it is things you need to know.
   // "Pull live LAX→CDG fares, Sept 28 out" is a question with a number for an
@@ -472,6 +482,61 @@ export default function CurrentPage() {
         <p className="faint" style={{ fontSize: 'var(--fs-caption)', textAlign: 'center', marginTop: 'var(--sp-5)' }}>
           {aside} set aside for later
         </p>
+      )}
+
+      {/* The goal that just ran out of work. Offered, never done for you: "that
+          whole thing is finished" is a claim about your work and the agent does
+          not get to make it. */}
+      {finished && (
+        <div className="card" style={{ marginTop: 'var(--sp-5)', textAlign: 'left' }}>
+          <p style={{ fontSize: 'var(--fs-label)' }}>
+            Nothing left in <strong style={{ fontWeight: 560 }}>{finished.title || finished.raw_content.slice(0, 60)}</strong>.
+          </p>
+          <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+            <button
+              className="btn btn--primary btn--sm"
+              onClick={() => {
+                const goal = finished
+                setFinished(null)
+                if (!closeGoal(goal.id)) return
+                if (offline) return
+                // and what finishing it put in the air — usually nothing
+                void evaporateGoal(goal.id).then((r) => {
+                  if (r.kind === 'rose') setRose({ title: r.thought.title || r.thought.raw_content, why: r.why })
+                })
+              }}
+            >
+              Finish it
+            </button>
+            <button className="btn btn--ghost btn--sm" onClick={() => setFinished(null)}>
+              Not yet
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* the seventh stage of the cycle, which was a puff of CSS until now */}
+      {rose && (
+        <div className="card" style={{ marginTop: 'var(--sp-5)', textAlign: 'left' }}>
+          <div className="eyebrow" style={{ marginBottom: 8 }}>
+            That put something in the air
+          </div>
+          <p style={{ fontSize: 17, lineHeight: 1.4 }}>{rose.title}</p>
+          {rose.why && (
+            <p className="muted" style={{ fontSize: 'var(--fs-label)', marginTop: 6 }}>
+              {rose.why}
+            </p>
+          )}
+          <p className="faint" style={{ fontSize: 'var(--fs-caption)', marginTop: 10 }}>
+            It’s in the sky.{' '}
+            <button
+              onClick={() => setRose(null)}
+              style={{ background: 'none', border: 0, padding: 0, font: 'inherit', color: 'inherit', textDecoration: 'underline', cursor: 'pointer' }}
+            >
+              dismiss
+            </button>
+          </p>
+        </div>
       )}
 
       {/* the read on you sits under the one thing to do, never above it */}

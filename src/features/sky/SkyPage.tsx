@@ -10,6 +10,7 @@ import { isWebUrl } from '@shared/ai/url'
 import type { ClassifyOutput } from '@shared/ai/actions/classify-thought'
 import { nameThePool, organizeText, tidySky } from './absorbFlow'
 import { seaLineAt, waterlineY } from '@/world/water'
+import { evaporateAt } from '@/world/Atmosphere'
 import { KIN_EVIDENCE, KIN_POOL, KIN_THREAD, type Kinship, kinship } from '@/domain/kinship'
 import { humanDate } from '@/domain/human-date'
 import { nextAction } from '@/domain/next-action'
@@ -18,6 +19,8 @@ import { applyDeepen, deepenThought } from './deepenFlow'
 import { applyAnswer, answerThought } from './answerFlow'
 import { applyDraft, draftThought } from './draftFlow'
 import { rainThought } from './rainFlow'
+import { closeGoal, evaporateGoal } from './finishFlow'
+import { emptiedGroup } from '@/domain/finished'
 import { fullDepth, sizeUp, waitingWord, type Sizing } from './gaugeFlow'
 import { isMakeable, isQuestion } from '@/domain/question'
 import { addTo, bin, complete, groupInto, membersOf, rename, takeOut, ungroup, type Undone } from './groupFlow'
@@ -1523,16 +1526,7 @@ function mountSky(root: HTMLDivElement) {
   function completeDrop(t: Thought) {
     const el = els.get(t.id)
     const p = posOf(t.id)
-    const poolId = view.tls.find((tl) => tl.kind === 'pool' && tl.members.some((m) => m.id === t.id))?.t.id
     S().updateThought(t.id, { status: 'done', completed_at: new Date().toISOString() })
-    let poolDone = false
-    if (poolId) {
-      const remaining = view.byId.get(poolId)?.members.filter((m) => m.id !== t.id).length ?? 0
-      if (remaining === 0) {
-        S().updateThought(poolId, { status: 'done', completed_at: new Date().toISOString() })
-        poolDone = true
-      }
-    }
     if (el) {
       els.delete(t.id)
       const r = el.clientWidth / 2 || 40
@@ -1549,11 +1543,79 @@ function mountSky(root: HTMLDivElement) {
     }
     setTimeout(() => splash(p.rx * cam.k + cam.x), reduced ? 0 : 420)
     haptics.sink()
-    say(poolDone ? 'returned to the ocean — the pool with it' : 'returned to the ocean')
+    say('returned to the ocean')
     offerUndo(`“${trim(label(t), 26)}” returned to the ocean`, () => {
       S().updateThought(t.id, { status: 'open', completed_at: null })
-      if (poolDone && poolId) S().updateThought(poolId, { status: 'open', completed_at: null })
       say('back from the ocean')
+    })
+    finishedIt(t.id)
+  }
+
+  /**
+   * The goal that just ran out of work, and the question that follows.
+   *
+   * The sky draws only what is open, so ticking the last action under a cloud
+   * made its members vanish — correctly — and left the goal open with zero
+   * members, which stops being a pool and is redrawn as an orphan drop. A thing
+   * you had completed, sitting in the sky looking exactly like a thought nobody
+   * had touched. Nothing marked it finished, nothing sank, and the app never
+   * once said you had completed anything.
+   *
+   * It closes the goal only if you say so. That is a claim about your work.
+   */
+  function finishedIt(justDone: string) {
+    const s = S()
+    const goal = emptiedGroup(justDone, s.thoughts, s.relationships)
+    if (!goal) return
+    // after the undo bar for the tick itself has had its six seconds
+    setTimeout(() => {
+      if (dead) return
+      const still = emptiedGroup(justDone, S().thoughts, S().relationships)
+      if (!still) return
+      offerAction(`nothing left in “${trim(label(goal), 24)}”`, 'finish it', () => {
+        const done = closeGoal(goal.id)
+        if (!done) return
+        rebuild()
+        paintAll()
+        fitWhenSettled()
+        haptics.sink()
+        record(done.note, label(goal))
+        say(done.note)
+        void riseFrom(goal.id)
+      })
+    }, 6200)
+  }
+
+  /**
+   * And what that finishing put in the air.
+   *
+   * Usually nothing, which is the point — see the action. It runs on the back
+   * of closing a goal and nowhere else, it is one fast call, and what it
+   * returns is a real thought in the sky rather than a line of prose.
+   */
+  async function riseFrom(goalId: string) {
+    if (S().offline) return
+    const res = await evaporateGoal(goalId)
+    if (dead || res.kind === 'failed') return
+    if (res.kind === 'settled') {
+      if (res.note) say(res.note)
+      return
+    }
+    // it comes up where the goal was, and drifts
+    const from = posOf(goalId)
+    const p = posOf(res.thought.id)
+    p.x = p.rx = Math.max(60, Math.min(worldW() - 60, from.rx + (Math.random() - 0.5) * 120))
+    p.y = p.ry = Math.max(140, from.ry - 120)
+    rebuild()
+    paintAll()
+    // off the water, which is where the thing it came from just went
+    evaporateAt(p.rx * cam.k + cam.x)
+    haptics.arrive()
+    record(`“${trim(label(res.thought), 30)}” rose`, label(res.thought))
+    offerAction(res.note || trim(label(res.thought), 42), 'go to it', () => {
+      focusOn(posOf(res.thought.id))
+      const tl = view.byId.get(res.thought.id)
+      if (tl) openPage('open', tl, W / 2, innerHeight / 2)
     })
   }
   function restDrop(t: Thought) {
@@ -2145,6 +2207,9 @@ function mountSky(root: HTMLDivElement) {
           row.classList.toggle('ticked', nowDone)
           settle(row as HTMLDivElement, nowDone)
           tally()
+          // ticking the last one in here empties the group too — the same
+          // offer as ticking it out in the sky, from the other place it happens
+          if (nowDone) finishedIt(m.id)
         })
         row.querySelector('.out')?.addEventListener('click', (e) => {
           e.stopPropagation()

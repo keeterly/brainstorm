@@ -50,7 +50,7 @@ No CRDT, no realtime channels — one user on a few devices does not need them y
   swapping vendors means one new class.
 
 Actions: `classify_thought`, `prioritize`, `absorb`, `organize`, `name_pool`, `cluster`,
-`gauge`, `deepen`, `answer`, `draft`, `rain`, `reshape`, `notice`, `remember`.
+`gauge`, `deepen`, `answer`, `draft`, `rain`, `evaporate`, `reshape`, `notice`, `remember`.
 
 Six were retired together: `summarize`, `clarify_question`, `find_related`, `to_goal`,
 `make_mind_map` and `generate_roadmap`. Four served one screen — a thought detail page
@@ -60,6 +60,14 @@ is the kinship threading, `clarify_question` is the ask moon, and `generate_road
 `rain` plus `deepen`, which produce real thoughts instead of a second parallel model of what
 work is. The other two had no caller at all. The `roadmaps` table is still read (existing
 rows still export); nothing writes new ones.
+
+**Closing the loop.** Ticking the last thing under a goal used to leave the goal open with
+nothing in it — an orphan drop in the sky, and no moment anywhere in the app where you had
+completed something. It is now offered, never taken: `emptiedGroup` notices, you say yes. And
+`evaporate` runs once on the back of that, reading what the finishing made possible against
+what is still open, returning **at most one** droplet as a real thought — usually none, which
+is the discipline of the whole action. Something that hands you a fresh task every time you
+tick one off is a treadmill, not a cycle.
 
 **The funnel.** A thought becomes an idea; ideas gather into a cloud; `rain` condenses the
 cloud into real actions *under* it; and each of those leaves is then read by the sky's third

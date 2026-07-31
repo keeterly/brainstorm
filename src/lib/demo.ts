@@ -159,6 +159,9 @@ export const DEMO_SEED = {
 export const DEMO_OUTPUT: Record<string, unknown> = {
   // The commonest real answer, and the one the old code could not give.
   remember: { ops: [] },
+  // …and its twin at the other end of the cycle. Most work closes and opens
+  // nothing, and an app that says so is one you can believe when it doesn't.
+  evaporate: { rises: null, note: 'that one is simply done' },
   // What falls out of a full cloud: what these ideas turned out to be about,
   // and the two things that follow from it. Not the members with a verb in
   // front of them, which is what this replaced.
