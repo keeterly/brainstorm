@@ -21,40 +21,31 @@ body,
 }
 
 /*
- * The hem of the world — the last 59pt of screen that nothing fixed can reach.
+ * The hem of the world — and the whole of the fix, as it turns out.
  *
- * On an installed iPhone the layout viewport is shorter than the screen, so
- * `position: fixed; inset: 0` — which is every layer that paints this world —
- * stops short of the bottom. Painting the document canvas does not help
- * either: iOS fills that strip from the root's background *colour* and ignores
- * its images, which is why the bar stayed one flat colour through three goes at
- * it. Document content is the only thing that has ever reached down there, and
- * that is the entire reason Memory — the one page long enough to scroll — never
- * showed a bar.
+ * On an installed iPhone the layout viewport is 59pt shorter than the screen,
+ * anchored at the top, so `position: fixed; inset: 0` stops short of the bottom
+ * and the last of the screen falls through as a flat bar. Measured off the
+ * phone: dead flat from the bottom edge to exactly 59pt up it.
  *
- * So this is document content, rendered last in App so it is last in the flow:
- * it adds exactly --bleed to the height of the document and sits at the very
- * end of it. On a page the height of the glass that is the strip; on a page
- * that scrolls it is below the fold, where the strip is already covered by the
- * page itself. See Atmosphere.tsx, which sizes and paints the inner div.
+ * This is document content, rendered last in App so it is last in the flow: it
+ * adds exactly --hem to the height of the document and sits at the very end of
+ * it. On a page the height of the glass that is the strip; on a page that
+ * scrolls it is below the fold, where the strip is already covered by the page
+ * itself — which is why Memory, the one page long enough to scroll, was the
+ * only one that never showed a bar.
  *
- * It is the floor, not the whole answer. Every opaque full-screen surface in
- * the app now runs --bleed past the bottom of the glass in its own right — the
- * world's own box, the paper page, the photo viewer, Focus, the bottom sheet —
- * because for a long while none of them did, and the hem was left carrying a
- * strip that four different overlays each wanted a different colour. The rules
- * below are what it wears while one of them is up, so the two agree whichever
- * of them the phone ends up drawing.
+ * And it does more than cover its own 59pt. Once the document is as tall as the
+ * screen, iOS resolves fixed positioning against the screen as well, so every
+ * `inset: 0` surface in the app — the world, the paper page, the photo viewer,
+ * Focus, the sheet — covers the whole of it without asking. Four rounds of
+ * fixes went into making those layers reach past the bottom edge; none of them
+ * needed to, and the round that finally worked made things reach *twice*: the
+ * tab bar's rim moved 118pt on a phone for 59pt of CSS, and the paper page put
+ * its own bottom row off the screen. There is no over-draw left anywhere.
  *
- * One correction, because it was written here as fact and it was not one. The
- * paragraph above says extending a fixed layer past the viewport does nothing
- * and only document content reaches the strip. That was inferred from a device
- * where --bleed was zero — measureBleed() ran before the standalone layout had
- * settled, saw no gap, and wrote 0px over a working CSS default — so every
- * `calc(-1 * var(--bleed))` in the app was `calc(-1 * 0px)` and the experiment
- * was never actually run. The strip stayed for five rounds of fixes because
- * nothing had yet been made one pixel taller. The value is a floor now, not a
- * measurement, and the JS may only raise it.
+ * The rules below are what the hem wears while an opaque screen is up, so the
+ * strip agrees with whatever is standing over it.
  */
 .world-hem {
   position: relative;

@@ -205,18 +205,12 @@ export function Atmosphere() {
       canvas.style.height = `${WATER_DRAW_H}px`
       ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0)
       invalidateWaterline()
-      // How far the water's surface sits above the bottom edge, so anything
-      // that wants to float on it can be placed in CSS without guessing.
-      //
-      // Published relative to the bottom of the *viewport*, because that is
-      // what a CSS `bottom` is measured from — while the ocean is anchored to
-      // the bottom of the screen, which on an installed phone is --bleed lower.
-      // Doing the subtraction once here keeps every consumer of this (the tab
-      // bar resting in the surface, the two notices above it) a plain
-      // `bottom: calc(var(--water-line-up) ± n)` with nothing to know.
-      const root = document.documentElement
-      const bleed = parseFloat(getComputedStyle(root).getPropertyValue('--bleed')) || 0
-      root.style.setProperty('--water-line-up', `${WATER_H - SURFACE - bleed}px`)
+      // how far the water's surface sits above the bottom edge, so anything
+      // that wants to float on it can be placed in CSS without guessing. No
+      // correction for the bleed: the ocean and everything that floats on it
+      // are both fixed, so they are in the same coordinates whichever bottom
+      // edge the phone decides that is.
+      document.documentElement.style.setProperty('--water-line-up', `${WATER_H - SURFACE}px`)
     }
     size()
     // the canvas behind the glass is sized from the viewport, so it is repainted
@@ -291,16 +285,14 @@ export function Atmosphere() {
 
   return (
     <>
-    {/* The world's box is the whole screen, not the part of it the page was
-        given. Everything inside is positioned against this, so the one change
-        puts the ocean — and with it the waterline, and with that the tab bar
-        resting in the surface — on the bottom edge of the glass instead of
-        59pt up it. The layers used to carry the bleed one by one, which moved
-        the gradients down and left the water where it was. */}
-    <div
-      aria-hidden
-      style={{ position: 'fixed', inset: '0 0 calc(-1 * var(--bleed, 0px)) 0', zIndex: 0, pointerEvents: 'none' }}
-    >
+    {/* Plain `inset: 0`, and that is now enough — see the hem in global.css.
+        Once the document is as tall as the screen, iOS resolves fixed
+        positioning against the screen too, so this box already is the whole
+        of it. Over-drawing past the bottom on top of that moved the world
+        59pt too low and took the ocean, the waterline and the tab bar with
+        it. Measured on the phone: the tab bar's rim went from 123pt above the
+        bottom edge to 5pt, which is 118 — twice the 59 the CSS asked for. */}
+    <div aria-hidden style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
       {/* depth, not graph paper — night above, the water's glow below */}
       <div
         style={{
@@ -380,7 +372,7 @@ const HEM_GRAIN: React.CSSProperties = {
 
 const GRAIN: React.CSSProperties = {
   position: 'fixed',
-  inset: '0 0 calc(-1 * var(--bleed)) 0',
+  inset: 0,
   zIndex: 300,
   pointerEvents: 'none',
   // plain alpha rather than a blend mode: it reads stronger on the dark world

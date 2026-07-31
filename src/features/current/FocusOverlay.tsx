@@ -37,12 +37,10 @@ export function FocusOverlay({
       aria-label="Focus on one action"
       style={{
         position: 'fixed',
-        // To the bottom of the screen, not of the viewport — an installed
-        // iPhone puts 59pt between those, and this is an opaque sheet that
-        // covers everything. Centred on the screen too, which is what the
-        // extra height buys: the one sentence on it belongs in the middle of
-        // the glass, not the middle of the part of it the page was given.
-        inset: '0 0 calc(-1 * var(--bleed, 0px)) 0',
+        // Plain inset: 0 — it covers the screen because the document is as
+        // tall as the screen (see the hem in global.css). Reaching past that
+        // as well pushed the one sentence on this screen off centre.
+        inset: 0,
         zIndex: 200,
         display: 'flex',
         flexDirection: 'column',

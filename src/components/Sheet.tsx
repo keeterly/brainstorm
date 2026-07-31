@@ -27,10 +27,9 @@ export function Sheet({
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      // Down to the bottom of the screen: the scrim has to dim all of it, and
-      // the panel rides on this box's bottom edge, so one change puts both
-      // where they belong on an installed phone. See --bleed.
-      style={{ position: 'fixed', inset: '0 0 calc(-1 * var(--bleed, 0px)) 0', zIndex: 200 }}
+      // inset: 0 is the whole screen, because the document is — see the hem in
+      // global.css. Reaching past it put the panel below the bottom edge.
+      style={{ position: 'fixed', inset: 0, zIndex: 200 }}
     >
       <button
         aria-label="Close"

@@ -546,9 +546,9 @@ body.sky-held {
    there is nothing to write here. */
 .sky-lightbox {
   position: fixed;
-  /* the same, and for the same reason: a photo shown on near-black with a
-     59pt band of something else beneath it is not full screen */
-  inset: 0 0 calc(-1 * var(--bleed, 0px)) 0;
+  /* the same: full screen because the document is, not because this reaches
+     past it — over-drawing moved the picture's centre 30pt off centre */
+  inset: 0;
   z-index: 200;
   display: none;
   align-items: center;
@@ -596,13 +596,10 @@ body.sky-held {
 /* ---------- inside the drop: the full-screen light page ---------- */
 .sky-page {
   position: fixed;
-  /* To the bottom of the *screen*, not the bottom of the viewport.
-     On an installed iPhone those are 59pt apart, and this is an opaque sheet
-     of paper: stopping at the viewport put a dark band of night sky under a
-     light page every single time a drop was opened, which is the most-seen
-     surface in the app. The world's own layers have carried the bleed since
-     they were written; the three opaque full-screen surfaces never did. */
-  inset: 0 0 calc(-1 * var(--bleed, 0px)) 0;
+  /* Plain inset: 0. It reaches the bottom of the screen because the document
+     does — see the hem in global.css — and over-drawing past that pushed this
+     page's own bottom row (photo · voice · ✦ · Done) clean off the screen. */
+  inset: 0;
   z-index: 120;
   display: none;
   flex-direction: column;

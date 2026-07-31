@@ -91,43 +91,34 @@
   --sat: env(safe-area-inset-top, 0px);
   --sab: env(safe-area-inset-bottom, 0px);
   /*
-   * How far the world has to keep going after the glass has stopped.
+   * The gap between the viewport the page is given and the screen it is on.
    *
-   * On an installed iPhone the layout viewport is shorter than the screen and
-   * anchored at the top, so everything laid out `position: fixed; inset: 0` —
-   * which is every layer that paints this world — stops short of the bottom
-   * and the last of the screen falls through as a flat bar. Rather than work
-   * out what colour that bar should be, which is a different colour on every
-   * screen (water under a vignette under a page glow under film grain), every
-   * layer that touches the bottom edge carries on for another --bleed and they
-   * compose down there exactly as they do up here. No seam to match, because
-   * no seam.
+   * On an installed iPhone in `display: standalone` iOS lays the page out
+   * below the status bar, so the layout viewport is the screen less the inset
+   * at the top and the whole of that shortfall lands at the bottom. Measured on
+   * the phone: screen 852, viewport 793, safe area top 59. Those are the same
+   * 59, which is why this is env(safe-area-inset-top) and not a guess.
    *
-   * The top inset, and it is not a guess. In `display: standalone` iOS lays
-   * the page out *below* the status bar, so the viewport is the screen less
-   * the inset at the top and the whole of that shortfall lands at the bottom.
-   * Measured on the phone: screen 852, viewport 793, safe area top 59. Those
-   * are the same 59.
-   *
-   * It used to be the inset at the *bottom* — 34pt, the home indicator — which
-   * was never the right number, and then JS was supposed to correct it. The JS
-   * ran early, measured no gap, and wrote 0px over the top; every
-   * `calc(-1 * var(--bleed))` in the app quietly became zero and five rounds of
-   * fixes multiplied by nothing. So the honest default is the one that is right
-   * without help, and measureBleed() may now only raise it — never zero it.
-   *
-   * Safe to over-estimate: this is over-draw on fixed layers, and anything
-   * past the bottom of the screen is simply not seen. The number that must be
-   * exact is --hem below, because that one adds real document height.
+   * Nothing over-draws by this any more, and that is the finding that took
+   * longest to get. What closes the strip is --hem below: once the document is
+   * as tall as the screen, iOS resolves `position: fixed` against the screen
+   * too, and every `inset: 0` surface in the app already covers all of it.
+   * Reaching *past* the bottom on top of that double-counts — measured on the
+   * phone, the tab bar's rim moved 118pt for 59pt of CSS — and pushes anything
+   * bottom-anchored clean off the screen. Kept because the keyboard maths still
+   * needs to know the distance, and because it is the honest name for it.
    */
   --bleed: env(safe-area-inset-top, 0px);
 
   /*
-   * …and how much of that is real, measured, document height.
+   * …and how much real document height stands in for it. This is the one that
+   * does the work.
    *
-   * The hem is an element in the flow, so getting this wrong does not
-   * over-draw harmlessly — it makes every page in the app scroll by the amount
-   * it is wrong by. Measured only, zero until then. See measureBleed().
+   * The hem is an element in the flow, so getting it wrong does not over-draw
+   * harmlessly — it makes every page in the app scroll by the amount it is
+   * wrong by. Measured only, and zero until measureBleed() has a real gap to
+   * report. Its predecessor wrote a stray 0px over a correct CSS default and
+   * turned five rounds of fixes into no-ops; this one may only be raised.
    */
   --hem: 0px;
 
