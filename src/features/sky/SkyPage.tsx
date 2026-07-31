@@ -568,6 +568,21 @@ function mountSky(root: HTMLDivElement) {
   const lightboxX = $('lightboxX')
 
   /*
+   * What the one field is asking for, right now.
+   *
+   * This page has a single textarea and it means something different in each
+   * mode — a name, a storm, what you found out, a question. That was carried
+   * by the placeholder alone, and a placeholder is not a label: it disappears
+   * the moment you type, and a screen reader announces it only while the field
+   * is empty. So the field was the one control on the page with no name at
+   * all. Both come off the same string here so they cannot drift apart.
+   */
+  const asking = (s: string) => {
+    pageT.placeholder = s
+    pageT.setAttribute('aria-label', s || 'What you are writing')
+  }
+
+  /*
    * What you have written and not yet let go of.
    *
    * Everything typed into this page lived in the DOM and nowhere else until
@@ -2464,7 +2479,7 @@ function mountSky(root: HTMLDivElement) {
       // when you close it the obvious way is a page that does not work.
       pageQ.textContent = tl.kind === 'pool' ? 'This group' : 'This drop'
       pageT.value = label(tl.t)
-      pageT.placeholder = 'Name it'
+      asking('Name it')
       nameFor = tl.t.id
       pending.push(() => landUndo(rename(tl.t.id, pageT.value)))
       // Keeping what was just ticked, so the row strikes through under your
@@ -2843,7 +2858,7 @@ function mountSky(root: HTMLDivElement) {
       // lose anything.
       const kept = heldDraft()
       pageT.value = kept
-      pageT.placeholder = 'Let it storm.'
+      asking('Let it storm.')
       // Where it will land, said before you write rather than after. A group
       // is open often enough that "this is going somewhere in particular" is
       // worth a line.
@@ -2870,7 +2885,7 @@ function mountSky(root: HTMLDivElement) {
       pendingImage = null
       pageQ.textContent = QUESTIONS[answersOf(tl.t).length] || 'What else wants to be said?'
       pageT.value = ''
-      pageT.placeholder = 'What you know, what changed, what you found out…'
+      asking('What you know, what changed, what you found out…')
       pageN.textContent = trim(label(tl.t), 46)
     } else if (mode === 'ask' && tl) {
       /*
@@ -2886,12 +2901,12 @@ function mountSky(root: HTMLDivElement) {
       pendingImage = null
       pageQ.textContent = 'Ask about this'
       pageT.value = ''
-      pageT.placeholder = 'Anything you want to know…'
+      asking('Anything you want to know…')
       pageN.textContent = trim(label(tl.t), 46)
     } else if (tl) {
       pageQ.textContent = 'Inside this drop'
       pageT.value = tl.t.raw_content
-      pageT.placeholder = ''
+      asking('')
       pageN.textContent = answersOf(tl.t).length ? '' : 'edits are kept'
       const answers = answersOf(tl.t)
       // Always shown now, because there was no way to throw a drop away from

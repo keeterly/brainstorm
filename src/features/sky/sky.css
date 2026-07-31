@@ -716,12 +716,15 @@ body.sky-dragging .sky-undo.show {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: calc(var(--sat) + 18px) 20px 6px;
+  /* 10 at the bottom, not 6: Close is a 44pt circle and the name field
+     underneath is a 44pt row, and at 6px apart a thumb aimed at the top of the
+     name lands on Close and shuts the page you were about to title. */
+  padding: calc(var(--sat) + 18px) 20px 10px;
 }
 .sky-page .pq { flex: 1; font-size: 15px; font-weight: 400; line-height: 1.45; color: var(--paper-soft, #5b6b7e); text-wrap: balance; padding-top: 6px; }
 .sky-page .x {
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: rgba(19, 26, 36, 0.06);
   border: 0.5px solid rgba(19, 26, 36, 0.12);
@@ -854,8 +857,16 @@ body.sky-dragging .sky-undo.show {
      tall row put its tick and its take-out floating in the middle of a
      paragraph with nothing to sit against. */
   align-items: flex-start;
-  gap: 10px;
-  padding: 3px 0;
+  gap: 12px;
+  /* Room for a thumb.
+     Every control in this row measured under Apple's 44pt floor — the tick at
+     38, the take-out at 30, the field at 40 — and four pairs of them sat within
+     seven pixels of each other. A row is the densest thing in the app and the
+     one where a miss is expensive: you tick off the wrong step, or take out the
+     row above the one you meant. The visual language does not change; the areas
+     under it do, and this padding is what stops one row's targets reaching into
+     the next one's. */
+  padding: 5px 0;
   border-top: 0.5px solid rgba(19, 26, 36, 0.08);
   /* How far in it sits. --d is set on the element from the same number the
      drag reads back out of data-depth, so the picture and the maths cannot
@@ -885,7 +896,7 @@ body.sky-dragging .sky-undo.show {
   border-radius: 7px;
   padding: 10px 6px;
   margin: 0 -6px;
-  min-height: 40px;
+  min-height: 44px;
   -webkit-appearance: none;
   appearance: none;
 }
@@ -899,9 +910,11 @@ body.sky-dragging .sky-undo.show {
    and it opens the full frame when pressed. */
 .sky-page .pans .row .pic {
   flex-shrink: 0;
-  width: 38px;
-  height: 38px;
-  margin: 4px 0 -2px;
+  /* at 38 it was both under the floor and too small to tell two references
+     apart; the picture is the row's whole content, so it may have the room */
+  width: 44px;
+  height: 44px;
+  margin: 2px 0 -2px;
   padding: 0;
   border: 0.5px solid rgba(19, 26, 36, 0.16);
   border-radius: 9px;
@@ -937,7 +950,7 @@ body.sky-dragging .sky-undo.show {
 
 .sky-page .pans .row .out {
   flex-shrink: 0;
-  min-height: 30px;
+  min-height: 32px;
   padding: 0 11px;
   /* on the first line of the row, whatever the row's height */
   margin: 6px 0 -4px 4px;
@@ -945,6 +958,44 @@ body.sky-dragging .sky-undo.show {
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+
+/*
+ * Forty-four points, wherever the thumb lands.
+ *
+ * Some of these controls are deliberately quiet — a take-out is a secondary
+ * act and a 44pt pill on every row would shout it — so they keep the size they
+ * look and grow the size they *are*. A transparent overlay, centred, taking
+ * nothing from the layout.
+ *
+ * It has to be centred rather than inset, or a short control with an offset
+ * margin grows lopsidedly and reaches into the row above it. And it must stay
+ * inside the row's own padding, which is why that went up at the same time:
+ * two of these touching across a boundary is worse than either being small,
+ * because then a miss is not a miss, it is the wrong row.
+ *
+ * `position: relative` on the host is load-bearing, not decoration. A
+ * percentage width on an absolutely positioned box resolves against its
+ * *containing block*, so an expander on a static host silently becomes the
+ * width of the whole row and swallows every other control in it. Both hosts
+ * here are `.ctl`, which is already positioned; the rule says so anyway so
+ * that moving it somewhere else cannot quietly break the page.
+ */
+.sky-page .pans .row .out,
+.sky-page .pans .lab.head .sel {
+  position: relative;
+}
+.sky-page .pans .row .out::after,
+.sky-page .pans .lab.head .sel::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
+  /* above the rim, which is a sibling pseudo-element painted later */
+  z-index: 1;
 }
 
 /* Rearranging by hand.
@@ -1014,7 +1065,16 @@ body.sky-dragging .sky-undo.show {
    square: a mode you cannot see is a trap. */
 .sky-page .pans .lab.head {
   display: flex;
-  align-items: baseline;
+  /* The band is 44 tall because Select lives in it.
+     It used to be 16 — the height of the word "what is inside" — with Select
+     hanging out of it top and bottom on a negative margin. That looks right
+     and measures wrong: the button's touch area overlapped the name field
+     above it and the first row below it, so pressing Select could type in the
+     title, and reaching for the first row could switch the page into a mode.
+     Giving the header its own 44 costs 28px once per page and nothing per row,
+     and it is the only place on this page where a band is only a label. */
+  min-height: 44px;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
@@ -1089,8 +1149,8 @@ body.sky-dragging .sky-undo.show {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   padding: 0 11px;
+  /* still the size it looks — the header band it sits in is what got taller */
   min-height: 30px;
-  margin: -7px 0;
 }
 /* On — the rim thickens and the words go to ink, but the glass stays glass. A
    tick fills because the fill *is* the answer to "is this one done". This
@@ -1107,9 +1167,15 @@ body.sky-dragging .sky-undo.show {
 
 .sky-page .pans .row .tick {
   flex-shrink: 0;
-  width: 38px;
-  height: 38px;
-  margin: 0 -6px 0 -9px;
+  /* 44, not 38 — the ring you see is the ::before below and does not grow */
+  width: 44px;
+  height: 44px;
+  /* The negative margins pull the *ring* back to where it looked right when
+     the button was 38. -6 on the right rather than -9 because at -9 the tick's
+     new 44 box came within three pixels of the photo thumbnail's, and those
+     two are the pair you least want to confuse: one marks a step finished, the
+     other opens a picture. Three pixels of the text's width buys six of gap. */
+  margin: 0 -6px 0 -12px;
   padding: 0;
   background: none;
   border: 0;
@@ -1235,7 +1301,8 @@ body.sky-dragging .sky-undo.show {
 }
 .sky-page .pans .danger .d {
   align-self: flex-start;
-  min-height: 38px;
+  /* these stack with 8px between them, so they can simply be the right size */
+  min-height: 44px;
   padding: 0 15px;
   font-size: 13px;
   font-weight: 500;
@@ -1275,8 +1342,8 @@ body.sky-dragging .sky-undo.show {
 }
 .sky-page .tools { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .sky-page .tool {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: rgba(19, 26, 36, 0.06);
   border: 0.5px solid rgba(19, 26, 36, 0.14);

@@ -109,3 +109,73 @@ describe('picking a row up off a list', () => {
     expect(sky).not.toMatch(/\.grip/)
   })
 })
+
+// Forty-four points, held in place.
+//
+// The whole group page was measured with a hit-testing probe against Apple's
+// 44pt floor and came back with 38 of 41 targets under it — the tick at 38,
+// the take-out at 30, the field at 40, Select at 24 of reachable height. All
+// of them look deliberate on a screenshot, and all of them are a coin toss
+// under a thumb.
+//
+// These are pinned as text because nothing else can see them. jsdom computes
+// no layout, the browser reports the painted box rather than the reachable
+// one, and every number here is the kind a later tidy-up shaves by two without
+// noticing. The probe that found them lives outside the repo and does not run
+// in CI; this is what is left when it is not looking.
+describe('somewhere to put a thumb', () => {
+  const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
+  const block = (sel: string) => {
+    const i = sky.indexOf(sel + ' {')
+    expect(i, `${sel} — no such rule`).toBeGreaterThan(-1)
+    return sky.slice(i, sky.indexOf('}', i))
+  }
+
+  it('gives the tick, the thumbnail and the field their 44', () => {
+    expect(block('.sky-page .pans .row .tick')).toMatch(/width: 44px;\s*height: 44px/)
+    expect(block('.sky-page .pans .row .pic')).toMatch(/width: 44px;\s*height: 44px/)
+    expect(block('.sky-page .pans .row .t')).toMatch(/min-height: 44px/)
+  })
+
+  it('gives the close, the tools and the danger buttons theirs', () => {
+    expect(block('.sky-page .x')).toMatch(/width: 44px;\s*height: 44px/)
+    expect(block('.sky-page .tool')).toMatch(/width: 44px;\s*height: 44px/)
+    expect(block('.sky-page .pans .danger .d')).toMatch(/min-height: 44px/)
+  })
+
+  it('grows the quiet controls without growing how loud they look', () => {
+    // A take-out is a secondary act; a 44pt pill on every row would shout it.
+    // So it keeps the size it looks and grows the size it is, via a
+    // transparent centred overlay.
+    const exp = sky.slice(sky.indexOf('.sky-page .pans .row .out::after'))
+    expect(exp).toMatch(/width: max\(100%, 44px\)/)
+    expect(exp).toMatch(/height: max\(100%, 44px\)/)
+    expect(exp).toMatch(/transform: translate\(-50%, -50%\)/)
+  })
+
+  it('positions the hosts of those overlays', () => {
+    // Load-bearing, and silent when missing: a percentage width on an
+    // absolutely positioned box resolves against its *containing block*, so an
+    // expander on a static host quietly becomes as wide as the whole row and
+    // swallows every other control in it. That is not a hypothetical — it
+    // happened, and it made the tick and the field unhittable.
+    const hosts = sky.slice(sky.indexOf('.sky-page .pans .row .out,'))
+    expect(hosts.slice(0, 160)).toMatch(/position: relative/)
+  })
+
+  it('gives the header band the height its button needs', () => {
+    // Select used to hang out of a 16px band on a negative margin, so its
+    // touch area overlapped the name field above and the first row below.
+    const head = block('.sky-page .pans .lab.head')
+    expect(head).toMatch(/min-height: 44px/)
+    expect(head).toMatch(/align-items: center/)
+    expect(block('.sky-page .pans .lab.head .sel')).not.toMatch(/margin: -7px/)
+  })
+
+  it('keeps one row of targets out of the next row of them', () => {
+    // The rows are the densest thing in the app and the place where a miss is
+    // expensive: you tick off the wrong step, or take out the row above the
+    // one you meant. This padding is the gutter between them.
+    expect(block('.sky-page .pans .row')).toMatch(/padding: 5px 0/)
+  })
+})
