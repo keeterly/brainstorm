@@ -55,7 +55,7 @@ interface GraphState {
   memoryEvents: MemoryEvent[]
   artifacts: ResearchArtifact[]
   profile: Profile | null
-  layouts: Record<string, Record<string, { x: number; y: number }>>
+  layouts: Record<string, Record<string, { x: number; y: number; p?: 1 }>>
 
   hydrate(userId: string): Promise<void>
   reset(): void
@@ -83,7 +83,7 @@ interface GraphState {
 
   addArtifact(a: Omit<ResearchArtifact, 'user_id' | 'created_at'>): void
 
-  saveLayout(scope: string, positions: Record<string, { x: number; y: number }>): void
+  saveLayout(scope: string, positions: Record<string, { x: number; y: number; p?: 1 }>): void
   updateProfileSettings(patch: Record<string, unknown>): void
   setBucket(id: string, bucket: Bucket | null): void
 }

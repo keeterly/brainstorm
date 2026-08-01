@@ -42,6 +42,7 @@ import {
 import { branchOf, dropAt, type Drop, type Line } from './arrange'
 import { editsPending, flushEdits, forgetEdit, keepEdit, watchForLeaving } from './autosave'
 import { findLikeThis, imageSearchUrl, keepImage, type Find } from './findFlow'
+import { breath } from './breath'
 import { awaitRun, markApplied, pendingRuns, subjectOf } from '@/ai/pending'
 import { reshapeTally, reshapeThought } from './reshapeFlow'
 import { haptics } from '@/lib/haptics'
@@ -316,6 +317,44 @@ interface Pos {
   mt: number
   mx: number
   my: number
+  /*
+   * The breath: a few pixels of drift around where this drop belongs.
+   *
+   * An *offset*, and that is the whole of the point. It used to be written
+   * straight into `x` and `y` — `p.x += Math.sin(ang) * 0.06` every frame —
+   * and adding a sine to a position sixty times a second does not wobble it,
+   * it integrates it. The excursion of an integrated sine is its amplitude
+   * over its frequency: 0.06 per frame at 0.016 per tick is 3.75 a tick, over
+   * 0.09, which is **forty-two pixels** in x and another forty-three in y, on
+   * a seventy-second round trip.
+   *
+   * Measured on the built app: every drop in the sky wandered between thirty
+   * and a hundred pixels away from where it was put and then slowly came back,
+   * for ever. That is the drift, and it was never anybody's intention — the
+   * intention was that the sky should breathe.
+   *
+   * Kept out of `x`/`y` so a drop's real place never moves: the arrangement
+   * you made survives, and a layout saved while the sky is breathing saves
+   * where things belong rather than wherever the sine happened to be.
+   */
+  bx: number
+  by: number
+  /*
+   * You put this one here on purpose.
+   *
+   * The kin spring pulls like-minded drops toward each other for as long as
+   * they are apart, and that is right for a sky nobody has arranged — it is
+   * how a loose pile of thoughts finds its own shape. It is wrong the moment
+   * you have expressed an opinion. Measured: drag a drop to a clear patch of
+   * sky and it creeps sixty pixels away over the next half a minute and stops,
+   * which reads as the app quietly disagreeing with where you put it.
+   *
+   * A pinned drop is out of the spring and nothing else. It still cannot
+   * overlap anything, and it still travels with the whole constellation when
+   * the sky re-centres, because that is a uniform move and preserves exactly
+   * the arrangement it is meant to preserve.
+   */
+  pinned?: boolean
   /*
    * Stay where you are until this moment passes.
    *
@@ -1047,7 +1086,7 @@ function mountSky(root: HTMLDivElement) {
 
   // ---------- positions (persisted to the layouts table) ----------
   const pos = new Map<string, Pos>()
-  const savedLayout: Record<string, { x: number; y: number }> = S().layouts['sky'] ?? {}
+  const savedLayout: Record<string, { x: number; y: number; p?: 1 }> = S().layouts['sky'] ?? {}
   function posOf(id: string): Pos {
     let p = pos.get(id)
     if (!p) {
@@ -1069,6 +1108,12 @@ function mountSky(root: HTMLDivElement) {
         mt: 0,
         mx: 1,
         my: 0,
+        bx: 0,
+        by: 0,
+        // …and it survives a reload, because on an installed PWA a reload is
+        // most days. An arrangement that only holds until the app is next
+        // opened is not an arrangement.
+        pinned: saved?.p === 1,
       }
       pos.set(id, p)
     }
@@ -1078,10 +1123,10 @@ function mountSky(root: HTMLDivElement) {
   function persistLayout() {
     if (layoutT) clearTimeout(layoutT)
     layoutT = setTimeout(() => {
-      const out: Record<string, { x: number; y: number }> = {}
+      const out: Record<string, { x: number; y: number; p?: 1 }> = {}
       for (const tl of view.tls) {
         const p = pos.get(tl.t.id)
-        if (p) out[tl.t.id] = { x: p.x / W, y: p.y / H }
+        if (p) out[tl.t.id] = p.pinned ? { x: p.x / W, y: p.y / H, p: 1 } : { x: p.x / W, y: p.y / H }
       }
       S().saveLayout('sky', out)
     }, 1200)
@@ -1772,7 +1817,7 @@ function mountSky(root: HTMLDivElement) {
   inviteEl.style.width = inviteEl.style.height = '192px'
   inviteEl.innerHTML = `<div class="q">What’s on your mind?</div>`
   field.appendChild(inviteEl)
-  const invitePos: Pos = { x: W / 2, y: H * 0.34, rx: W / 2, ry: H * 0.34, s: 1, vx: 0, vy: 0, mk: 0, mt: 0, mx: 1, my: 0 }
+  const invitePos: Pos = { x: W / 2, y: H * 0.34, rx: W / 2, ry: H * 0.34, s: 1, vx: 0, vy: 0, mk: 0, mt: 0, mx: 1, my: 0, bx: 0, by: 0 }
 
   // ---------- splash / say ----------
   function splash(x: number) {
@@ -6116,6 +6161,23 @@ function mountSky(root: HTMLDivElement) {
       p.vx = Math.max(-14, Math.min(14, d.vx))
       p.vy = Math.max(-14, Math.min(14, d.vy))
     }
+    /*
+     * Wherever it ended up, that is where you meant it.
+     *
+     * Only when it actually went somewhere. `moved` alone is not enough — it
+     * turns true on a few pixels of thumb roll, and a tap that happens to
+     * wobble is not an opinion about where a drop belongs. Forty pixels is
+     * about the smallest move nobody makes by accident.
+     *
+     * Not for a member being rearranged inside an open pool — that one lives
+     * on a ring, and a ring is a layout rather than a place — and not for one
+     * that has just been pooled with something else, which is a different act
+     * with its own idea of where things go.
+     */
+    if (!d.isMember && !d.target && d.moved) {
+      const p = posOf(d.id)
+      if (Math.hypot(p.x - d.wx, p.y - d.wy) > 40) p.pinned = true
+    }
     persistLayout()
   }
   const onCancel = (e: PointerEvent) => {
@@ -6316,8 +6378,15 @@ function mountSky(root: HTMLDivElement) {
       p.hold = undefined
     }
     const k = reduced ? 1 : dragged ? 0.55 : 0.22
-    p.rx += (p.x - p.rx) * k
-    p.ry += (p.y - p.ry) * k
+    // …toward where it belongs *plus* its breath. The breath is an offset
+    // rather than a push — see Pos.bx — so it shows without ever moving the
+    // place the drop is actually standing in.
+    // Never under a finger: three pixels between the touch and the thing being
+    // touched is three pixels of the app not doing what your hand is doing.
+    const bx = dragged ? 0 : p.bx
+    const by = dragged ? 0 : p.by
+    p.rx += (p.x + bx - p.rx) * k
+    p.ry += (p.y + by - p.ry) * k
     p.s += ((dragged ? 1.045 : 1) - p.s) * 0.18
   }
 
@@ -6418,17 +6487,41 @@ function mountSky(root: HTMLDivElement) {
     stepHold()
     const busy = drag || holding || pageFor
     if (!busy) {
+      /*
+       * The sky breathes — three pixels, not a hundred.
+       *
+       * Written as the offset it always meant to be. The old line added a sine
+       * to the position every frame, which integrates rather than wobbles: it
+       * carried every drop forty-odd pixels out in each axis and slowly back,
+       * over about seventy seconds, for as long as the app was open. Measured
+       * on the built app at up to 101 pixels of travel from a standing start,
+       * which is the drift.
+       *
+       * The frequency is up and the amplitude is down: a breath you can see
+       * has to be quick enough to read as breathing. Eleven seconds a cycle at
+       * three pixels reads as alive; seventy seconds at a hundred reads as
+       * things wandering off.
+       */
       view.tls.forEach((tl, i) => {
-        if (moonsFor === tl.t.id) return
+        if (moonsFor === tl.t.id) {
+          const p = posOf(tl.t.id)
+          // the one you have opened stands still, the way it always did
+          p.bx = p.by = 0
+          return
+        }
         const p = posOf(tl.t.id)
-        const ang = t * 0.09 + i * 2.1
-        p.x += Math.sin(ang) * 0.06
-        p.y += Math.cos(ang * 0.8) * 0.05
+        const b = breath(t, i)
+        p.bx = b.x
+        p.by = b.y
       })
       for (const pair of allKinPairs()) {
         if (moonsFor && (moonsFor === pair.a.t.id || moonsFor === pair.b.t.id)) continue
         const pa = posOf(pair.a.t.id)
         const pb = posOf(pair.b.t.id)
+        // Both ends have to be unarranged for the spring to mean anything.
+        // Pulling a pinned drop toward a loose one is the app moving the thing
+        // you placed rather than the thing you did not — see Pos.pinned.
+        if (pa.pinned && pb.pinned) continue
         const dx = pb.x - pa.x
         const dy = pb.y - pa.y
         const dist = Math.hypot(dx, dy) || 1
@@ -6438,10 +6531,16 @@ function mountSky(root: HTMLDivElement) {
           // score runs 0…1 where the old shared-word count ran 1…4, so it is
           // scaled back up to the same range of pull
           const pull = Math.min(0.4, (dist - rest) * 0.0012 * (1 + pair.score * 6 + (bonded ? 2 : 0)))
-          pa.x += (dx / dist) * pull
-          pa.y += (dy / dist) * pull
-          pb.x -= (dx / dist) * pull
-          pb.y -= (dy / dist) * pull
+          // The pinned end does not move; the other end closes at its own
+          // ordinary rate. Doubling it to keep the closing speed the same was
+          // the wrong trade — what it looked like was every loose drop
+          // sprinting at the one you had just put down.
+          const ka = pa.pinned ? 0 : 1
+          const kb = pb.pinned ? 0 : 1
+          pa.x += (dx / dist) * pull * ka
+          pa.y += (dy / dist) * pull * ka
+          pb.x -= (dx / dist) * pull * kb
+          pb.y -= (dy / dist) * pull * kb
         }
       }
       // nothing may overlap. Several soft passes settle a crowded sky without
