@@ -1645,7 +1645,15 @@ function mountSky(root: HTMLDivElement) {
             // there is what stops two lines of text coming out in a body four
             // times as wide as it is tall. The corners still take room off the
             // ends, so the sides keep a little more than the top and bottom.
-            me.style.padding = `${(box.pad * 1.5).toFixed(1)}px ${(box.pad * 1.62).toFixed(1)}px`
+            //
+            // None at all for a picture. A rectangle inset inside a blown edge
+            // leaves a crescent of glass at each corner and a strip along the
+            // top, and what that reads as is not a mount — it is a gap. The
+            // photograph takes the whole shape instead and the edge cuts it,
+            // which is what the small drop in the ring has always done.
+            me.style.padding = imgOf(m)
+              ? '0px'
+              : `${(box.pad * 1.5).toFixed(1)}px ${(box.pad * 1.62).toFixed(1)}px`
             // its corners are set from the box, not in pixels, so they eat
             // almost the whole of the sides: what opens is a blob that happens
             // to hold a sentence, not a rectangle with the edges taken off

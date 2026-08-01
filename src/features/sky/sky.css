@@ -1949,15 +1949,27 @@ body.sky-resting .sky-tidy { right: calc(14px + var(--rest-w, 96px) + 8px); }
 /*
  * …and when what opens is a photograph, it opens as one.
  *
- * The glass keeps its blown edge and the picture is cut to it, so what comes
- * up is still a drop that swelled rather than a rectangle laid over the sky.
- * No height is set anywhere: the image's own proportions decide, a portrait
- * comes up tall and a landscape wide, and the ring is pushed apart around
- * whichever it turns out to be.
+ * The blown edge belongs to the picture rather than to a frame around it. The
+ * first version inset the image inside the card's padding, which left a strip
+ * of glass along the top and a crescent of it at each corner where the curve
+ * ran wide of a rectangle — and a gap between a picture and its own edge does
+ * not read as a mount, it reads as a mistake. So the photograph fills the
+ * whole shape and the edge cuts it, which is exactly what the small drop in
+ * the ring has always done. What is left of the glass is the rim, and the rim
+ * is the part that says this is still a drop.
+ *
+ * No height is set anywhere either: the image's own proportions decide, so a
+ * portrait comes up tall and a landscape wide, and the ring is pushed apart
+ * around whichever it turns out to be.
  */
 .skyb.peek.picture {
-  gap: 7px;
+  gap: 0;
   overflow: hidden;
+  /* nothing behind it is visible any more, and gathering light through an
+     opaque photograph is a blur the phone computes for no one */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(0, 0, 0, 0.3);
 }
 .skyb.peek.picture .big {
   display: block;
@@ -1969,18 +1981,30 @@ body.sky-resting .sky-tidy { right: calc(14px + var(--rest-w, 96px) + 8px); }
      inside the zoom and a dvh here would mean something different at every
      scale. The dvh is only the fallback. */
   max-height: var(--picmax, 54dvh);
-  object-fit: contain;
-  /* no radius of its own: `--blob` is a four-corner ellipse spec, not a length
-     you can subtract from, so the card's own `overflow: hidden` is what cuts
-     the picture to the blown edge */
-  /* the picture is the content; the glass behind it is the frame */
-  background: rgba(0, 0, 0, 0.24);
+  /* `cover`, so a portrait tall enough to hit that cap is cropped rather than
+     letterboxed: bars inside a blob are the same gap by another name. Below
+     the cap nothing is cropped at all, because the box is already the
+     picture's own shape. The whole of it is one tap further in, on its page.
+     No radius of its own — `--blob` is a four-corner ellipse spec, not a
+     length you can subtract from, so the card's `overflow: hidden` is what
+     cuts the picture to the blown edge. */
+  object-fit: cover;
 }
+/* The caption lies on the picture rather than under it: a band of glass below
+   a full-bleed photograph would put the gap straight back at the bottom. Only
+   a wash of shade, and only where the words are. */
 .skyb.peek.picture .t {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   font-weight: 400;
-  color: var(--ink-soft);
+  color: #fff;
   text-align: center;
-  padding: 0 6px 2px;
+  padding: 30px 16px 13px;
+  background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.34) 46%, rgba(0, 0, 0, 0.62));
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
 }
 
 /* a drop the agent has gone away to work on — lit, and breathing while it is

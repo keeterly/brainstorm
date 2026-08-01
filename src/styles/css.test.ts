@@ -319,6 +319,29 @@ describe('opening a photograph', () => {
     expect(sky).toMatch(/\.skyb\.peek\.picture \{[^}]*overflow: hidden/s)
   })
 
+  it('leaves no glass between the picture and its own edge', () => {
+    // Inset inside the card's padding, a rectangle left a strip of glass along
+    // the top and a crescent at each corner where the blown curve ran wide of
+    // it — and a gap between a picture and its edge does not read as a mount,
+    // it reads as a mistake. The photograph takes the whole shape.
+    expect(page).toMatch(/me\.style\.padding = imgOf\(m\)\s*\?\s*'0px'/)
+    expect(sky).toMatch(/\.skyb\.peek\.picture \{[^}]*gap: 0/s)
+  })
+
+  it('crops a picture too tall for the cap rather than letterboxing it', () => {
+    // bars inside a blob are the same gap by another name
+    expect(sky).toMatch(/\.skyb\.peek\.picture \.big \{[^}]*object-fit: cover/s)
+  })
+
+  it('lays the caption on the picture instead of under it', () => {
+    // a band of glass below a full-bleed photograph puts the gap straight back
+    const cap = sky.slice(sky.indexOf('.skyb.peek.picture .t'))
+    expect(cap.slice(0, 460)).toMatch(/position: absolute/)
+    expect(cap.slice(0, 460)).toMatch(/bottom: 0/)
+    // a wash of shade, so it works over a light foot as well as a dark one
+    expect(cap.slice(0, 460)).toMatch(/linear-gradient\(rgba\(0, 0, 0, 0\)/)
+  })
+
   it('gives the drop page to the picture that is the whole of the drop', () => {
     // 120px was the shared thumbnail rule, and it applied to the one page
     // where the picture is the content rather than an illustration of it
