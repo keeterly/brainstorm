@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { DAILY_USD_CAP } from '@shared/ai/pricing'
+import { readAllowance, type Allowance } from '@/ai/allowance'
 import type { AgentRun } from '@/domain/types'
 
 /**
@@ -38,6 +38,15 @@ const STATUS_COLOR: Record<AgentRun['status'], string> = {
 
 export default function RunsPage() {
   const [runs, setRuns] = useState<AgentRun[] | null>(null)
+  /*
+   * What the *server* says this person is allowed.
+   *
+   * Not `DAILY_USD_CAP` out of the bundle. That is the app's own default, and
+   * a guest's day is set by configuration the client cannot see — so the page
+   * told everybody their ceiling was six dollars, which for somebody on a
+   * dollar fifty is not a rounding error, it is the wrong number.
+   */
+  const [mine, setMine] = useState<Allowance | null>(null)
   const [error, setError] = useState<string | null>(null)
   // an error with no way past it is a dead end; every other AI surface in the
   // app offers the retry, and this one printed the message in the faintest
@@ -71,19 +80,50 @@ export default function RunsPage() {
     }
   }, [tries])
 
-  const today = useMemo(() => (runs ? spentToday(runs) : null), [runs])
+  useEffect(() => {
+    let live = true
+    void readAllowance().then((a) => {
+      if (live) setMine(a)
+    })
+    return () => {
+      live = false
+    }
+  }, [tries])
+
+  // The server's figure when there is one — it counts every run, not the
+  // hundred this page happens to have pulled — and this page's own arithmetic
+  // when there is not, so a deployment without the endpoint still says
+  // something true.
+  const today = useMemo(() => mine?.spentUSD ?? (runs ? spentToday(runs) : null), [mine, runs])
   // Only the last hundred runs are on the page, so a very heavy day would be
   // read short. Said as "at least" rather than quietly under-reported.
-  const partial = (runs?.length ?? 0) >= 100
+  // …and only when the figure is this page's own guess, which stops at a
+  // hundred rows. The server's figure counts everything.
+  const partial = mine?.spentUSD == null && (runs?.length ?? 0) >= 100
 
   return (
     <div className="page">
       <h1 className="page-title">AI activity</h1>
+      {mine && !mine.allowed && (
+        <p className="faint" style={{ fontSize: 'var(--fs-label)', marginBottom: 'var(--sp-3)' }} role="status">
+          This account is not on the list for AI actions. Everything else in the app works.
+        </p>
+      )}
       {today !== null && (
         <p className="faint" style={{ fontSize: 'var(--fs-label)', marginBottom: 'var(--sp-3)' }}>
           {partial ? 'At least ' : ''}
-          <strong className="mono">${today.toFixed(2)}</strong> of ${DAILY_USD_CAP.toFixed(2)} today
+          <strong className="mono">${today.toFixed(2)}</strong>
+          {mine ? ` of $${mine.capUSD.toFixed(2)}` : ''} today
           {today > 0 && ' · resets at midnight UTC'}
+          {/* the ceiling over everybody, when there is one — a guest who cannot
+              run anything should be able to see that it is not about them */}
+          {mine?.everyoneCapUSD != null && mine.everyoneUSD != null && (
+            <>
+              <br />
+              everyone together: <strong className="mono">${mine.everyoneUSD.toFixed(2)}</strong> of $
+              {mine.everyoneCapUSD.toFixed(2)}
+            </>
+          )}
         </p>
       )}
       {error && (
