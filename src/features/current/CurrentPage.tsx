@@ -388,7 +388,7 @@ export default function CurrentPage() {
               thing is blocked is a real day, and the fold used not to open on
               it at all — you got one action and a silent page. */}
           <button
-            className="faint"
+            className="faint hit"
             style={{ fontSize: 'var(--fs-label)', letterSpacing: '0.06em' }}
             onClick={() => setShowAll((s) => !s)}
           >
@@ -411,8 +411,16 @@ export default function CurrentPage() {
                     background: 'var(--glass)',
                   }}
                 >
+                  {/* `hit` is the app's own answer to a control that should look
+                      small and be pressable: it keeps its twenty points of ring
+                      and gets forty-four points of reach from a transparent
+                      overlay. The class has existed in global.css the whole
+                      time and this page — the one you tick work off on — used
+                      it nowhere. Measured: this and the snooze beside it were
+                      20x20 and 20x23. */}
                   <button
                     aria-label="Complete"
+                    className="hit"
                     onClick={() => complete(t)}
                     style={{
                       width: 20,
@@ -432,7 +440,7 @@ export default function CurrentPage() {
                   </button>
                   <button
                     aria-label="Snooze one week"
-                    className="faint"
+                    className="faint hit"
                     onClick={() => {
                       const d = new Date()
                       d.setDate(d.getDate() + 7)

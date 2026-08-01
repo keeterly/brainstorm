@@ -82,7 +82,9 @@ export default function MemoryPage() {
           to="/settings"
           aria-label="Settings"
           className="btn btn--ghost"
-          style={{ textDecoration: 'none', flexShrink: 0, padding: '4px 10px' }}
+          /* minWidth because it holds a gear and nothing else, so it came out
+             33 points wide — the one control on this page under the floor */
+          style={{ textDecoration: 'none', flexShrink: 0, padding: '4px 10px', minWidth: 44 }}
         >
           ⚙
         </Link>
@@ -125,6 +127,7 @@ export default function MemoryPage() {
         </div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
           <input
+            aria-label="Add a fact, preference, or constraint"
             placeholder="Add a fact, preference, or constraint…"
             value={newMem}
             onChange={(e) => setNewMem(e.target.value)}
@@ -156,6 +159,7 @@ export default function MemoryPage() {
             value={distillText}
             onChange={(e) => setDistillText(e.target.value)}
             rows={4}
+            aria-label="Paste something for it to learn from"
             placeholder="Paste notes, an email, a bio. It keeps what is durable about you, corrects what it already believed, and ignores the rest."
             className="field"
             style={{ marginTop: 8, resize: 'vertical', minHeight: 90 }}
@@ -318,7 +322,13 @@ function MemoryRow({
   if (editing) {
     return (
       <div style={{ display: 'flex', gap: 6 }}>
-        <input className="field" value={v} onChange={(e) => setV(e.target.value)} style={inputStyle} />
+        <input
+          className="field"
+          aria-label="What it remembers"
+          value={v}
+          onChange={(e) => setV(e.target.value)}
+          style={inputStyle}
+        />
         <button
           className="btn btn--sm"
           onClick={() => {

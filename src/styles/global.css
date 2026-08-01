@@ -886,3 +886,35 @@ a {
   font-size: var(--fs-caption);
   color: var(--ink-faint);
 }
+
+/*
+ * A disclosure is a control, and a control has to be pressable.
+ *
+ * Every `<summary>` in this app is styled inline at its call site and not one
+ * of them was given a height, so they came out however tall their own text
+ * happened to be: measured at 18, 26 and 35 points across Memory and Settings.
+ * They are wide, which helps a great deal — a wide short target is far easier
+ * to hit than a small square one — but an eighteen-point band is still a band
+ * you miss, and these are the rows that open the only view of what the app
+ * remembers about you.
+ *
+ * The reach rather than the height, for the same reason `.hit` exists: these
+ * sit in dense stacks where forty-four points of real height would push the
+ * content they introduce off the screen. Nothing moves; the area under it
+ * grows.
+ */
+summary { position: relative; }
+summary::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 100%;
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
+  /* No `pointer-events: none` here, however much it looks like it belongs.
+     That is what `.hit` deliberately omits: the whole job of this box is to be
+     hit, and switching it off makes an overlay that neither paints nor catches
+     anything — which is what it did on the first attempt, leaving all three
+     summaries measuring exactly as short as before. */
+}

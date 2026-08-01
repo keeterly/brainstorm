@@ -57,7 +57,7 @@ export function NoticedPanel() {
     if (openCount < 4 || offline) return null
     return (
       <div style={{ textAlign: 'center', marginTop: 'var(--sp-6)' }}>
-        <button className="faint" style={{ fontSize: 'var(--fs-label)' }} onClick={refresh}>
+        <button className="faint hit" style={{ fontSize: 'var(--fs-label)' }} onClick={refresh}>
           {failed ? '▾ that did not come back — try again' : '▾ what do you notice?'}
         </button>
       </div>

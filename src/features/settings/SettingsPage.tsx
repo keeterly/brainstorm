@@ -62,6 +62,9 @@ function AccountSection() {
           type="password"
           minLength={8}
           required
+          /* A placeholder is not a label: it is gone the moment you type, and a
+             screen reader announces it only while the field is empty. */
+          aria-label="New password"
           placeholder="New password"
           autoComplete="new-password"
           value={pw}

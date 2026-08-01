@@ -33,6 +33,16 @@ function sheets(): { file: string; css: string }[] {
 
 const all = sheets()
 
+/**
+ * A stylesheet with its comments taken out.
+ *
+ * For asserting that something is *absent*. Prose explaining why a declaration
+ * was removed necessarily contains that declaration, so a negative match over
+ * the raw file fails on exactly the file that satisfies it — which has now
+ * happened twice here, once for a margin and once for a pointer-events.
+ */
+const code = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, '')
+
 describe('the stylesheets say what they mean', () => {
   it('finds some to check', () => {
     expect(all.length).toBeGreaterThan(2)
@@ -601,5 +611,69 @@ describe('the width of the app’s voice', () => {
       const cap = block.match(/max-width: ([^;]+);/)?.[1] ?? ''
       expect(cap, `${rule} caps its width at ${cap}`).toMatch(/var\(--say\)|min\(/)
     }
+  })
+})
+
+// Somewhere to put a thumb, on the surfaces that are not the sky.
+//
+// The sky and the group page were measured and fixed a while ago. The Current,
+// Memory and Settings were reported clean at the same time and were not: the
+// probe had navigated by URL into a demo build that mounts a MemoryRouter, so
+// it changed the address bar, left the router on `/`, and measured the sky
+// three more times under other names. Re-measured properly they had seventeen
+// targets under the floor between them, including the tick you complete work
+// with at twenty points square — on a page whose whole purpose is ticking work
+// off — and three fields with no accessible name at all.
+describe('a thumb on the other surfaces', () => {
+  const global = readFileSync(join('src/styles', 'global.css'), 'utf8')
+  const current = readFileSync(join('src/features/current', 'CurrentPage.tsx'), 'utf8')
+  const memory = readFileSync(join('src/features/memory', 'MemoryPage.tsx'), 'utf8')
+  const settings = readFileSync(join('src/features/settings', 'SettingsPage.tsx'), 'utf8')
+  const noticed = readFileSync(join('src/features/current', 'Noticed.tsx'), 'utf8')
+
+  it('uses the reach class the app already had', () => {
+    // `.hit` has been in global.css the whole time — twenty points of ring,
+    // forty-four of reach — and the Current used it precisely nowhere
+    expect(current).toMatch(/aria-label="Complete"\s*\n\s*className="hit"/)
+    expect(current).toMatch(/aria-label="Snooze one week"\s*\n\s*className="faint hit"/)
+    expect(noticed).toMatch(/className="faint hit"/)
+  })
+
+  it('gives every disclosure in the app a reach', () => {
+    // each `<summary>` is styled inline at its call site and none was given a
+    // height, so they came out however tall their own text happened to be —
+    // 18, 26 and 35 points, on the rows that open the only view of what the
+    // app remembers about you
+    expect(global).toMatch(/^summary \{ position: relative; \}/m)
+    expect(global).toMatch(/summary::after \{[^}]*height: max\(100%, 44px\)/s)
+  })
+
+  it('does not switch that reach off again', () => {
+    /*
+     * `pointer-events: none` is what `.hit` deliberately omits: the whole job
+     * of the box is to be hit. Setting it made an overlay that neither painted
+     * nor caught anything, and all three summaries measured exactly as short
+     * as before.
+     *
+     * Asserted against the *code*, with the comments taken out. A negative
+     * match over raw CSS is a trap that has now caught me twice: the comment
+     * saying why a declaration is gone contains the declaration, so the test
+     * fails on the very file that satisfies it.
+     */
+    const rule = code(global).slice(code(global).indexOf('summary::after'))
+    expect(rule.slice(0, rule.indexOf('}'))).not.toMatch(/pointer-events: none/)
+  })
+
+  it('names the fields a screen reader would otherwise skip', () => {
+    // a placeholder is not a label: it goes the moment you type, and is
+    // announced only while the field is empty
+    expect(memory).toMatch(/aria-label="Add a fact, preference, or constraint"/)
+    expect(memory).toMatch(/aria-label="Paste something for it to learn from"/)
+    expect(memory).toMatch(/aria-label="What it remembers"/)
+    expect(settings).toMatch(/aria-label="New password"/)
+  })
+
+  it('widens the one control that held nothing but a gear', () => {
+    expect(memory).toMatch(/minWidth: 44/)
   })
 })
