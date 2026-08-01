@@ -1,15 +1,24 @@
 /* The first breath — see Opening.tsx.
 
-   Over everything, including the tab bar, because for its second and a half it
-   is the whole app. Under nothing: there is nothing else on screen yet. */
+   Over everything, including the tab bar, because for its two seconds it is
+   the whole app. Under nothing: there is nothing else on screen yet. */
 .opening {
   position: fixed;
   inset: 0;
   z-index: 400;
   display: flex;
-  align-items: center;
+  /* Anchored, not centred. The numbers and the thing to start with arrive a
+     beat after the name — they are waiting on the graph — and with the block
+     centred, every one of them shunted the name upward as it appeared. The
+     name is the fixed point of this moment; everything else grows underneath
+     it and nothing already on screen moves. */
+  align-items: flex-start;
   justify-content: center;
-  pointer-events: none;
+  /* It takes touches, and any touch ends it. Two seconds is right the first
+     time you open the app today and too long the fourth time; the way out
+     should be the thing your thumb is already doing. */
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
   /* the same night the sky is, so the dissolve reveals rather than switches */
   background:
     radial-gradient(ellipse 120% 70% at 50% 18%, rgba(var(--accent-rgb), 0.1), transparent 62%),
@@ -19,6 +28,9 @@
 }
 .opening.leaving {
   opacity: 0;
+  /* it stops taking touches the moment it starts to go, so the tap that
+     dismissed it is not also a tap on the sky underneath */
+  pointer-events: none;
 }
 
 /* The grain, the same as everywhere else in this world — a little heavier
@@ -37,23 +49,111 @@
   position: relative;
   z-index: 1;
   display: grid;
-  gap: 14px;
-  padding: 0 32px;
+  justify-items: start;
+  align-content: start;
+  gap: 26px;
+  /* a third of the way down, and never so far that a long "start with" runs
+     off the bottom of a short screen */
+  padding: min(30dvh, 250px) 32px 0;
+  width: 100%;
+  max-width: 420px;
+}
+
+/*
+ * The name, condensing.
+ *
+ * This app's whole metaphor is vapour becoming water — a thought is shapeless
+ * until it collects into a drop — so the word arrives the same way rather than
+ * sliding in from somewhere. Each letter starts wide of where it belongs, out
+ * of focus and weightless, and gathers: blur to nothing, spacing closing up,
+ * opacity coming on. Left to right, a beat apart, so it reads as a word
+ * forming and not as ten things animating.
+ *
+ * The glow behind it swells once and settles, on the same easing the ripples
+ * use. It is the only flourish here and it is over in under a second.
+ */
+.opening-name {
+  position: relative;
+  margin: 0;
+  font-size: clamp(38px, 12vw, 52px);
+  font-weight: 300;
+  letter-spacing: -0.012em;
+  line-height: 1;
+  color: var(--ink, #e8eef6);
+  white-space: nowrap;
+}
+.opening-name span {
+  display: inline-block;
+  opacity: 0;
+  filter: blur(12px);
+  transform: translateY(0.16em) scale(1.16);
+  /* the space each letter came in with, closing as it lands */
+  margin-right: 0.06em;
+  animation: opening-letter 940ms cubic-bezier(0.18, 0.72, 0.22, 1) forwards;
+  animation-delay: calc(var(--i) * 54ms);
+  will-change: opacity, filter, transform;
+}
+@keyframes opening-letter {
+  60% {
+    filter: blur(0.6px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+    margin-right: 0;
+  }
+}
+/* the light it condenses out of */
+.opening-name::before {
+  content: '';
+  position: absolute;
+  left: -14%;
+  right: -14%;
+  top: -80%;
+  bottom: -80%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 42% 50%, rgba(var(--accent-rgb), 0.2), transparent 66%);
+  opacity: 0;
+  transform: scale(0.72);
+  animation: opening-glow 1500ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+@keyframes opening-glow {
+  40% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+  to {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+}
+
+/* What it has to say, once the graph is here. It comes in under the name
+   rather than with it: the name is the app arriving and this is the app
+   answering, and they are two sentences. */
+.opening-said {
+  display: grid;
+  gap: 13px;
+  justify-items: start;
 }
 
 /* Each line arrives after the one above it. Not a flourish: three numbers
    appearing at once is a dashboard, and three arriving in turn is somebody
    telling you where things stand. */
+.opening-line,
+.opening-next {
+  opacity: 0;
+  transform: translateY(7px);
+  animation: opening-line 620ms cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+  /* after the word has finished forming, not during it */
+  animation-delay: calc(560ms + var(--i) * 120ms);
+}
 .opening-line {
   display: flex;
   align-items: baseline;
   gap: 12px;
-  opacity: 0;
-  transform: translateY(6px);
-}
-.opening.lit .opening-line {
-  animation: opening-line 620ms cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
-  animation-delay: calc(var(--i) * 130ms);
 }
 @keyframes opening-line {
   to {
@@ -79,13 +179,60 @@
   color: var(--ink-soft, #8fa3b6);
 }
 
+/*
+ * …and the one thing to pick up.
+ *
+ * Three counts on their own are a readout: accurate, and no use. This is the
+ * same choice the Current makes and the same reason it gives, run here on the
+ * graph as it lands, so the last thing read before the sky arrives is a thing
+ * to do rather than a number. It is not a button — touching anywhere skips the
+ * moment, and a target that dismisses the screen it is on is a trap.
+ */
+.opening-next {
+  margin-top: 4px;
+  padding-top: 15px;
+  /* a hairline the width of the words above it, not a rule across the screen */
+  border-top: 0.5px solid rgba(var(--accent-rgb), 0.22);
+  max-width: 22em;
+}
+.opening-next .lb {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(var(--accent-rgb), 0.8);
+  margin-bottom: 7px;
+}
+.opening-next .what {
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--ink, #e8eef6);
+  text-wrap: pretty;
+}
+.opening-next .why {
+  margin-top: 5px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--ink-soft, #8fa3b6);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .opening {
     transition-duration: 1ms;
   }
-  .opening.lit .opening-line {
+  .opening.lit .opening-name span,
+  .opening.lit .opening-line,
+  .opening.lit .opening-next {
     animation: none;
     opacity: 1;
+    filter: none;
+    transform: none;
+    margin-right: 0;
+  }
+  .opening-name::before {
+    animation: none;
+    opacity: 0.5;
     transform: none;
   }
 }

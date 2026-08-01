@@ -412,3 +412,56 @@ describe('what the agent is doing, while it does it', () => {
     expect(page2).toMatch(/<Working$/m)
   })
 })
+
+// Opening the app.
+//
+// Three faults in one moment. The background arrived a beat behind the app —
+// the hour's colours are custom properties written from inside an effect,
+// which runs after the browser has already painted once, so it opened in the
+// fallback palette and snapped. The sheet itself waited for the graph and only
+// then covered the screen, which meant watching the sky paint and then having
+// a full-screen panel dropped over it. And what it finally said was three
+// counts with nothing under them: true, and no use.
+describe('the first breath', () => {
+  const css = readFileSync(join('src/features/opening', 'opening.css'), 'utf8')
+  const main = readFileSync('src/main.tsx', 'utf8')
+  const open = readFileSync(join('src/features/opening', 'Opening.tsx'), 'utf8')
+
+  it('sets the hour before the first frame instead of after it', () => {
+    // measured: without this the first painted frame is #04050a and cyan, and
+    // it snaps to the hour's own ground and accent once the effect runs
+    expect(main).toMatch(/tickDaylight\(\)/)
+    expect(main.indexOf('tickDaylight()')).toBeLessThan(main.indexOf('createRoot'))
+  })
+
+  it('holds the name still while the rest arrives under it', () => {
+    // the numbers wait on the graph; centred, each one shunted the name upward
+    // as it appeared
+    expect(css).toMatch(/\.opening \{[^}]*align-items: flex-start/s)
+    expect(css).toMatch(/\.opening-in \{[^}]*align-content: start/s)
+  })
+
+  it('condenses the name rather than sliding it in', () => {
+    // the app's whole metaphor is vapour becoming water, and the word arrives
+    // the same way: out of focus and weightless, gathering left to right
+    expect(css).toMatch(/@keyframes opening-letter/)
+    expect(css).toMatch(/\.opening-name span \{[^}]*filter: blur\(12px\)/s)
+    expect(css).toMatch(/animation-delay: calc\(var\(--i\) \* 54ms\)/)
+  })
+
+  it('lets a thumb end it early', () => {
+    // two seconds is right the first time you open the app today and too long
+    // the fourth time
+    expect(open).toMatch(/onPointerDown=\{skip\}/)
+    expect(css).toMatch(/\.opening \{[^}]*pointer-events: auto/s)
+    // …and stops taking touches the instant it starts to go, so the tap that
+    // dismissed it is not also a tap on the sky underneath
+    expect(css).toMatch(/\.opening\.leaving \{[^}]*pointer-events: none/s)
+  })
+
+  it('says what to pick up, not just how much there is', () => {
+    // the same rules the Current uses, run offline on the graph as it lands
+    expect(open).toMatch(/from '@\/domain\/next-action'/)
+    expect(open).toMatch(/start with/)
+  })
+})

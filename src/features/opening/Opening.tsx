@@ -2,26 +2,44 @@
 //
 // Opening the app used to put you straight onto the sky mid-settle: the world
 // arrives, the drops find their places, and you are already meant to be
-// thinking. This is the half-second before that — the grain, and three numbers
-// saying what state your thinking is in.
+// thinking. This is the half-second before that — the app's own name
+// condensing out of the grain, and then where your thinking stands.
 //
 // It is a moment, not a screen. Nothing to dismiss, nothing to learn, no
 // button: it fades up, holds long enough to be read, and dissolves into the
 // sky on its own. A splash screen you have to get past is a toll you pay
 // several times a day; this is closer to the pause before you open a notebook.
+// Touching it anywhere skips the rest, because some of the time you already
+// know what you came in for.
 //
 // It also answers a question the sky cannot. The sky shows you *what* you are
 // thinking about; it has no way to say how much of it is waiting on you, how
 // much is still shapeless, and how much is already moving. Three numbers do,
 // and they cost nothing to read because you are not doing anything yet.
+//
+// And then — the part that was missing — it says what to pick up. Three counts
+// with nothing under them are a readout: true, and not usable. The same rules
+// the Current uses to choose the next thing run here, offline, on the graph
+// that has just landed, so the last thing you read before the sky arrives is a
+// thing to do and the reason it was chosen.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useGraph } from '@/store/graph'
+import { nextAction } from '@/domain/next-action'
+import { todayISO } from '@/domain/prioritize-prepass'
 import './opening.css'
 
-/** Long enough to read three short numbers; short enough not to be a wait. */
-export const HOLD_MS = 1500
+/** Long enough to read three short numbers and a line; short enough not to be a wait. */
+export const HOLD_MS = 2300
+/**
+ * Signed out there are no numbers coming — `hydrate` only runs for a session —
+ * so the name says its piece and gets out of the way of the form.
+ */
+export const BARE_MS = 1250
 /** …and the dissolve on the end of it. */
 export const FADE_MS = 620
+
+/** Ten letters, each one a beat behind the last. See opening.css. */
+export const NAME = 'Brainstorm'
 
 /**
  * What state your thinking is in, in three numbers.
@@ -64,10 +82,13 @@ const WORDS: [keyof Weather, string][] = [
 ]
 
 /**
- * Shown once per launch, and only when there is something to say.
+ * Shown once per launch.
  *
- * A brand-new account has nothing to report and would get a screen of three
- * zeroes for its trouble; that is worse than no moment at all.
+ * From the very first frame, opaque, before anything is known — which is the
+ * fix for the background arriving in two pieces. It used to wait for the graph
+ * and only then cover the screen, so you watched the sky paint itself and then
+ * had a full-screen sheet dropped over the top of it. The sheet is what the
+ * app opens as now, and the sky is revealed by it leaving.
  */
 export default function Opening() {
   const hydrated = useGraph((s) => s.hydrated)
@@ -75,51 +96,90 @@ export default function Opening() {
   const relationships = useGraph((s) => s.relationships)
   const [gone, setGone] = useState(false)
   const [leaving, setLeaving] = useState(false)
-  const started = useRef(false)
+  const born = useRef(0)
+  if (!born.current) born.current = performance.now()
+  /** past the point of no return: the timers that finish the dissolve must live */
+  const going = useRef(false)
 
   const weather = useMemo(() => readWeather(thoughts, relationships), [thoughts, relationships])
   const anything = weather.pending + weather.inThought + weather.inWorks > 0
+  // The same rules the Current applies, on the graph that has just arrived. No
+  // model, no network, no waiting: a pure read of what is already here.
+  const next = useMemo(
+    () => (hydrated ? nextAction(thoughts, relationships, todayISO()) : null),
+    [hydrated, thoughts, relationships],
+  )
+
+  const skip = () => {
+    if (going.current) return
+    going.current = true
+    setLeaving(true)
+    setTimeout(() => setGone(true), FADE_MS)
+  }
 
   useEffect(() => {
-    // The clock starts when the numbers are real, not when the component
-    // mounts. Counting up from an empty store and then jumping as the graph
-    // lands is worse than waiting a beat for it.
-    if (!hydrated || started.current) return
-    started.current = true
-    if (!anything) return setGone(true)
-
-    const a = setTimeout(() => setLeaving(true), HOLD_MS)
-    const b = setTimeout(() => setGone(true), HOLD_MS + FADE_MS)
+    if (going.current) return
+    /*
+     * The clock runs from when the app opened, not from when this effect ran,
+     * and it is re-set once the graph lands. Signed in, hydration usually beats
+     * the name finishing and the whole thing reads as one movement. Signed out
+     * it never comes at all, so this leaves on the short measure rather than
+     * sitting on a sign-in form waiting for something that is not coming.
+     */
+    const wait = hydrated ? HOLD_MS : BARE_MS
+    const left = Math.max(120, wait - (performance.now() - born.current))
+    const a = setTimeout(() => {
+      going.current = true
+      setLeaving(true)
+    }, left)
+    const b = setTimeout(() => setGone(true), left + FADE_MS)
     return () => {
+      // Once it has started to go it has to be allowed to finish. Hydration
+      // landing late would otherwise tear down the timer that unmounts this,
+      // leaving a fully transparent sheet over the app for ever.
+      if (going.current) return
       clearTimeout(a)
       clearTimeout(b)
     }
-  }, [hydrated, anything])
+  }, [hydrated])
 
-  /*
-   * Nothing at all until the graph has landed.
-   *
-   * `hydrate` only runs for a signed-in session; signed out — the sign-in
-   * screen, a password reset, a device with no Supabase configured — the store
-   * stays unhydrated for ever. Waiting for hydration behind an opaque
-   * full-screen sheet therefore meant a black screen over the form you had come
-   * to fill in, with no way to make it go away. It renders when it has
-   * something to say and not one frame before.
-   */
-  if (gone || !hydrated || !anything) return null
+  if (gone) return null
+  const title = next ? (next.thought.title || next.thought.raw_content).trim().slice(0, 72) : ''
   return (
     <div
       data-testid="opening"
       className={`opening lit${leaving ? ' leaving' : ''}`}
-      aria-hidden="true"
+      onPointerDown={skip}
+      role="presentation"
     >
       <div className="opening-in">
-        {WORDS.map(([k, word], i) => (
-          <div className="opening-line" style={{ '--i': i } as React.CSSProperties} key={k}>
-            <span className="n">{weather[k]}</span>
-            <span className="w">{word}</span>
+        <h1 className="opening-name" aria-label={NAME}>
+          {[...NAME].map((c, i) => (
+            <span key={i} style={{ '--i': i } as React.CSSProperties} aria-hidden="true">
+              {c}
+            </span>
+          ))}
+        </h1>
+        {/* Nothing below the name until the graph is here. Counting up from an
+            empty store and then jumping as it lands is worse than a beat of
+            the name on its own. */}
+        {hydrated && anything && (
+          <div className="opening-said">
+            {WORDS.map(([k, word], i) => (
+              <div className="opening-line" style={{ '--i': i } as React.CSSProperties} key={k}>
+                <span className="n">{weather[k]}</span>
+                <span className="w">{word}</span>
+              </div>
+            ))}
+            {next && (
+              <div className="opening-next" style={{ '--i': 3 } as React.CSSProperties}>
+                <div className="lb">start with</div>
+                <div className="what">{title}</div>
+                <div className="why">{next.why}</div>
+              </div>
+            )}
           </div>
-        ))}
+        )}
       </div>
     </div>
   )
