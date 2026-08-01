@@ -504,3 +504,58 @@ describe('the first breath', () => {
     expect(open).toMatch(/start with/)
   })
 })
+
+// The storm, made visible.
+//
+// A capture has always been able to be several things at once — blank lines
+// split it into independent blocks, and a heading over bullets becomes a goal
+// with its steps under it. That has been true since the first version of the
+// page and nothing ever showed it happening: the drops were written straight
+// to their final places, so they simply existed, already scattered, the
+// instant the page closed. The one moment that would have taught anybody the
+// app could do it was the moment being skipped.
+describe('what you wrote, arriving', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+
+  it('is born where you were writing rather than where it ends up', () => {
+    expect(page).toMatch(/p\.rx = pf\.ox/)
+    expect(page).toMatch(/p\.ry = pf\.oy/)
+    // and out of nothing, at the point of the splash
+    expect(page).toMatch(/p\.s = 0\.08/)
+  })
+
+  it('keeps the destination authoritative the whole way', () => {
+    // `x`/`y` are where a drop belongs and `rx`/`ry` are where it is. If the
+    // target were the starting point too, a layout saved mid-flight would save
+    // every drop stacked on the spot it set out from.
+    const born = page.slice(page.indexOf('const born = (id: string'))
+    expect(born.slice(0, 300)).toMatch(/p\.x = x\s*\n\s*p\.y = y/)
+  })
+
+  it('lets them leave one at a time, and bounds the whole burst', () => {
+    // a fixed gap is right for three and absurd for twenty; the point is a
+    // ripple of departures, not a queue
+    expect(page).toMatch(/Math\.max\(28, Math\.min\(105, 380 \/ leaving\.length\)\)/)
+  })
+
+  it('does not make anybody wait when they asked for less motion', () => {
+    expect(page).toMatch(/if \(!reduced && leaving\.length > 1\)/)
+  })
+
+  it('lets a finger outrank the queue', () => {
+    // catching one mid-burst should move it, not leave it pinned to the point
+    // it was born at until its turn comes round
+    expect(page).toMatch(/if \(!dragged && performance\.now\(\) < p\.hold\) return/)
+  })
+
+  it('rings a new goal with its own steps', () => {
+    // they were not placed at all before, which is why a pool arrived looking
+    // shaken rather than formed
+    expect(page).toMatch(/b\.children\.forEach\(\(c, i, all\) => \{/)
+    expect(page).toMatch(/gp\.x \+ Math\.cos\(a\) \* 122/)
+  })
+
+  it('does not make a lone drop appear to travel', () => {
+    expect(page).toMatch(/if \(rad === 0\) p\.rx = p\.x/)
+  })
+})

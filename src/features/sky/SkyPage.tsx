@@ -315,6 +315,17 @@ interface Pos {
   mt: number
   mx: number
   my: number
+  /*
+   * Stay where you are until this moment passes.
+   *
+   * `x`/`y` are where a drop belongs and `rx`/`ry` are where it is; `glide`
+   * closes the gap every frame. A drop that is born somewhere other than where
+   * it belongs — everything written in one capture is born at the point you
+   * were writing — needs to wait its turn before it sets off, and the target
+   * must stay authoritative the whole time so that a layout saved mid-flight
+   * saves where things are going rather than where they set out from.
+   */
+  hold?: number
 }
 
 const QUESTIONS = [
@@ -3213,31 +3224,87 @@ function mountSky(root: HTMLDivElement) {
       // while its page is up, and hanging a new thought off something that is
       // no longer there loses it.
       const into = pf.into && S().thoughts.some((t) => t.id === pf.into && t.status === 'open') ? pf.into : null
+      /*
+       * The storm, made visible.
+       *
+       * A capture has always been able to be several things at once — blank
+       * lines split it into independent blocks, and a heading over bullets
+       * becomes a goal with its steps under it. That has been true since the
+       * first version of this page and *nothing showed it happening*: the
+       * drops were written straight to their final places, so they simply
+       * existed, already scattered, the instant the page closed. Nobody would
+       * ever have guessed the app could do it, and the one moment that would
+       * have taught them was the moment being skipped.
+       *
+       * So everything is born where you were writing, and leaves from there —
+       * one after another, a beat apart, out to where it belongs. Same
+       * positions, same graph, same everything: only the departure is new. The
+       * target stays authoritative throughout (see `Pos.hold`), so the physics
+       * and any layout saved mid-flight are of where things are going.
+       */
+      const leaving: { p: Pos; at: number }[] = []
+      const born = (id: string, x: number, y: number) => {
+        const p = posOf(id)
+        p.x = x
+        p.y = y
+        p.rx = pf.ox
+        p.ry = pf.oy
+        // out of nothing, at the point of the splash
+        p.s = 0.08
+        leaving.push({ p, at: 0 })
+        return p
+      }
       for (const b of blocks) {
         if (b.children.length) {
           pools++
           const g = S().addThought({ raw_content: b.title, title: b.title, type: 'goal', due_date: b.due })
           if (into) S().addRelationship(g.id, into, 'part_of')
-          const gp = posOf(g.id)
-          gp.x = gp.rx = pf.ox + (Math.random() - 0.5) * 60
-          gp.y = gp.ry = Math.max(140, pf.oy - 60)
-          for (const c of b.children) {
+          const gp = born(
+            g.id,
+            pf.ox + (Math.random() - 0.5) * 60,
+            Math.max(140, pf.oy - 60),
+          )
+          // …and its steps ring the goal rather than landing wherever the
+          // default placement felt like putting them. They were unplaced
+          // entirely before this, which is why a pool arrived looking shaken
+          // rather than formed.
+          b.children.forEach((c, i, all) => {
             const child = S().addThought({ raw_content: c, title: c, type: 'action' })
             S().addRelationship(child.id, g.id, 'part_of')
-          }
+            const a = -Math.PI / 2 + (i / Math.max(1, all.length)) * Math.PI * 2
+            born(
+              child.id,
+              Math.max(60, Math.min(W - 60, gp.x + Math.cos(a) * 122)),
+              Math.max(140, Math.min(H - 160, gp.y + Math.sin(a) * 104)),
+            )
+          })
         } else {
           for (const line of b.body.split(/\n+/).map((s) => s.trim()).filter(Boolean)) {
             drops++
             const t = S().addThought({ raw_content: line, due_date: b.due, source: micUsed ? 'voice' : 'text' })
             if (into) S().addRelationship(t.id, into, 'part_of')
-            const p = posOf(t.id)
             const a = Math.random() * Math.PI * 2
             const rad = drops === 1 && pools === 0 ? 0 : 100 + (drops % 3) * 46
-            p.x = p.rx = Math.max(60, Math.min(W - 60, pf.ox + Math.cos(a) * rad))
-            p.y = p.ry = Math.max(140, Math.min(H - 160, pf.oy + Math.sin(a) * rad * 0.8))
+            const p = born(
+              t.id,
+              Math.max(60, Math.min(W - 60, pf.ox + Math.cos(a) * rad)),
+              Math.max(140, Math.min(H - 160, pf.oy + Math.sin(a) * rad * 0.8)),
+            )
+            // a lone drop has nowhere to go, so it should not appear to travel
+            if (rad === 0) p.rx = p.x
             classifyQuiet(t)
           }
         }
+      }
+      /*
+       * One at a time, and the whole burst over in about a third of a second
+       * however many there are. A fixed gap is right for three and absurd for
+       * twenty — the point is a ripple of departures, not a queue.
+       */
+      if (!reduced && leaving.length > 1) {
+        const now = performance.now()
+        const step = Math.max(28, Math.min(105, 380 / leaving.length))
+        leaving.forEach((l, i) => (l.p.hold = now + i * step))
       }
       micUsed = false
       splash(pf.ox)
@@ -5837,6 +5904,13 @@ function mountSky(root: HTMLDivElement) {
     lineUsed++
   }
   function glide(p: Pos, dragged: boolean) {
+    // waiting its turn to leave — see Pos.hold and the capture below. A finger
+    // on it outranks the queue: catching one mid-burst should move it, not
+    // leave it pinned to the point it was born at until its turn comes round.
+    if (p.hold) {
+      if (!dragged && performance.now() < p.hold) return
+      p.hold = undefined
+    }
     const k = reduced ? 1 : dragged ? 0.55 : 0.22
     p.rx += (p.x - p.rx) * k
     p.ry += (p.y - p.ry) * k
