@@ -818,3 +818,71 @@ a {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Waiting on the agent, on paper.
+   The glass version of this lives in sky.css; both take their words and their
+   arithmetic from `workFace`, so the app cannot describe the same minute two
+   different ways depending on which screen you happened to be looking at. */
+.working {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.working__line {
+  font-size: var(--fs-caption);
+  color: var(--ink-soft);
+}
+.working__bar {
+  height: 2px;
+  border-radius: 2px;
+  /* the accent at a whisper, so the track works on paper and on glass without
+     this file having to know which one it is on */
+  background: rgba(var(--accent-rgb), 0.16);
+  overflow: hidden;
+}
+.working__bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: rgba(var(--accent-rgb), 0.7);
+  /* a second, matching the tick that feeds it: it creeps rather than steps */
+  transition: width 950ms linear, background 400ms ease;
+}
+/* past the estimate it stops moving and goes quiet, rather than inching
+   towards a line it is not going to reach */
+.working__bar i.over { background: rgba(var(--accent-rgb), 0.3); }
+/* What it went out to check — the substance of the whole thing, and the
+   difference between "the computer is busy" and knowing what it is busy with. */
+.working__needs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.working__needs li {
+  position: relative;
+  padding-left: 13px;
+  font-size: var(--fs-caption);
+  line-height: 1.35;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.working__needs li::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0.58em;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(var(--accent-rgb), 0.5);
+}
+.working__note {
+  font-size: var(--fs-caption);
+  color: var(--ink-faint);
+}

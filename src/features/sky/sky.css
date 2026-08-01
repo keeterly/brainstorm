@@ -430,6 +430,115 @@ body.sky-offering .sky-voice { bottom: calc(var(--water-line-up, 86px) + 106px);
 }
 
 /*
+ * While the agent is away.
+ *
+ * The whole of this used to be one line — "out finding out · 41s" — over a
+ * pulsing drop, which says something is happening and nothing else. Not what
+ * it went to do, not whether forty-one seconds is normal, not whether you have
+ * to stand here for it. A minute of silence with a glow on it is
+ * indistinguishable from a minute of nothing working.
+ *
+ * It is still the same pill in the same place, grown: the line it already had,
+ * a bar under it, and the specific things the agent said it was going to check
+ * — which the app has known before every single run and has never once shown
+ * you. Nothing here is a second surface to dismiss, and it collapses back to a
+ * line the moment the work lands. See working.ts, which decides the words.
+ */
+/*
+ * Denser glass while it is a panel rather than a line.
+ *
+ * The pill is a window onto the sky, and at one line of four words that is
+ * exactly right — it is an aside, and you should be able to see what it is an
+ * aside *about*. Grown to five lines it is a window the size of a drop, and
+ * the first thing this looked like on a real sky was a paragraph printed
+ * across the middle of "SS27 campaign": both legible, neither readable.
+ *
+ * Same material, more of it — but the darkening is done with a fill rather
+ * than by leaning on `backdrop-filter` alone. Every drop carries
+ * `will-change: transform` and so lives on its own composited layer, which is
+ * exactly the case where a backdrop filter quietly declines to include it: the
+ * pill dimmed the sky behind it and left the nearest drop's words printed
+ * across the panel at full contrast. A fill has no such opinion.
+ *
+ * It is still glass. At this alpha the sky's own gradient comes through it and
+ * the hour still changes its colour; it is smoked, not opaque, and it lasts
+ * only as long as the work does.
+ */
+.sky-voice.busy {
+  backdrop-filter: blur(30px) saturate(150%) brightness(0.8);
+  -webkit-backdrop-filter: blur(30px) saturate(150%) brightness(0.8);
+  background: linear-gradient(rgba(9, 13, 21, 0.84), rgba(9, 13, 21, 0.76) 48%, rgba(9, 13, 21, 0.82));
+}
+.sky-voice .work {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 7px;
+}
+.sky-voice .work[hidden] { display: none; }
+/* The bar is elapsed against an estimate, and it is drawn as one: a hairline
+   the width of the pill, not a loading bar with a percentage behind it. */
+.sky-voice .work .bar {
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+.sky-voice .work .bar i {
+  display: block;
+  height: 100%;
+  width: calc(var(--p, 0) * 100%);
+  border-radius: inherit;
+  background: rgba(var(--accent-rgb), 0.85);
+  /* a second, matching the tick that feeds it, so it creeps rather than steps */
+  transition: width 950ms linear, background 400ms ease;
+}
+/* Overrun: the bar stops moving and goes quiet rather than inching towards a
+   line it is not going to reach. The note below says so in words. */
+.sky-voice.over .work .bar i { background: rgba(255, 255, 255, 0.34); }
+
+/* What it went out to check. The substance of the whole panel: it is the
+   difference between "the computer is busy" and "it is looking up your show
+   dates and the showroom lead times". */
+.sky-voice .work .needs {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.sky-voice .work .needs[hidden] { display: none; }
+.sky-voice .work .needs span {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--ink-soft);
+  padding-left: 13px;
+  position: relative;
+  /* one line each — these are things to check, not sentences to read */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sky-voice .work .needs span::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0.58em;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(var(--accent-rgb), 0.55);
+}
+/* One note, and only when there is something true to say: that you are free to
+   put the phone down, or that this has run long. */
+.sky-voice .work .note {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--ink-faint);
+}
+.sky-voice .work .note[hidden] { display: none; }
+.sky-voice.over .work .note { color: rgba(255, 255, 255, 0.62); }
+
+/*
  * The two notes about the sky as a whole — what is resting, and an offer to
  * tidy it — stand together, in a row, at the top right.
  *
@@ -775,6 +884,45 @@ body.sky-dragging .sky-undo.show {
 }
 .sky-page .pans .shot img { margin-bottom: 0; }
 .sky-page .pans .shot:active { opacity: 0.6; }
+/*
+ * A drop that *is* a photograph gets the page it is on.
+ *
+ * Opening one gave you a 120px stamp in the top-left corner of an otherwise
+ * empty screen — the same size the picture has in the row of a list, on a page
+ * whose entire content is that picture. The rest of the page said "Photo",
+ * "Add something under this…", and nothing else. There was more of the
+ * photograph visible in the bubble you tapped to get here.
+ *
+ * So it fills the width and takes as much height as it needs up to about half
+ * the screen, which is where the writing box and Done begin. Bigger than that
+ * and the page stops being a page; this way the format is intact — name at the
+ * top, somewhere to add underneath, Done where Done always is — and the
+ * picture is the subject rather than a footnote to it. Pressing it still opens
+ * the true full screen.
+ */
+.sky-page.solo .pans .shot {
+  width: 100%;
+  margin-bottom: 14px;
+}
+.sky-page.solo .pans .shot img {
+  width: 100%;
+  max-width: none;
+  /* it may be a tall portrait; `contain` keeps it whole rather than cropping
+     the top off a picture whose subject is usually in it */
+  max-height: 46dvh;
+  object-fit: contain;
+  border-radius: 14px;
+}
+/* On a group page the picture shares the page with the list of what is inside,
+   so it takes a quarter of the height rather than half — still four times the
+   stamp it was. */
+.sky-page.group:not(.solo) .pans .shot img {
+  width: 100%;
+  max-width: none;
+  max-height: 24dvh;
+  object-fit: contain;
+  border-radius: 14px;
+}
 /* A brief is longer than a plan and is the thing you waited a minute for, so
    it gets the room to be read — all of it. 58dvh was still a cap: the writing
    box is hidden on a reading page, so nearly a third of the screen sat empty
@@ -1796,6 +1944,43 @@ body.sky-resting .sky-tidy { right: calc(14px + var(--rest-w, 96px) + 8px); }
   line-height: 1.45;
   font-weight: 400;
   text-wrap: pretty;
+}
+
+/*
+ * …and when what opens is a photograph, it opens as one.
+ *
+ * The glass keeps its blown edge and the picture is cut to it, so what comes
+ * up is still a drop that swelled rather than a rectangle laid over the sky.
+ * No height is set anywhere: the image's own proportions decide, a portrait
+ * comes up tall and a landscape wide, and the ring is pushed apart around
+ * whichever it turns out to be.
+ */
+.skyb.peek.picture {
+  gap: 7px;
+  overflow: hidden;
+}
+.skyb.peek.picture .big {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* far enough short of the glass that a tall photograph still reads as
+     something floating in the sky rather than a column filling it. Set from
+     the card, in the card's own units — see peekBox — because this lives
+     inside the zoom and a dvh here would mean something different at every
+     scale. The dvh is only the fallback. */
+  max-height: var(--picmax, 54dvh);
+  object-fit: contain;
+  /* no radius of its own: `--blob` is a four-corner ellipse spec, not a length
+     you can subtract from, so the card's own `overflow: hidden` is what cuts
+     the picture to the blown edge */
+  /* the picture is the content; the glass behind it is the frame */
+  background: rgba(0, 0, 0, 0.24);
+}
+.skyb.peek.picture .t {
+  font-weight: 400;
+  color: var(--ink-soft);
+  text-align: center;
+  padding: 0 6px 2px;
 }
 
 /* a drop the agent has gone away to work on — lit, and breathing while it is

@@ -271,3 +271,121 @@ describe('swiping a row to uncover its take-out', () => {
     expect(page).toMatch(/if \(!drag\.up\) return steer\(e\.clientX, e\.clientY\)/)
   })
 })
+
+// A photograph, opened.
+//
+// Two separate places threw the picture away at the exact moment you asked to
+// see it bigger. Tapping a photo drop in a ring rebuilt it as a card holding
+// one text node — so the bubble that had been showing the photograph became a
+// wide pill saying the word "Photo". And opening its page put the picture in
+// at 120px, a stamp in the corner of a screen whose entire content is that
+// picture, with more of it visible in the bubble you tapped to get there.
+describe('opening a photograph', () => {
+  const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+
+  it('builds the opened card round the picture, not round the word for it', () => {
+    expect(page).toMatch(/const pic = imgOf\(m\)/)
+    expect(page).toMatch(/<img class="big" alt="" \/>/)
+    // the full-size original where there is one; the drop's small face is cut
+    // for a bubble and would be soft at this size
+    expect(page).toMatch(/fullOf\(m\) \?\? pic/)
+  })
+
+  it('drops a caption that only repeats the word photograph', () => {
+    // every picture arrives titled "Photo" until it is renamed, and a caption
+    // saying "photo" under a photo is a line of type spent on nothing
+    expect(page).toMatch(/cap\.trim\(\)\.toLowerCase\(\) !== 'photo'/)
+  })
+
+  it('gives it a box sized for looking rather than for reading', () => {
+    // the column width that suits a sentence is the wrong measure for a
+    // picture: what you opened it for is to see it bigger
+    expect(page).toMatch(/if \(picture\)\s*return \{\s*w: Math\.min\(320, W - 56\)/)
+    expect(page).toMatch(/return \{ w: Math\.min\(224, W - 112\)/)
+  })
+
+  it('sets no height anywhere, so the picture keeps its own proportions', () => {
+    const rule = sky.slice(sky.indexOf('.skyb.peek.picture .big'))
+    expect(rule.slice(0, 320)).toMatch(/height: auto/)
+    // a cap, so a tall portrait is still a thing floating in the sky rather
+    // than a column filling it — set from the card in the card's own units,
+    // because this lives inside the zoom and a dvh would mean something
+    // different at every scale
+    expect(rule.slice(0, 460)).toMatch(/max-height: var\(--picmax, 54dvh\)/)
+  })
+
+  it('cuts the picture to the blown edge rather than to a rectangle', () => {
+    expect(sky).toMatch(/\.skyb\.peek\.picture \{[^}]*overflow: hidden/s)
+  })
+
+  it('gives the drop page to the picture that is the whole of the drop', () => {
+    // 120px was the shared thumbnail rule, and it applied to the one page
+    // where the picture is the content rather than an illustration of it
+    expect(sky).toMatch(/\.sky-page\.solo \.pans \.shot img \{[^}]*max-width: none/s)
+    expect(sky).toMatch(/\.sky-page\.solo \.pans \.shot img \{[^}]*max-height: 46dvh/s)
+    // `contain`, not `cover`: the subject of a photograph is usually near the
+    // top and cropping is how you lose it
+    expect(sky).toMatch(/\.sky-page\.solo \.pans \.shot img \{[^}]*object-fit: contain/s)
+  })
+
+  it('leaves room for the list when the page has one', () => {
+    expect(sky).toMatch(/\.sky-page\.group:not\(\.solo\) \.pans \.shot img \{[^}]*max-height: 24dvh/s)
+  })
+})
+
+// Saying what the agent is doing.
+//
+// The wording and the arithmetic are argued with in working.test.ts. What is
+// pinned here is that the app is actually wired to it — that the three actions
+// which go away for a minute all report through one watch, that the panel it
+// paints into exists, and that the two surfaces a wait can happen on read from
+// the same function rather than each keeping its own sentence.
+describe('what the agent is doing, while it does it', () => {
+  const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+
+  it('runs all four waits through one watch', () => {
+    // deepen, draft, answer — and the fourth, picking up a run that was
+    // already going before this page existed, which was the longest and least
+    // legible wait in the app and had one static line for the whole of it
+    expect([...page.matchAll(/watchWork\(tl,/g)].length).toBe(4)
+    // and none of them keeps a hand-rolled ticker any more
+    expect(page).not.toMatch(/const tick = \(\) => \{\s*if \(working !== tl\.t\.id\)/)
+  })
+
+  it('counts a picked-up run from when the run started, not from now', () => {
+    // what a person means by "how long has it been" is how long the work has
+    // been going, not how long this tab has been watching it
+    expect(page).toMatch(/watchWork\(tl, \(\) => carried, run\.createdAt\)/)
+    expect(page).toMatch(/const began = since \?\? Date\.now\(\)/)
+  })
+
+  it('has somewhere to paint it', () => {
+    expect(page).toMatch(/data-sky="voiceWork"/)
+    expect(page).toMatch(/data-sky="voiceBar"/)
+    expect(page).toMatch(/data-sky="voiceNeeds"/)
+    expect(page).toMatch(/data-sky="voiceNote"/)
+  })
+
+  it('rebuilds the list of what it is checking only when it changes', () => {
+    // this paints on a one-second tick for up to a minute; replacing the same
+    // three nodes sixty times is work the phone does not need to do
+    expect(page).toMatch(/if \(voiceNeeds\.dataset\.said !== want\)/)
+  })
+
+  it('thickens the glass while it is a panel rather than a line', () => {
+    // a five-line window onto the sky puts a drop's words through the middle
+    // of the paragraph you are reading
+    expect(sky).toMatch(/\.sky-voice\.busy \{[^}]*background: linear-gradient\(rgba\(9, 13, 21/s)
+  })
+
+  it('says the same thing on paper as it does on glass', () => {
+    const cur = readFileSync(join('src/features/current', 'Working.tsx'), 'utf8')
+    expect(cur).toMatch(/from '@\/features\/sky\/working'/)
+    const page2 = readFileSync(join('src/features/current', 'CurrentPage.tsx'), 'utf8')
+    // the Current kept its own sentence for the same minute; it does not now
+    expect(page2).not.toMatch(/waitingWord/)
+    expect(page2).toMatch(/<Working$/m)
+  })
+})

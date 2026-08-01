@@ -23,7 +23,8 @@ import { faceOf, isWall, lookAtWall } from './lookFlow'
 import { learnFromLettingGo } from './letGoFlow'
 import { closeGoal, evaporateGoal } from './finishFlow'
 import { emptiedGroup, wouldCircle } from '@/domain/finished'
-import { fullDepth, sizeUp, waitingWord, type Sizing } from './gaugeFlow'
+import { fullDepth, sizeUp, type Sizing } from './gaugeFlow'
+import { workFace, type Phase, type WorkState } from './working'
 import { isMakeable, isQuestion } from '@/domain/question'
 import {
   addTo,
@@ -101,6 +102,14 @@ export default function SkyPage() {
       <div className="sky-voice" data-sky="voice" role="status">
         <span className="who" data-sky="voiceWho" />
         <span className="lb" data-sky="voiceLb" />
+        {/* …and while it is away, what it is away doing. See working.ts. */}
+        <div className="work" data-sky="voiceWork" hidden>
+          <div className="bar">
+            <i data-sky="voiceBar" />
+          </div>
+          <div className="needs" data-sky="voiceNeeds" />
+          <div className="note" data-sky="voiceNote" />
+        </div>
       </div>
       {/* speaking is one tap: no page to open first, no button to find inside it */}
       <div className="sky-undo" data-sky="undo">
@@ -532,6 +541,10 @@ function mountSky(root: HTMLDivElement) {
   const voiceEl = $('voice')
   const voiceWho = $('voiceWho')
   const voiceLb = $('voiceLb')
+  const voiceWork = $('voiceWork')
+  const voiceBar = $('voiceBar')
+  const voiceNeeds = $('voiceNeeds')
+  const voiceNote = $('voiceNote')
   const meter = $('meter')
   const tide = $('tide')
   const updraft = $('updraft')
@@ -1293,9 +1306,24 @@ function mountSky(root: HTMLDivElement) {
    * comes out nearer square, and what opens reads as a drop that swelled
    * rather than a bar laid across the sky.
    */
-  function peekBox() {
+  function peekBox(picture = false) {
     const k = camTarget?.k ?? cam.k
     const per = 1 / Math.max(0.2, k)
+    // A picture is not prose and the column width that suits a sentence is the
+    // wrong measure for it: what you opened it for is to see it bigger. So it
+    // takes most of the glass, and the padding comes right down — a photograph
+    // wants an edge, not a mount.
+    if (picture)
+      return {
+        w: Math.min(320, W - 56) * per,
+        font: 13 * per,
+        pad: 5 * per,
+        // A ceiling for a tall portrait, in the card's own units rather than
+        // in dvh. The card is inside the zoom, so a viewport-relative cap
+        // tightens as you zoom out and a portrait would come up smaller than a
+        // landscape of the same photograph.
+        tall: Math.min(460, H - 210) * per,
+      }
     return { w: Math.min(224, W - 112) * per, font: 15 * per, pad: 16 * per }
   }
   /**
@@ -1607,9 +1635,10 @@ function mountSky(root: HTMLDivElement) {
           } else if (peek === m.id) {
             // as wide as a sentence wants and only as tall as it needs, with a
             // hand-blown rounded edge rather than a circle
-            const box = peekBox()
+            const box = peekBox(!!imgOf(m))
             me.classList.remove('pool', 'small')
             me.classList.add('member')
+            me.classList.toggle('picture', !!imgOf(m))
             me.style.width = box.w + 'px'
             me.style.height = 'auto'
             // Generous all round, and generous above and below on purpose: air
@@ -1621,11 +1650,41 @@ function mountSky(root: HTMLDivElement) {
             // almost the whole of the sides: what opens is a blob that happens
             // to hold a sentence, not a rectangle with the edges taken off
             me.style.setProperty('--blob', wabiBlob(m.id))
-            me.innerHTML = `<div class="t"></div>`
-            const tx = me.querySelector('.t') as HTMLDivElement
-            tx.style.fontSize = box.font.toFixed(1) + 'px'
-            tx.style.width = '100%'
-            tx.textContent = label(m)
+            if (box.tall) me.style.setProperty('--picmax', box.tall.toFixed(0) + 'px')
+            /*
+             * A photograph opens into the photograph.
+             *
+             * This used to build a card holding one `<div class="t">` and
+             * nothing else, which for a picture meant the picture *vanished*
+             * at the moment you touched it: the bubble had been showing it,
+             * and tapping to look closer replaced it with a wide pill saying
+             * the word "Photo". The one thing on the drop worth enlarging was
+             * the one thing thrown away to enlarge it.
+             *
+             * So it comes up as an `<img>` — laid out by the browser at the
+             * picture's own proportions, which is why the card is not given a
+             * height. A portrait opens tall and a landscape opens wide, and
+             * the ring makes room for whichever it is, because
+             * `memberRadiusOf` measures the element rather than assuming.
+             *
+             * The caption goes under it, and only if it says something. Every
+             * picture arrives titled "Photo" until you rename it, and a
+             * caption repeating the word "photo" beneath a photograph is a
+             * line of type spent on nothing.
+             */
+            const pic = imgOf(m)
+            const cap = label(m)
+            const worthSaying = cap.trim() && cap.trim().toLowerCase() !== 'photo'
+            me.innerHTML = pic
+              ? `<img class="big" alt="" />` + (worthSaying ? `<div class="t"></div>` : '')
+              : `<div class="t"></div>`
+            if (pic) (me.querySelector('img.big') as HTMLImageElement).src = fullOf(m) ?? pic
+            const tx = me.querySelector('.t') as HTMLDivElement | null
+            if (tx) {
+              tx.style.fontSize = box.font.toFixed(1) + 'px'
+              tx.style.width = '100%'
+              tx.textContent = cap
+            }
           } else {
             me.classList.remove('pool')
             me.style.height = ''
@@ -1719,14 +1778,58 @@ function mountSky(root: HTMLDivElement) {
    * suggesting something are the same voice and should never be two.
    */
   function paintVoice() {
-    const msg = voiceT ?? held
-    const who = voiceT ? voiceWhoT : heldWho
+    /*
+     * While the agent is away, this pill *is* the progress report.
+     *
+     * Not a second surface. The app has one place where it speaks, at the foot
+     * of the screen where your thumb already is, and a run that takes a minute
+     * is the app speaking at length rather than the app needing somewhere else
+     * to stand. So the same pill grows: the line it was already showing, a bar
+     * under it, what the agent went out to check, and one note. It shrinks
+     * back to a line the moment the work lands.
+     */
+    const face = work ? workFace(work) : null
+    const msg = voiceT ?? (face ? face.line : held)
+    const who = voiceT ? voiceWhoT : (work?.who ?? heldWho)
     voiceEl.classList.toggle('show', !!msg)
+    // a transient `say` takes the pill back for its four seconds; the work
+    // panel would otherwise sit under an unrelated sentence
+    voiceEl.classList.toggle('busy', !!face && !voiceT)
+    voiceEl.classList.toggle('over', !!face?.over)
     voiceWho.textContent = who ?? ''
     voiceWho.hidden = !who
     voiceLb.textContent = msg ?? ''
+    voiceWork.hidden = !face || !!voiceT
+    if (face && !voiceT) {
+      voiceBar.style.setProperty('--p', face.fill.toFixed(3))
+      // Rebuilt only when it changes. This paints on a one-second tick for as
+      // long as a minute, and replacing four nodes sixty times for the same
+      // four strings is work the phone does not need to do.
+      const want = face.needs.join('\n')
+      if (voiceNeeds.dataset.said !== want) {
+        voiceNeeds.dataset.said = want
+        voiceNeeds.innerHTML = face.needs.map(() => `<span></span>`).join('')
+        ;[...voiceNeeds.children].forEach((el, i) => (el.textContent = face.needs[i]))
+      }
+      voiceNeeds.hidden = !face.needs.length
+      voiceNote.textContent = face.note ?? ''
+      voiceNote.hidden = !face.note
+    }
     // the recommendation and the agent share one place; whoever is speaking wins
     paintNext()
+  }
+  /**
+   * What the agent is doing, as state rather than as a sentence.
+   *
+   * `hold` could only ever be given a finished string, so everything the app
+   * knew about a run — how long this size of job takes, what it went out to
+   * check, whether you are free to walk away from it — had to be flattened
+   * into one line or thrown away. Nearly all of it was thrown away.
+   */
+  let work: WorkState | null = null
+  function setWork(w: WorkState | null) {
+    work = w
+    paintVoice()
   }
   let voiceT: string | null = null
   let voiceWhoT: string | null = null
@@ -4472,6 +4575,56 @@ function mountSky(root: HTMLDivElement) {
     }
   }
   /**
+   * The one ticker every action that goes away shares.
+   *
+   * All three of them had grown their own copy of the same six lines — a
+   * `began`, a `tick` guarded on `working`, a one-second interval, and a
+   * `clearInterval` at each of the several ways out. Three copies of a thing
+   * that says how the app is doing is three chances for one of them to say it
+   * differently, or to stop saying it at all on the path nobody tested.
+   *
+   * The sizing is read through a getter rather than passed in, because it is
+   * not known yet when the watch starts: the cheap read that produces it is
+   * itself part of what the wait is showing.
+   */
+  function watchWork(tl: TL, sizingNow: () => Sizing, since?: number) {
+    // `since` for a run this page did not start: what a person wants to know
+    // about work they left running is how long it has been going, not how long
+    // this tab has been watching it.
+    const began = since ?? Date.now()
+    let phase: Phase = 'sizing'
+    const tick = () => {
+      // it moved on to something else, or finished; either way this is stale
+      if (working !== tl.t.id) return
+      const sz = sizingNow()
+      setWork({
+        who: trim(label(tl.t), 34),
+        what: sz.why,
+        phase,
+        needs: sz.needs,
+        expect: sz.seconds,
+        elapsed: (Date.now() - began) / 1000,
+        // a run with nothing to look up is answered inside the request and
+        // dies with the page; only the other kind survives being walked away
+        // from, and only the other kind may say so
+        background: !sz.quick,
+      })
+    }
+    tick()
+    const patience = setInterval(tick, 1000)
+    return {
+      /** where the page has got to — the three states it can actually tell apart */
+      at(p: Phase) {
+        phase = p
+        tick()
+      },
+      stop() {
+        clearInterval(patience)
+        setWork(null)
+      },
+    }
+  }
+  /**
    * Work new information into a part of the map.
    *
    * The one thing here that can take something away, so it is the one thing
@@ -4564,9 +4717,28 @@ function mountSky(root: HTMLDivElement) {
       if (run.status === 'running') {
         // still out there. Take over the watch, and show it as out.
         setWorking(id)
-        hold('still out there — picking up where it left off')
+        /*
+         * The longest, least legible wait in the app, and it had one static
+         * line for the whole of it. This is a run that has been going since
+         * before the page existed — possibly for minutes, through a locked
+         * phone — and it now counts from when the run actually started rather
+         * than from when this tab noticed it, which is the number a person
+         * means when they ask how long it has been.
+         *
+         * The gauge that sized it lived in the page that started the run and
+         * is gone, so there is nothing honest to say about what it went out to
+         * check. It says how long instead, and no more.
+         */
+        const carried: Sizing = { ...fullDepth(0), why: 'picked up where it left off' }
+        const watch = watchWork(tl, () => carried, run.createdAt)
+        watch.at('out')
         const res = await awaitRun(run.id, { startedAt: run.createdAt })
-        if (dead) return
+        if (dead) {
+          watch.stop()
+          return
+        }
+        watch.at('landing')
+        watch.stop()
         setWorking(null)
         if (!res.ok) {
           void markApplied(run.id)
@@ -4622,23 +4794,18 @@ function mountSky(root: HTMLDivElement) {
     // because it does not fit inside a request. So the notice stands for the
     // whole of that, and counts, rather than blinking once and leaving a
     // glowing drop and silence — which reads as nothing happening.
-    const began = Date.now()
     // How long this takes is a property of the ask, not of the button, so the
     // notice stops promising a minute for everything. A cheap read decides
     // first, and what it says stands as the wait.
     let sizing: Sizing = { ...fullDepth(4), why: 'sizing it up' }
-    const tick = () => {
-      if (working !== tl.t.id) return
-      hold(waitingWord(sizing, Math.round((Date.now() - began) / 1000)), trim(label(tl.t), 34))
-    }
-    tick()
-    const patience = setInterval(tick, 1000)
+    const watch = watchWork(tl, () => sizing)
     sizing = await sizeUp(tl.t.id, 'plan', 4)
     if (dead) {
-      clearInterval(patience)
+      watch.stop()
       return
     }
-    tick()
+    // sized; now it is genuinely away
+    watch.at('out')
     // if the drop is a picture, the picture is the thing being asked about
     const img = ex(tl.t).img as string | undefined
     const b64 = img?.includes(',') ? img.split(',')[1] : undefined
@@ -4646,7 +4813,11 @@ function mountSky(root: HTMLDivElement) {
       image: b64 ? { mediaType: 'image/jpeg', dataB64: b64 } : undefined,
       sizing,
     })
-    clearInterval(patience)
+    // back, and what it wrote is going in. A minute of waiting that ends on a
+    // bar still at four-fifths reads as a failure; this is the one moment the
+    // bar is allowed to close, because it is the one moment it is true.
+    watch.at('landing')
+    watch.stop()
     setWorking(null)
     if (res.kind === 'failed') {
       // a minute of waiting deserves better than four seconds of apology, and
@@ -4707,22 +4878,21 @@ function mountSky(root: HTMLDivElement) {
   async function runDraft(tl: TL, intent?: string) {
     if (working || S().offline) return
     setWorking(tl.t.id)
-    const began = Date.now()
     let sizing: Sizing = { ...fullDepth(2), why: 'reading the task' }
-    const tick = () => {
-      if (working !== tl.t.id) return
-      hold(waitingWord(sizing, Math.round((Date.now() - began) / 1000)), trim(label(tl.t), 34))
-    }
-    tick()
-    const patience = setInterval(tick, 1000)
+    const watch = watchWork(tl, () => sizing)
     sizing = await sizeUp(tl.t.id, 'draft', 2)
     if (dead) {
-      clearInterval(patience)
+      watch.stop()
       return
     }
-    tick()
+    // sized; now it is genuinely away
+    watch.at('out')
     const res = await draftThought(tl.t.id, { intent, sizing })
-    clearInterval(patience)
+    // back, and what it wrote is going in. A minute of waiting that ends on a
+    // bar still at four-fifths reads as a failure; this is the one moment the
+    // bar is allowed to close, because it is the one moment it is true.
+    watch.at('landing')
+    watch.stop()
     setWorking(null)
     if (dead) return
     if (res.kind === 'failed') {
@@ -4788,20 +4958,15 @@ function mountSky(root: HTMLDivElement) {
   async function runAnswer(tl: TL, question?: string) {
     if (working || S().offline) return
     setWorking(tl.t.id)
-    const began = Date.now()
     let sizing: Sizing = { ...fullDepth(3), why: 'sizing it up' }
-    const tick = () => {
-      if (working !== tl.t.id) return
-      hold(waitingWord(sizing, Math.round((Date.now() - began) / 1000)), trim(label(tl.t), 34))
-    }
-    tick()
-    const patience = setInterval(tick, 1000)
+    const watch = watchWork(tl, () => sizing)
     sizing = await sizeUp(tl.t.id, 'answer', 3)
     if (dead) {
-      clearInterval(patience)
+      watch.stop()
       return
     }
-    tick()
+    // sized; now it is genuinely away
+    watch.at('out')
     const img = ex(tl.t).img as string | undefined
     const b64 = img?.includes(',') ? img.split(',')[1] : undefined
     const res = await answerThought(tl.t.id, {
@@ -4809,7 +4974,11 @@ function mountSky(root: HTMLDivElement) {
       image: b64 ? { mediaType: 'image/jpeg', dataB64: b64 } : undefined,
       sizing,
     })
-    clearInterval(patience)
+    // back, and what it wrote is going in. A minute of waiting that ends on a
+    // bar still at four-fifths reads as a failure; this is the one moment the
+    // bar is allowed to close, because it is the one moment it is true.
+    watch.at('landing')
+    watch.stop()
     setWorking(null)
     if (dead) return
     if (res.kind === 'failed') {

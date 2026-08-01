@@ -15,7 +15,8 @@ import { Made } from './Made'
 import { isMakeable, isQuestion } from '@/domain/question'
 import { answerThought } from '@/features/sky/answerFlow'
 import { draftMarkdown, draftThought } from '@/features/sky/draftFlow'
-import { fullDepth, sizeUp, waitingWord, type Sizing } from '@/features/sky/gaugeFlow'
+import { fullDepth, sizeUp, type Sizing } from '@/features/sky/gaugeFlow'
+import Working from './Working'
 import type { AnswerOutput } from '@shared/ai/actions/answer'
 import { emptiedGroup } from '@/domain/finished'
 import { closeGoal, evaporateGoal } from '@/features/sky/finishFlow'
@@ -329,10 +330,11 @@ export default function CurrentPage() {
               that you can put the phone down. An ask that needs nothing looked
               up lands before you could lock anything. */}
           {asking === primary.id && (
-            <p className="muted" style={{ fontSize: 'var(--fs-caption)', marginTop: 12 }}>
-              {waitingWord(sizing ?? { ...fullDepth(primaryMakes ? 2 : 3), why: 'sizing it up' }, waited)}
-              {sizing && !sizing.quick && ' · it keeps going if you lock the phone'}
-            </p>
+            <Working
+              sizing={sizing ?? { ...fullDepth(primaryMakes ? 2 : 3), why: 'sizing it up' }}
+              sized={!!sizing}
+              waited={waited}
+            />
           )}
           {askFailed && !asking && (
             <p style={{ color: 'var(--danger)', fontSize: 'var(--fs-label)', marginTop: 12 }}>
