@@ -41,7 +41,14 @@ alter policy "own profile"             on public.profiles           using (id = 
 -- owner rather than as whoever is connected — so revoking this cannot affect
 -- sign-up. Verified by grep before writing: no `.rpc(` call anywhere in the
 -- app names it, or names anything.
-revoke execute on function public.handle_new_user() from anon, authenticated;
+--
+-- FROM PUBLIC, not from `anon, authenticated`. `execute` is granted to PUBLIC
+-- by default and those two roles inherit it from there rather than holding a
+-- grant of their own, so naming them is a no-op that reports success and
+-- changes nothing — which is what the first attempt at this did, and the
+-- advisor went on warning until it was pointed at the grant that exists. The
+-- owner keeps execute regardless, an owner's rights not being a grant.
+revoke execute on function public.handle_new_user() from public;
 
 -- ---------- 3. covering indexes for the foreign keys that carry volume ----------
 --
