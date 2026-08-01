@@ -3612,6 +3612,17 @@ function mountSky(root: HTMLDivElement) {
       micUsed = false
       splash(pf.ox)
       persistLayout()
+      /*
+       * A storm is the one landing that could leave the sky unframed.
+       *
+       * Every ⚡ landing ends in fitWhenSettled(); this one did not, and it is
+       * the only gesture that can add thirty things at once. Measured with a
+       * thirty-line capture: drops clipped off both edges of the glass and a
+       * pool half-buried under the tab bar, with the camera still framing the
+       * seven bubbles that existed before the storm. One or two new drops land
+       * where you wrote them and the frame is fine; a real storm re-frames.
+       */
+      if (drops + pools >= 3) fitWhenSettled()
       const home = into ? S().thoughts.find((t) => t.id === into) : null
       say(
         home
