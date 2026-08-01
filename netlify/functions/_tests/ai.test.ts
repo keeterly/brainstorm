@@ -15,7 +15,10 @@ interface MockState {
   authOk: boolean
   runRows: Record<string, unknown>[]
   runPatches: Record<string, unknown>[]
-  todayCount: number
+  /** what today's agent_runs rows hold — the meter reads this */
+  todayRuns: { cost_usd: number | null }[]
+  /** make the usage read fail, so failing closed can be tested */
+  usageDown: boolean
   anthropicResponses: Array<Record<string, unknown> | { __status: number }>
   anthropicCalls: Record<string, unknown>[]
 }
@@ -37,7 +40,8 @@ beforeEach(() => {
     authOk: true,
     runRows: [],
     runPatches: [],
-    todayCount: 0,
+    todayRuns: [],
+    usageDown: false,
     anthropicResponses: [],
     anthropicCalls: [],
   }
@@ -61,11 +65,10 @@ beforeEach(() => {
           state.runPatches.push(JSON.parse(String(init.body)))
           return new Response('[]', { status: 200 })
         }
-        if (init?.method === 'HEAD') {
-          return new Response(null, {
-            status: 200,
-            headers: { 'content-range': `0-0/${state.todayCount}` },
-          })
+        // the meter: a plain select of today's costs — see spentToday
+        if (!init?.method || init.method === 'GET') {
+          if (state.usageDown) return new Response('{}', { status: 500 })
+          return new Response(JSON.stringify(state.todayRuns), { status: 200 })
         }
       }
       if (u.includes('api.anthropic.com')) {
@@ -170,10 +173,60 @@ describe('/api/ai', () => {
     expect(state.anthropicCalls).toHaveLength(2)
   })
 
-  it('enforces the daily run cap', async () => {
-    state.todayCount = 400
+  it('stops when the day has cost enough, and says how much', async () => {
+    // The cap is dollars now, not a count of rows: a `gauge` and a deep
+    // `draft` are the same run to a counter and about seventy times apart in
+    // what they cost.
+    state.todayRuns = [{ cost_usd: 4 }, { cost_usd: 2 }]
     const r = await handler(req(VALID))
     expect(r.status).toBe(429)
+    expect(((await r.json()) as { error: string }).error).toContain('$6.00 of $6.00')
+  })
+
+  it('refuses the expensive run and allows the cheap one at the same balance', async () => {
+    // The point of charging the estimate up front: without it, the run that
+    // crosses the line is unbounded, and the one most likely to cross it is
+    // the one that goes out and searches four times.
+    state.todayRuns = [{ cost_usd: 5.9 }]
+    const dear = await handler(
+      req({ action: 'deepen', input: { subject: { id: 'g1', title: 'Get a $100k SBA loan' }, context: [] } }),
+    )
+    expect(dear.status).toBe(429)
+    state.anthropicResponses = [anthropicToolResponse(GOOD_OUTPUT)]
+    expect((await handler(req(VALID))).status).toBe(200)
+  })
+
+  it('counts a run that is still going, and one that never finished', async () => {
+    // Both are charged their estimate at birth — a run only becomes free by
+    // never being started.
+    state.todayRuns = [{ cost_usd: 3 }, { cost_usd: 3 }]
+    expect((await handler(req(VALID))).status).toBe(429)
+  })
+
+  it('still refuses at an absurd number of runs, however cheap they were', async () => {
+    state.todayRuns = Array.from({ length: 400 }, () => ({ cost_usd: 0 }))
+    const r = await handler(req(VALID))
+    expect(r.status).toBe(429)
+    expect(((await r.json()) as { error: string }).error).toContain('400 runs')
+  })
+
+  it('fails closed when the meter cannot be read', async () => {
+    // It used to `catch { return 0 }`, so the one condition under which the
+    // cap could not be checked was also the one under which everything was
+    // allowed. 503 and not 429: this is not the user's limit.
+    state.usageDown = true
+    const r = await handler(req(VALID))
+    expect(r.status).toBe(503)
+    expect(state.anthropicCalls).toHaveLength(0)
+  })
+
+  it('charges the run before it runs, and corrects the figure after', async () => {
+    state.anthropicResponses = [anthropicToolResponse(GOOD_OUTPUT)]
+    await handler(req(VALID))
+    expect(Number(state.runRows[0].cost_usd)).toBeGreaterThan(0)
+    // …and the true cost lands on the same row when it finishes
+    expect(Number(state.runPatches[0].cost_usd)).toBeGreaterThan(0)
+    expect(Number(state.runPatches[0].cost_usd)).toBeLessThan(Number(state.runRows[0].cost_usd))
   })
 })
 

@@ -19,8 +19,7 @@ import type { PromptCtx } from '../../shared/ai/types'
 import { corsHeaders, originAllowed } from './_lib/guard'
 import { verifyUser } from './_lib/auth'
 import { recordFailure, recordOutcome, runToValidated, type RunRequest } from './_lib/engine'
-import { insertRun, runsToday } from './_lib/runs'
-import { DAILY_RUN_CAP } from '../../shared/ai/pricing'
+import { allowRun, insertRun } from './_lib/runs'
 
 const BodySchema = z.object({
   action: z.string(),
@@ -73,13 +72,6 @@ export default async (req: Request): Promise<Response> => {
     return json(400, { error: 'Invalid input', details: parsedInput.error.flatten() }, cors)
   }
 
-  const gateAt = Date.now()
-  const used = await runsToday(user.token, user.id)
-  const gate_ms = Date.now() - gateAt
-  if (used >= DAILY_RUN_CAP) {
-    return json(429, { error: `Daily AI limit reached (${DAILY_RUN_CAP} runs). Try again tomorrow.` }, cors)
-  }
-
   // Only ever downward. The action definition is the authority on how much
   // this may cost; the caller is merely allowed to want less of it.
   const searchMaxUses =
@@ -92,14 +84,30 @@ export default async (req: Request): Promise<Response> => {
   }
   const model = MODEL_FOR_TIER[def.modelTier]
 
+  // After the searches are settled, because what this might cost depends on
+  // how many of them it is allowed to make — usually by more than the tokens.
+  const gateAt = Date.now()
+  const gate = await allowRun(
+    user.token,
+    user.id,
+    def,
+    model,
+    JSON.stringify(parsedInput.data).length,
+    searchMaxUses,
+  )
+  const gate_ms = Date.now() - gateAt
+  if (!gate.ok) return json(gate.status, { error: gate.error }, cors)
+
   // Opened alongside the question, not in front of it. Nothing needs the row to
-  // exist until there is an outcome to write into it.
+  // exist until there is an outcome to write into it — except the meter, which
+  // is why the estimate goes on at birth and is corrected at death.
   const rowP = insertRun(user.token, {
     user_id: user.id,
     action: def.name,
     action_version: def.version,
     model,
     input: parsedInput.data,
+    cost_usd: gate.cost,
   })
   // an unhandled rejection here would take the process down for a row nobody
   // is waiting on; insertRun already swallows, this is the belt

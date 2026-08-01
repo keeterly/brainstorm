@@ -1,6 +1,33 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { DAILY_USD_CAP } from '@shared/ai/pricing'
 import type { AgentRun } from '@/domain/types'
+
+/**
+ * What today has cost, out of what today is allowed to cost.
+ *
+ * The server meters in dollars and refuses at the cap; this is the same
+ * arithmetic over rows already on the page, so it costs no extra query. A
+ * limit you can only meet by being refused is not one anybody can plan
+ * around — and unlike a count of runs, this is a number that means something
+ * on its own.
+ *
+ * Every run carries a figure from the moment it opens: an estimate at first,
+ * replaced by the real cost when it lands. So a run still in flight is
+ * counted, which is the point, and the total drifts *down* as things finish.
+ */
+export function spentToday(runs: AgentRun[], now = new Date()): number {
+  const since = new Date(now)
+  since.setUTCHours(0, 0, 0, 0)
+  let usd = 0
+  for (const r of runs) {
+    if (new Date(r.created_at) < since) continue
+    // numeric(10,6) arrives from PostgREST as a string
+    const n = Number(r.cost_usd ?? 0)
+    if (Number.isFinite(n)) usd += n
+  }
+  return usd
+}
 
 const STATUS_COLOR: Record<AgentRun['status'], string> = {
   running: 'var(--warn)',
@@ -44,9 +71,21 @@ export default function RunsPage() {
     }
   }, [tries])
 
+  const today = useMemo(() => (runs ? spentToday(runs) : null), [runs])
+  // Only the last hundred runs are on the page, so a very heavy day would be
+  // read short. Said as "at least" rather than quietly under-reported.
+  const partial = (runs?.length ?? 0) >= 100
+
   return (
     <div className="page">
       <h1 className="page-title">AI activity</h1>
+      {today !== null && (
+        <p className="faint" style={{ fontSize: 'var(--fs-label)', marginBottom: 'var(--sp-3)' }}>
+          {partial ? 'At least ' : ''}
+          <strong className="mono">${today.toFixed(2)}</strong> of ${DAILY_USD_CAP.toFixed(2)} today
+          {today > 0 && ' · resets at midnight UTC'}
+        </p>
+      )}
       {error && (
         <p className="muted" style={{ fontSize: 'var(--fs-label)' }} role="status">
           {error}{' '}

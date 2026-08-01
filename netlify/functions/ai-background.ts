@@ -10,8 +10,7 @@ import type { PromptCtx } from '../../shared/ai/types'
 import { corsHeaders, originAllowed } from './_lib/guard'
 import { verifyUser } from './_lib/auth'
 import { actionFor, recordFailure, recordOutcome, runToValidated, type RunRequest } from './_lib/engine'
-import { insertRun, runsToday } from './_lib/runs'
-import { DAILY_RUN_CAP } from '../../shared/ai/pricing'
+import { allowRun, insertRun } from './_lib/runs'
 import { MODEL_FOR_TIER } from '../../shared/ai/pricing'
 import { notifyUser } from './_lib/notify'
 import { runNote } from './_lib/note'
@@ -62,25 +61,38 @@ export default async (req: Request): Promise<Response> => {
   const parsedInput = def.inputSchema.safeParse(body.input)
   if (!parsedInput.success) return json(400, { error: 'Invalid input' }, cors)
 
-  if ((await runsToday(user.token, user.id)) >= DAILY_RUN_CAP) {
-    return json(429, { error: `Daily AI limit reached (${DAILY_RUN_CAP} runs). Try again tomorrow.` }, cors)
-  }
+  // Only ever downward. The action definition is the authority on how much
+  // this may cost; the caller is merely allowed to want less of it.
+  const searchMaxUses =
+    body.searches === undefined ? undefined : Math.min(body.searches, def.searchMaxUses ?? 0)
+
+  const model = MODEL_FOR_TIER[def.modelTier]
+  // The same decision the synchronous endpoint makes, made the same way — see
+  // allowRun. It matters more here: every action that runs in the background is
+  // one of the expensive ones, and this is where a minute of searching starts.
+  const gate = await allowRun(
+    user.token,
+    user.id,
+    def,
+    model,
+    JSON.stringify(parsedInput.data).length,
+    searchMaxUses,
+  )
+  if (!gate.ok) return json(gate.status, { error: gate.error }, cors)
 
   // the row exists before the work starts, so the client always has something
-  // to watch even if the model call dies on its first breath
+  // to watch even if the model call dies on its first breath — and it is
+  // charged its estimate from that moment, so a background run that never
+  // comes back is still counted
   const runId = await insertRun(user.token, {
     id: body.runId,
     user_id: user.id,
     action: def.name,
     action_version: def.version,
-    model: MODEL_FOR_TIER[def.modelTier],
+    model,
     input: parsedInput.data,
+    cost_usd: gate.cost,
   })
-
-  // Only ever downward. The action definition is the authority on how much
-  // this may cost; the caller is merely allowed to want less of it.
-  const searchMaxUses =
-    body.searches === undefined ? undefined : Math.min(body.searches, def.searchMaxUses ?? 0)
 
   const request: RunRequest = {
     def,
