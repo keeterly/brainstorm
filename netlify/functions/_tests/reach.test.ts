@@ -118,6 +118,84 @@ describe('the picture a page says is its own', () => {
   })
 })
 
+describe('the ways a museum page names its picture', () => {
+  // Open Graph alone produced one image out of five real gallery pages.
+  // Collection systems are usually rendered by JavaScript with only structured
+  // data in the served HTML, and plenty of gallery pages never learned og.
+  const page = (body: string) => `<!doctype html><html><head></head><body>${body}</body></html>`
+  const ld = (json: string) => page(`<script type="application/ld+json">${json}</script>`)
+
+  it('reads a plain string image out of JSON-LD', () => {
+    const html = ld(`{"@type":"VisualArtwork","name":"x","image":"https://m.org/w.jpg"}`)
+    expect(heroImage(html, 'https://m.org/a')).toBe('https://m.org/w.jpg')
+  })
+
+  it('reads an ImageObject, which is what the bigger collections emit', () => {
+    const html = ld(`{"@type":"CreativeWork","image":{"@type":"ImageObject","url":"https://m.org/o.jpg"}}`)
+    expect(heroImage(html, 'https://m.org/a')).toBe('https://m.org/o.jpg')
+  })
+
+  it('reads the first of an array of them', () => {
+    const html = ld(`{"image":["https://m.org/1.jpg","https://m.org/2.jpg"]}`)
+    expect(heroImage(html, 'https://m.org/a')).toBe('https://m.org/1.jpg')
+  })
+
+  it('finds it inside an @graph, where half of them put it', () => {
+    const html = ld(`{"@context":"https://schema.org","@graph":[{"@type":"WebSite"},{"@type":"WebPage","primaryImageOfPage":{"@id":"https://m.org/g.jpg"}}]}`)
+    expect(heroImage(html, 'https://m.org/a')).toBe('https://m.org/g.jpg')
+  })
+
+  it('resolves a relative one and puts it through the same gate', () => {
+    expect(heroImage(ld(`{"image":"/img/w.jpg"}`), 'https://m.org/a')).toBe('https://m.org/img/w.jpg')
+    expect(heroImage(ld(`{"image":"http://m.org/w.jpg"}`), 'https://m.org/a')).toBeNull()
+  })
+
+  it('does not choke on the malformed JSON-LD half the web ships', () => {
+    expect(heroImage(ld('{ this is not json'), 'https://m.org/a')).toBeNull()
+  })
+
+  it('reads the older itemprop spelling', () => {
+    const html = `<head><meta itemprop="image" content="https://m.org/i.jpg"></head>`
+    expect(heroImage(html, 'https://m.org/a')).toBe('https://m.org/i.jpg')
+  })
+
+  it('takes a picture the page wrapped in a figure', () => {
+    // a figure is the page saying this picture *is* the content, which is
+    // exactly the claim being looked for
+    const html = page(`<figure><img src="https://m.org/fig.jpg" width="900"><figcaption>x</figcaption></figure>`)
+    expect(heroImage(html, 'https://m.org/a')).toBe('https://m.org/fig.jpg')
+  })
+
+  it('reads a srcset when there is no plain src', () => {
+    const html = page(`<figure><img srcset="https://m.org/a.jpg 900w, https://m.org/b.jpg 1800w"></figure>`)
+    expect(heroImage(html, 'https://m.org/a')).toBe('https://m.org/a.jpg')
+  })
+
+  it('will not take a logo, an icon or a spacer, whatever it is wrapped in', () => {
+    for (const src of ['/assets/logo.png', '/i/icon-share.png', '/sprite.svg', '/img/placeholder.jpg', '/avatar.jpg']) {
+      expect(heroImage(page(`<figure><img src="${src}" width="900"></figure>`), 'https://m.org/a'), src).toBeNull()
+    }
+  })
+
+  it('will not take something that says it is tiny', () => {
+    expect(heroImage(page(`<figure><img src="/w.jpg" width="60"></figure>`), 'https://m.org/a')).toBeNull()
+  })
+
+  it('still never takes a bare img outside a figure', () => {
+    // the masthead is a bare img on every page in the world
+    expect(heroImage(page(`<img src="https://m.org/hero.jpg" width="1200">`), 'https://m.org/a')).toBeNull()
+  })
+
+  it('prefers what the page meant most: og over structured data over a figure', () => {
+    const html =
+      `<head><meta property="og:image" content="https://m.org/og.jpg"></head>` +
+      `<body><script type="application/ld+json">{"image":"https://m.org/ld.jpg"}</script>` +
+      `<figure><img src="https://m.org/fig.jpg" width="900"></figure></body>`
+    expect(heroImage(html, 'https://m.org/a')).toBe('https://m.org/og.jpg')
+    expect(heroImage(html.replace(/<meta[^>]*>/, ''), 'https://m.org/a')).toBe('https://m.org/ld.jpg')
+  })
+})
+
 describe('what the page calls itself', () => {
   it('prefers og:title', () => {
     const html = `<head><meta property="og:title" content="City of Refuge III"><title>Tate | thing</title></head>`

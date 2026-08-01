@@ -98,7 +98,9 @@ export type FindLikeOutput = z.infer<typeof Output>
 
 export const findLike: ActionDef<FindLikeInput, FindLikeOutput> = {
   name: 'find_like',
-  version: 1,
+  // 2: the pages have to show the work, not describe it — a page with no
+  // picture on it arrives as a hole in a wall of pictures
+  version: 2,
   modelTier: 'smart',
   maxTokens: 3000,
   // It is looking for things that exist, so it has to go and look. Three is
@@ -120,11 +122,17 @@ export const findLike: ActionDef<FindLikeInput, FindLikeOutput> = {
         `\n\nRight now you are finding more pictures like one they already have. You are not writing about it.\n\n` +
         `Read the image first and place it: medium, lineage, the specific formal move it is making. Then search ` +
         `for real works that make the same move, and return the page for each one.\n\n` +
-        `Every url must be a page that shows the work — a museum collection record, a gallery's page for the ` +
-        `show, an institution's page for the piece. Never a search results page, never a home page, never an ` +
-        `image aggregator or a stock library, never a URL you assembled from a pattern rather than found. If you ` +
-        `are not sure a page exists, leave it out: eight real ones beat twelve with three dead links, and a dead ` +
-        `link here shows up as a hole in a wall of pictures.\n\n` +
+        `Every url must be a page that **shows the work as a picture**, not a page that describes it. That is the ` +
+        `whole test, and it is worth being fussy about: what they get back is a wall of the images those pages ` +
+        `carry, so a page with no picture of the piece on it arrives as a hole in the wall.\n\n` +
+        `Pages that reliably show the work: a museum's collection record for the object, Wikipedia or Wikimedia ` +
+        `Commons for the piece or the series, a gallery's page for that specific show, an institution's press ` +
+        `page for the exhibition. Pages that reliably do not: a home page, a search results page, an artist's ` +
+        `index of everything they have made, a news article about a sale, a PDF, an image aggregator or a stock ` +
+        `library. Prefer the page you actually saw in the search results over a tidier-looking URL you assembled ` +
+        `from a pattern — the assembled one is usually a 404, and a 404 is a hole too.\n\n` +
+        `If you are not sure a page exists and shows the piece, leave it out. Six real ones beat twelve with ` +
+        `six holes in them.\n\n` +
         `Do not describe the image back to them. They can see it. Do not explain the artists at length — one ` +
         `line each on what it shares with their picture, and nothing else. The pictures are the answer.`,
       user:
@@ -134,8 +142,9 @@ export const findLike: ActionDef<FindLikeInput, FindLikeOutput> = {
         `reading: what this picture is, in one line — the lineage and the move, not the description. ` +
         `They can see what it looks like.\n` +
         `finds: real works that share that move, most alike first. For each: title, who made it, where it is or ` +
-        `when it was shown, why it belongs beside theirs in one line, and the page that shows it. Up to twelve, ` +
-        `and fewer real ones is better than more guessed ones.\n` +
+        `when it was shown, why it belongs beside theirs in one line, and a page that shows the work as a ` +
+        `picture. Up to twelve, and fewer pages that really carry the image is better than more that only ` +
+        `mention it.\n` +
         `searches: two to six image searches worth running, in the words somebody who knows this field would ` +
         `use. Include the proper names — the movement, the artists, the material — because those are what make ` +
         `the difference between a search that finds the field and one that finds nothing.`,

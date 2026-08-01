@@ -1577,11 +1577,21 @@ body.sky-dragging .sky-undo.show {
   font-size: 14px;
 }
 
-/* A work whose page kept no picture of itself is still a real work. It stays
-   on the wall as words, and says more, because words are all it has. */
+/*
+ * A work whose page kept no picture of itself.
+ *
+ * It stays on the wall — it is still a real work and still one tap from the
+ * page that has it — but it gets *quieter*, not louder. The first version gave
+ * these cards their extra line back on the grounds that words were all they
+ * had, which meant that the worse the pictures went the more the page filled
+ * up with prose: a wall that failed turned itself into an essay, which is the
+ * exact thing this page exists to stop doing.
+ *
+ * So: two lines, dimmed, no more room than a card that worked. Why it belongs
+ * beside yours is behind the same tap it is behind everywhere else.
+ */
 .sky-page .pans .find.bare .shot { display: none; }
-.sky-page .pans .find.bare .h { -webkit-line-clamp: 3; }
-.sky-page .pans .find.bare .d { -webkit-line-clamp: 2; }
+.sky-page .pans .find.bare .cap { opacity: 0.72; }
 
 /* Why it is asking rather than answering — what it cannot hand back, or what
    about the question has two readings. A sentence, so it is set as one: the

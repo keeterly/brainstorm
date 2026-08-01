@@ -2734,13 +2734,8 @@ function mountSky(root: HTMLDivElement) {
             // A hole in a wall of pictures reads as the app being broken. A
             // page that has moved its image since we read it simply becomes
             // one of the word-only cards, which say more to make up for it.
-            im.onerror = () => {
-              card.classList.add('bare', 'lost')
-              why.hidden = false
-            }
+            im.onerror = () => card.classList.add('bare', 'lost')
           }
-          // a card with nothing to look at has only its words, so it shows them
-          if (!f.image) why.hidden = false
           const go = () => window.open(f.url, '_blank', 'noopener,noreferrer')
           card.querySelector('.shot')?.addEventListener('click', (e) => {
             e.stopPropagation()
@@ -2751,7 +2746,6 @@ function mountSky(root: HTMLDivElement) {
             // On a card with a picture the caption is the way in to why it is
             // here; on one without, the words are already all there is, so it
             // opens the page like everything else.
-            if (!f.image || card.classList.contains('lost')) return go()
             why.hidden = !why.hidden
             card.classList.toggle('open', !why.hidden)
           })

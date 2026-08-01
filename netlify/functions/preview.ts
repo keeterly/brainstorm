@@ -2,8 +2,12 @@
 //
 // `find_like` comes back with works and the page for each one. A list of links
 // is not what anybody asked for; the pictures are. So this goes to each page,
-// reads the image the page itself declares — Open Graph, which every museum
-// and gallery site sets — and hands back the URL of it. The app draws them.
+// reads the image the page itself declares — Open Graph, then structured data,
+// then a figure — and hands back the URL of it. The app draws them.
+//
+// Four ways of asking rather than one, because one was not enough: a real wall
+// of five museum and gallery pages came back with a single picture on it. See
+// heroImage, which has the reasoning and the order.
 //
 // And `mode: 'keep'` fetches the bytes of one image, so a reference can be
 // pulled onto the map and still be there when the page it came from is gone.
@@ -37,8 +41,14 @@ const json = (status: number, body: unknown, cors: Record<string, string>) =>
 async function card(url: string): Promise<Card> {
   const r = await reach(url, 'text/html,application/xhtml+xml')
   if (!r) return { url, image: null, title: null }
+  // A missing content-type is not a reason to give up — plenty of older
+  // gallery servers send none at all, and the parsers below simply find
+  // nothing if it turns out not to be markup. Only an explicit *other* type is
+  // worth refusing, and the one that matters is a PDF.
   const type = r.headers.get('content-type') ?? ''
-  if (!/text\/html|application\/xhtml/i.test(type)) return { url, image: null, title: null }
+  if (type && !/text\/html|application\/xhtml|text\/plain/i.test(type)) {
+    return { url, image: null, title: null }
+  }
   const head = new TextDecoder().decode(await readCapped(r, HEAD_BYTES))
   // `r.url` is not set on a manual-redirect fetch, so relative URLs resolve
   // against the address we asked for — which, after reach()'s hand-rolled
