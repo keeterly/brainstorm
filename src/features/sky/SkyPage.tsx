@@ -2523,6 +2523,13 @@ function mountSky(root: HTMLDivElement) {
                   // how far in it sits, as data for the drag and as a variable
                   // for the indent — one number, so the two can never disagree
                   `<div class="row" data-i="${i}" data-id="${b.t.id}" data-depth="${b.depth}" style="--d:${b.depth}">` +
+                  // Everything you read is on a layer that slides. Taking a
+                  // thing out of a group is the rarest act on this page and it
+                  // used to be the loudest: an uppercase pill on every row,
+                  // nine of them down the right-hand side, shouting over the
+                  // list they were meant to serve. It waits under the row now
+                  // and a swipe uncovers it — see `wireArrange`.
+                  `<div class="slide">` +
                   `<button class="tick" role="checkbox" aria-checked="false" aria-label="Done"></button>` +
                   // The picture itself, where the word "Photo" used to be. A
                   // wall of references read as a list of five identical rows
@@ -2549,6 +2556,10 @@ function mountSky(root: HTMLDivElement) {
                   // to say so — a row that looks like any other item is the
                   // page contradicting what the sky just showed you
                   `<span class="held"></span>` +
+                  `</div>` +
+                  // Still in the tab order, and focusing it uncovers it: a
+                  // control you can only reach by swiping is one a keyboard
+                  // cannot reach at all.
                   `<button class="ctl out" aria-label="Take it out of this group">take out</button>` +
                   `</div>`,
               )
@@ -3396,7 +3407,40 @@ function mountSky(root: HTMLDivElement) {
       pointer: number
       /** when the finger landed, by the clock the input events themselves use */
       t0: number
+      /** the finger went sideways: this is uncovering the take-out, not a drag */
+      swipe: boolean
+      /** how far open the row already was when the finger landed, 0 to 1 */
+      sw0: number
     } | null = null
+
+    /*
+     * Sideways.
+     *
+     * How far the row travels to uncover what is under it. Mirrors `--reveal`
+     * in the stylesheet, which is the only other place the number appears.
+     */
+    const REVEAL = 88
+    /** Enough sideways to mean it, and more than a thumb wanders during a hold. */
+    const SWIPE_START = 14
+    /** Past this on release it opens the rest of the way; short of it, it shuts. */
+    const SWIPE_TAKE = 0.42
+
+    const setSw = (row: HTMLElement, k: number) => {
+      row.style.setProperty('--sw', String(k))
+      row.classList.toggle('out-open', k > 0.99)
+    }
+    const swOf = (row: HTMLElement) => Number(row.style.getPropertyValue('--sw')) || 0
+    /** Shut every row but one — only ever one thing uncovered at a time. */
+    const shut = (except?: HTMLElement) => {
+      let any = false
+      for (const r of rows()) {
+        if (r === except || swOf(r) === 0) continue
+        r.classList.remove('tracking')
+        setSw(r, 0)
+        any = true
+      }
+      return any
+    }
 
     // where the row would land, drawn as a line across the list at the depth it
     // would land at — the one thing that makes "across nests" discoverable
@@ -3444,15 +3488,61 @@ function mountSky(root: HTMLDivElement) {
      * to. Passive, because this one only ever cancels: the drag's own
      * `preventDefault` is a separate listener, added at the lift.
      */
-    const feel = (e: TouchEvent) => {
+    /**
+     * The one place that decides what a finger which has not lifted a row is
+     * doing: scrolling the list, waiting out a hold, or pulling the row
+     * sideways to uncover its take-out.
+     *
+     * One place because there are two sources and they disagreed. `touchmove`
+     * arrives while the finger is still moving; `pointermove` is withheld
+     * through the browser's scroll disambiguation and then delivered in a
+     * clump. When the swipe lived only in the touch handler, the pointer
+     * handler — still running its old "any movement cancels the hold" rule —
+     * threw the gesture away before the swipe threshold was ever crossed, and
+     * the row never moved at all. Both call this now, from whichever arrives
+     * first, and it is idempotent: every decision is taken from where the
+     * finger started, never from where it was last seen.
+     */
+    const steer = (x: number, y: number) => {
       if (!drag || drag.up) return
+      const dx = x - drag.x0
+      const dy = y - drag.y0
+      const to = (v: number) => Math.min(1, Math.max(0, v))
+      if (drag.swipe) {
+        setSw(drag.row, to(drag.sw0 - dx / REVEAL))
+        return
+      }
+      // Mostly down the page is the list being scrolled, or a thumb on its way
+      // somewhere. Mostly across it is this.
+      if (Math.abs(dx) > Math.abs(dy)) {
+        // Only leftward from shut. Rightward on a shut row is the edge-swipe
+        // people use to go back, and taking it over would be theft.
+        if (dx > 0 && drag.sw0 === 0) return giveUp()
+        // Sideways but not yet far enough to mean it: the hold comes off and
+        // that is all, because the slop that cancels a hold is smaller than the
+        // distance that starts a swipe and something has to survive the gap. A
+        // press that ends here is still a tap, and still opens the row.
+        dropHold()
+        if (Math.abs(dx) <= SWIPE_START) return
+        drag.swipe = true
+        drag.row.classList.add('tracking')
+        shut(drag.row)
+        setSw(drag.row, to(drag.sw0 - dx / REVEAL))
+        return
+      }
+      if (Math.abs(dx) + Math.abs(dy) > HOLD_SLOP) giveUp()
+    }
+
+    const feel = (e: TouchEvent) => {
       // The first touch, rather than a hunt for the right one: a second finger
       // arriving mid-wait can only make this cancel a hold, never start one,
       // and declining to pick a row up is the harmless way to be wrong.
       const t = e.touches[0]
-      if (!t) return
-      if (Math.abs(t.clientX - drag.x0) + Math.abs(t.clientY - drag.y0) > HOLD_SLOP) giveUp()
+      if (t) steer(t.clientX, t.clientY)
     }
+    // Passive: `touch-action: pan-y` on the row already told the browser that
+    // sideways belongs to us, so there is no pan here to argue with. The drag's
+    // own `preventDefault` is a separate listener, added at the lift.
     document.addEventListener('touchmove', feel, { passive: true })
 
     /**
@@ -3470,6 +3560,9 @@ function mountSky(root: HTMLDivElement) {
       if (!drag) return
       holdT = null
       drag.up = true
+      // Nothing travels with its take-out showing. A row you are carrying is
+      // one you are placing, not one you are removing.
+      shut()
       // A row picked up while *another* row's field holds focus would be dragged
       // around underneath a keyboard covering half the list it is travelling
       // through. Putting that field away also commits it, on the usual terms.
@@ -3505,6 +3598,12 @@ function mountSky(root: HTMLDivElement) {
       if (on.closest('.tick, .out, .ctl, .pic')) return
       if (on.closest('.t') && document.activeElement === on.closest('.t')) return
 
+      // A row is already open somewhere else: this touch spends itself closing
+      // it. Anything more would be the second meaning of one press, and the
+      // press that shuts a revealed delete is not also a press on what was
+      // underneath it.
+      if (shut(row)) return
+
       const id = row.dataset.id as string
       const all = rows()
       const lines: Line[] = all.map((r) => {
@@ -3528,6 +3627,8 @@ function mountSky(root: HTMLDivElement) {
         at: null,
         up: false,
         pointer: e.pointerId,
+        swipe: false,
+        sw0: swOf(row),
       }
       dropHold()
       holdT = setTimeout(lift, HOLD_MS)
@@ -3554,12 +3655,10 @@ function mountSky(root: HTMLDivElement) {
         letGo(false)
         return
       }
-      if (!drag.up) {
-        // Moving before the hold has fired is the list being scrolled, or a
-        // thumb on its way somewhere. Either way it is not this.
-        if (Math.abs(dx) + Math.abs(dy) > HOLD_SLOP) giveUp()
-        return
-      }
+      // Before the lift there is nothing here to decide; `steer` decides it,
+      // and a mouse — which produces no touch events at all — is why this
+      // handler calls it rather than leaving it to the touch one.
+      if (!drag.up) return steer(e.clientX, e.clientY)
       // the branch travels as one, so what you are holding stays together
       for (const r of drag.branch) r.style.transform = `translateY(${dy}px)`
       const was = drag.at
@@ -3591,6 +3690,26 @@ function mountSky(root: HTMLDivElement) {
       dropHold()
       if (!drag) return
       const { at, id, row, branch, up: was, t0 } = drag
+      /*
+       * A swipe ends where it means to end, not where the finger stopped.
+       *
+       * Nothing else in `letGo` applies to one: it did not hold anything, so
+       * there is nothing to place, and it was not a tap, so the field stays
+       * shut. Halfway is the line — under it the row closes, over it the row
+       * finishes opening — and the same easing carries it either way.
+       */
+      if (drag.swipe) {
+        const from = drag.sw0
+        drag = null
+        row.classList.remove('tracking')
+        const open = swOf(row) >= SWIPE_TAKE
+        setSw(row, open ? 1 : 0)
+        // only on the way open, and only from shut: a buzz for arriving
+        // somewhere you already were is noise
+        if (open && from < 1) haptics.grab()
+        document.removeEventListener('touchmove', eat)
+        return
+      }
       /*
        * …and the same for letting go as for moving.
        *

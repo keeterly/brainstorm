@@ -948,16 +948,106 @@ body.sky-dragging .sky-undo.show {
   white-space: nowrap;
 }
 
+/*
+ * Taking a thing out of a group, out from under the list.
+ *
+ * This was an uppercase pill on every row: nine of them down the right-hand
+ * side of the page, the loudest and most repeated thing on it — and the act
+ * you reach for least. Meanwhile the three things you do constantly (tick it,
+ * tap it to type, hold it to move it) have no chrome at all. The page was
+ * shouting its rarest word and whispering its commonest ones.
+ *
+ * So it waits under the row. Everything you read rides on `.slide`; the pill
+ * sits behind it at the right, uncovered by swiping the row left. The list
+ * gets eighty-odd pixels of its text back and goes quiet, and taking something
+ * out is still one gesture rather than a trip through Select.
+ *
+ * `--sw` is the whole of it: 0 closed, 1 open, and whatever the finger says in
+ * between. The transform and the fade both read it, so tracking a thumb and
+ * settling afterwards are the same code path — the only difference is whether
+ * transitions are on, which is what `.tracking` decides.
+ */
+.sky-page .pans .row {
+  --sw: 0;
+  /* mirrored in wireArrange as REVEAL; the pill's width plus its gutter */
+  --reveal: 88px;
+  /* how far the tick's touch area reaches out past the row's own left edge, so
+     that the ring you see lines up with the margin while the thing you press
+     stays 44 wide. Read by the tick's margin and by the swipe's clip. */
+  --tick-out: 12px;
+  position: relative;
+}
+.sky-page .pans .row .slide {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  transform: translateX(calc(var(--sw) * var(--reveal) * -1));
+  transition: transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+/* under a finger there is nothing to ease towards — it is already there */
+.sky-page .pans .row.tracking .slide,
+.sky-page .pans .row.tracking .out {
+  transition: none;
+}
+/*
+ * …and the words go under the edge of the page rather than across it.
+ *
+ * Sliding a row left sends its tick and its first few letters out past the
+ * list's left margin, where they carry on being drawn over the page — which
+ * reads as a rendering fault rather than as a row moving. The clip is the
+ * list's edge.
+ *
+ * Only while it is actually moving, and this is why: `clip-path` clips touch
+ * as well as paint, and the tick's 44pt box reaches `--tick-out` further left
+ * than the row's border does — that is how the ring you see stays lined up
+ * with the margin while the thing you press is full size. Clipping a row at
+ * rest would quietly cut a quarter off the most-pressed control on the page.
+ * A row mid-swipe is not one you are aiming a tick at, so here it costs
+ * nothing. Loose above, below and to the right, so no shadow is cut.
+ *
+ * The left inset is `--tick-out` for the same reason: the row's border box
+ * starts that far out, and clipping at the border would let the words run past
+ * the list's margin — off by exactly the amount the tick hangs out by. One
+ * number, used by both, so they cannot drift.
+ */
+.sky-page .pans .row.tracking,
+.sky-page .pans .row.out-open {
+  clip-path: inset(-40px -24px -40px var(--tick-out));
+}
+
 .sky-page .pans .row .out {
-  flex-shrink: 0;
+  position: absolute;
+  right: 0;
+  /* on the first line of the row, whatever the row's height */
+  top: 11px;
+  min-width: 80px;
   min-height: 32px;
   padding: 0 11px;
-  /* on the first line of the row, whatever the row's height */
-  margin: 6px 0 -4px 4px;
   font-size: 9.5px;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+  opacity: var(--sw);
+  /* it arrives from under the row rather than simply appearing there */
+  transform: translateX(calc((1 - var(--sw)) * 14px));
+  transition: opacity 200ms ease, transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  pointer-events: none;
+}
+.sky-page .pans .row.out-open .out {
+  pointer-events: auto;
+}
+/* …and a keyboard, which cannot swipe. `pointer-events: none` does not stop a
+   button being focused, so this is only about being able to see and press what
+   you have landed on. */
+.sky-page .pans .row .out:focus-visible {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.sky-page .pans .row:has(.out:focus-visible) {
+  --sw: 1;
 }
 
 /*
@@ -974,14 +1064,14 @@ body.sky-dragging .sky-undo.show {
  * two of these touching across a boundary is worse than either being small,
  * because then a miss is not a miss, it is the wrong row.
  *
- * `position: relative` on the host is load-bearing, not decoration. A
- * percentage width on an absolutely positioned box resolves against its
- * *containing block*, so an expander on a static host silently becomes the
- * width of the whole row and swallows every other control in it. Both hosts
- * here are `.ctl`, which is already positioned; the rule says so anyway so
- * that moving it somewhere else cannot quietly break the page.
+ * A positioned host is load-bearing, not decoration. A percentage width on an
+ * absolutely positioned box resolves against its *containing block*, so an
+ * expander on a static host silently becomes the width of the whole row and
+ * swallows every other control in it. Both hosts are `.ctl`, which is already
+ * relative; the take-out went absolute when it moved under the row, which is
+ * also a containing block, so it keeps working. The rule below says it anyway
+ * for the one that has nothing else pinning it.
  */
-.sky-page .pans .row .out,
 .sky-page .pans .lab.head .sel {
   position: relative;
 }
@@ -1175,7 +1265,7 @@ body.sky-dragging .sky-undo.show {
      new 44 box came within three pixels of the photo thumbnail's, and those
      two are the pair you least want to confuse: one marks a step finished, the
      other opens a picture. Three pixels of the text's width buys six of gap. */
-  margin: 0 -6px 0 -12px;
+  margin: 0 -6px 0 calc(var(--tick-out) * -1);
   padding: 0;
   background: none;
   border: 0;

@@ -159,8 +159,11 @@ describe('somewhere to put a thumb', () => {
     // expander on a static host quietly becomes as wide as the whole row and
     // swallows every other control in it. That is not a hypothetical — it
     // happened, and it made the tick and the field unhittable.
-    const hosts = sky.slice(sky.indexOf('.sky-page .pans .row .out,'))
-    expect(hosts.slice(0, 160)).toMatch(/position: relative/)
+    //
+    // The take-out went absolute when it moved under the row, which is also a
+    // containing block, so it needs nothing said about it. Select does.
+    expect(sky).toMatch(/\.sky-page \.pans \.lab\.head \.sel \{\s*position: relative/)
+    expect(block('.sky-page .pans .row .out')).toMatch(/position: absolute/)
   })
 
   it('gives the header band the height its button needs', () => {
@@ -177,5 +180,94 @@ describe('somewhere to put a thumb', () => {
     // expensive: you tick off the wrong step, or take out the row above the
     // one you meant. This padding is the gutter between them.
     expect(block('.sky-page .pans .row')).toMatch(/padding: 5px 0/)
+  })
+})
+
+// The take-out, put back where it belongs.
+//
+// It used to be an uppercase pill on every row — nine of them down the right
+// of the page, the loudest thing on it and the act you reach for least, while
+// tick / tap-to-type / hold-to-move had no chrome at all. Now it waits under
+// the row and a swipe uncovers it.
+//
+// None of this is visible to a test that renders the component: jsdom lays
+// nothing out, so the slide, the clip and the reveal all "pass" while doing
+// nothing. What *is* checkable is that the pieces still refer to each other,
+// which is where this breaks — one number in two places, and the swipe reveals
+// eighty-eight pixels of a pill that is somewhere else.
+describe('swiping a row to uncover its take-out', () => {
+  const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+
+  it('puts what you read on a layer that can move, and the pill outside it', () => {
+    // The pill must be a sibling of `.slide`, not inside it — inside, it would
+    // travel with the words and never appear.
+    const row = page.slice(page.indexOf('`<div class="slide">`'), page.indexOf('`</div>`,'))
+    expect(row).toMatch(/class="tick"/)
+    expect(row).toMatch(/class="t"/)
+    const shut = row.indexOf('`</div>` +')
+    expect(shut, 'the slide is never closed').toBeGreaterThan(-1)
+    expect(row.indexOf('ctl out'), 'the take-out is inside the sliding layer').toBeGreaterThan(shut)
+  })
+
+  it('drives the slide and the fade off one number', () => {
+    // `--sw` is 0 shut, 1 open, and whatever the thumb says in between —
+    // which is what makes tracking a finger and settling afterwards the same
+    // code rather than two that have to agree.
+    expect(sky).toMatch(/\.slide \{[^}]*transform: translateX\(calc\(var\(--sw\) \* var\(--reveal\) \* -1\)\)/s)
+    expect(sky).toMatch(/\.row \.out \{[^}]*opacity: var\(--sw\)/s)
+  })
+
+  it('keeps the same reveal distance in the stylesheet and in the gesture', () => {
+    const css = /--reveal:\s*(\d+)px/.exec(sky)
+    const js = /const REVEAL = (\d+)/.exec(page)
+    expect(css?.[1], 'the stylesheet has no --reveal').toBeTruthy()
+    expect(js?.[1], 'wireArrange has no REVEAL').toBeTruthy()
+    // they are the same distance described twice; a swipe that uncovers 88px
+    // of a pill sitting 96px away is a pill you can never quite press
+    expect(css?.[1]).toBe(js?.[1])
+  })
+
+  it('clips the words at the list margin, not at the row border', () => {
+    // `clip-path` clips touch as well as paint, and the tick reaches
+    // `--tick-out` past the row's border so that the ring lines up with the
+    // margin while the button stays 44 wide. Both read the one variable.
+    expect(sky).toMatch(/--tick-out: 12px/)
+    expect(sky).toMatch(/margin: 0 -6px 0 calc\(var\(--tick-out\) \* -1\)/)
+    expect(sky).toMatch(/clip-path: inset\(-40px -24px -40px var\(--tick-out\)\)/)
+  })
+
+  it('only clips a row that is actually moving', () => {
+    // …because clipping one at rest would cut a quarter off the tick, which is
+    // the most-pressed control on the page.
+    const at = sky.indexOf('clip-path: inset(-40px')
+    // back past the whole selector list, not just its last line
+    const rule = sky.slice(sky.lastIndexOf('*/', at), at)
+    expect(rule).toMatch(/\.tracking/)
+    expect(rule).toMatch(/\.out-open/)
+  })
+
+  it('leaves the pill untouchable until it is showing', () => {
+    expect(sky).toMatch(/\.row \.out \{[^}]*pointer-events: none/s)
+    expect(sky).toMatch(/\.row\.out-open \.out \{\s*pointer-events: auto/)
+  })
+
+  it('still gives a keyboard a way in', () => {
+    // A control you can only reach by swiping is one a keyboard cannot reach
+    // at all. `pointer-events: none` does not stop a button being focused.
+    expect(sky).toMatch(/\.row \.out:focus-visible \{[^}]*opacity: 1/s)
+    expect(sky).toMatch(/\.row:has\(\.out:focus-visible\) \{\s*--sw: 1/)
+    expect(page).not.toMatch(/class="ctl out"[^`]*tabindex="-1"/)
+  })
+
+  it('decides what the finger is doing in exactly one place', () => {
+    // Two sources — touchmove, which arrives on time, and pointermove, which
+    // the browser withholds through scroll disambiguation and then delivers in
+    // a clump. While the swipe lived only in the touch handler, the pointer
+    // handler's older "any movement cancels" rule threw the gesture away
+    // before the swipe threshold was ever crossed, and the row never moved.
+    expect(page).toMatch(/const steer = \(x: number, y: number\)/)
+    expect(page).toMatch(/if \(t\) steer\(t\.clientX, t\.clientY\)/)
+    expect(page).toMatch(/if \(!drag\.up\) return steer\(e\.clientX, e\.clientY\)/)
   })
 })
