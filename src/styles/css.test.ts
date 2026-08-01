@@ -175,8 +175,15 @@ describe('somewhere to put a thumb', () => {
     expect(block('.sky-page .pans .wall .col')).toMatch(/flex-direction: column/)
   })
 
-  it(`keeps the wall own buttons at 44 as well`, () => {
-    expect(block('.sky-page .pans .find .acts .ctl')).toMatch(/min-height: 44px/)
+  it('keeps the wall keep-mark reachable without making it loud', () => {
+    // A wall is for looking at, so `keep it` is a mark in the corner of the
+    // picture rather than a pill with a word in it — and it grows the size it
+    // *is* rather than the size it looks, the same trick the take-out uses.
+    const save = block('.sky-page .pans .find .save')
+    expect(save).toMatch(/width: 30px/)
+    const grow = sky.slice(sky.indexOf('.sky-page .pans .find .save::after'))
+    expect(grow).toMatch(/width: 44px/)
+    expect(grow).toMatch(/height: 44px/)
   })
 
   it('grows the quiet controls without growing how loud they look', () => {

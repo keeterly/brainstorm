@@ -1549,6 +1549,31 @@ function mountSky(root: HTMLDivElement) {
     const rs = ringRadii(g)
     return rs.length ? rs[rs.length - 1] : radiusOf(g) + memberR(1) + 18
   }
+  /*
+   * Far enough out to mean it.
+   *
+   * The line was `radiusOf(g) + 70`, and `radiusOf` on a pool is the size of
+   * the *collapsed* bubble — nothing to do with where its contents are sitting
+   * once it is open. A six-member group has a body 124 across and lays its
+   * members out on a ring at 187, so the line fell at 194 and every member in
+   * the group was resting seven pixels inside it. Nudge one outward by eight
+   * and it left the group. On a group big enough for a second ring, `orbitR`
+   * passes the line altogether and the outer members were *always* over it:
+   * pick one up, put it back down, and it was out.
+   *
+   * Measured from the ring they actually stand on, plus their own width, plus
+   * a margin nobody crosses by accident. What it costs is that taking a thing
+   * out is now a deliberate haul rather than a twitch, which is the right way
+   * round for a gesture that rearranges your map.
+   */
+  function pastTheRing(id: string, poolId: string): boolean {
+    const g = view.byId.get(poolId)
+    if (!g) return false
+    const gp = posOf(poolId)
+    const p = posOf(id)
+    const out = orbitR(g) + memberR(g.members.length) + 62
+    return Math.hypot(gp.x - p.x, gp.y - p.y) > out
+  }
   function paintDropEl(t: Thought, el: HTMLDivElement, r: number, asMember: boolean) {
     el.style.width = el.style.height = r * 2 + 'px'
     el.classList.toggle('saturated', isRipe(t))
@@ -2657,39 +2682,69 @@ function mountSky(root: HTMLDivElement) {
       const cols = [...pageA.querySelectorAll('.wall .col')] as HTMLDivElement[]
       if (cols.length === 2) {
         finds.forEach((f, i) => {
+          /*
+           * The picture is the card.
+           *
+           * The first version put a picture, a title, a line of who and where,
+           * a line of why, and two pill buttons on every card — which on a
+           * phone is two photographs and then a page of prose, and it read as
+           * a bibliography with pictures in it. What this is for is looking at
+           * things.
+           *
+           * So: the image is the whole card and tapping it opens the work.
+           * Underneath, two lines at most — what it is, and who made it. Keep
+           * is a small mark in the corner of the picture rather than a pill
+           * with a word in it, because on a wall of twenty the words are the
+           * noise. Why it belongs beside yours is still worth having and is
+           * still one tap away: it is what the caption becomes when you touch
+           * it.
+           */
           const card = document.createElement('div')
           card.className = 'find' + (f.image ? '' : ' bare')
           card.innerHTML =
-            (f.image ? `<button class="shot" type="button"><img alt="" loading="lazy" /></button>` : '') +
-            `<div class="meta"><div class="h"></div><div class="d"></div><div class="w"></div></div>` +
-            `<div class="acts"><button class="ctl open" type="button">open it</button>` +
-            (f.image ? `<button class="ctl keep" type="button">keep it</button>` : '') +
-            `</div>`
+            (f.image
+              ? `<button class="shot" type="button"><img alt="" loading="lazy" />` +
+                `<span class="save" role="button" tabindex="0" aria-label="Keep this on the map">+</span></button>`
+              : '') +
+            `<button class="cap" type="button"><span class="h"></span><span class="d"></span></button>` +
+            `<div class="w" hidden></div>`
           // textContent for every one of these: they are a model's words about
           // pages it read on the open web, and this is a page on our origin
           ;(card.querySelector('.h') as HTMLElement).textContent = f.title
           ;(card.querySelector('.d') as HTMLElement).textContent = [f.who, f.where].filter(Boolean).join(' · ')
-          ;(card.querySelector('.w') as HTMLElement).textContent = f.why
+          const why = card.querySelector('.w') as HTMLElement
+          why.textContent = f.why
           const im = card.querySelector('img') as HTMLImageElement | null
           if (im && f.image) {
             im.src = f.image
             // A hole in a wall of pictures reads as the app being broken. A
             // page that has moved its image since we read it simply becomes
-            // one of the word-only cards.
-            im.onerror = () => card.classList.add('bare', 'lost')
+            // one of the word-only cards, which say more to make up for it.
+            im.onerror = () => {
+              card.classList.add('bare', 'lost')
+              why.hidden = false
+            }
           }
+          // a card with nothing to look at has only its words, so it shows them
+          if (!f.image) why.hidden = false
           const go = () => window.open(f.url, '_blank', 'noopener,noreferrer')
           card.querySelector('.shot')?.addEventListener('click', (e) => {
             e.stopPropagation()
             go()
           })
-          card.querySelector('.open')?.addEventListener('click', (e) => {
+          card.querySelector('.cap')?.addEventListener('click', (e) => {
             e.stopPropagation()
-            go()
+            // On a card with a picture the caption is the way in to why it is
+            // here; on one without, the words are already all there is, so it
+            // opens the page like everything else.
+            if (!f.image || card.classList.contains('lost')) return go()
+            why.hidden = !why.hidden
+            card.classList.toggle('open', !why.hidden)
           })
-          card.querySelector('.keep')?.addEventListener('click', (e) => {
+          const save = card.querySelector('.save') as HTMLElement | null
+          save?.addEventListener('click', (e) => {
             e.stopPropagation()
-            void keepFind(tl, f, card.querySelector('.keep') as HTMLButtonElement)
+            void keepFind(tl, f, save)
           })
           // Dealt left, right, left. Which column a picture lands in is not
           // information, and any cleverer rule needs the image's proportions —
@@ -4558,7 +4613,24 @@ function mountSky(root: HTMLDivElement) {
       // added to since has more to give; the old second label opened a page of
       // five template rows that had already been produced, which is the one
       // thing a second press should never do.
-      lb: made ? 'read it' : asking ? 'answer it' : doable ? 'do it' : ready && canRain ? 'rain' : 'work it',
+      /*
+       * `make the steps`, not `rain`.
+       *
+       * Rain is the best metaphor in this app and it was the worst button in
+       * it. Every other moon is a verb and what it does — say, ask, do it,
+       * read it, work it, find like it — and then one of them was a noun from
+       * a weather system, on the one gesture that does the most: it reads
+       * everything you have gathered under a name and writes the actual work
+       * out from under it, which then flows to the Current. There is no way to
+       * guess that from the word, and a button you have to be taught is a
+       * button that is not doing its job.
+       *
+       * The metaphor is not gone, it has just moved to where it belongs: the
+       * drops still fall out of the cloud when you press it, and the app still
+       * says the cloud let go afterwards. What the *button* says is what will
+       * happen.
+       */
+      lb: made ? 'read it' : asking ? 'answer it' : doable ? 'do it' : ready && canRain ? 'make the steps' : 'work it',
       // reading what is already written is the only one of these that needs
       // nothing from the network — rain goes out to condense now
       dim: !made && S().offline,
@@ -4889,14 +4961,14 @@ function mountSky(root: HTMLDivElement) {
    * It lands in the same group the photograph it came from is in, which is the
    * group the wall was searched on behalf of.
    */
-  async function keepFind(tl: TL, f: Find, btn: HTMLButtonElement) {
-    if (!f.image || btn.disabled) return
-    btn.disabled = true
-    btn.textContent = 'keeping…'
+  async function keepFind(tl: TL, f: Find, btn: HTMLElement) {
+    if (!f.image || btn.dataset.busy) return
+    btn.dataset.busy = '1'
+    btn.classList.add('busy')
     const dataUrl = await keepImage(f.image)
     if (!dataUrl) {
-      btn.disabled = false
-      btn.textContent = 'keep it'
+      delete btn.dataset.busy
+      btn.classList.remove('busy')
       pageN.textContent = 'that one would not come down'
       return
     }
@@ -4916,7 +4988,9 @@ function mountSky(root: HTMLDivElement) {
     p.x = p.rx = Math.max(60, Math.min(worldW() - 60, home.x + Math.cos(a) * 150))
     p.y = p.ry = Math.max(140, Math.min(waterlineY() - 90, home.y + Math.sin(a) * 120))
     p.s = 0.2
-    btn.textContent = 'kept'
+    btn.classList.remove('busy')
+    btn.classList.add('kept')
+    btn.textContent = '✓'
     rebuild()
     paintAll()
     haptics.join()
@@ -5976,6 +6050,14 @@ function mountSky(root: HTMLDivElement) {
       const rising = at.y < top
       showUpdraft(Math.round(up * 20) / 20, rising)
       drag.el.classList.toggle('rising', rising)
+      // …and the third thing a drag can mean: out of the group it is in. The
+      // other two say so while your finger is still down and this one did not,
+      // so the first you knew of it was the bar afterwards telling you where
+      // the thing had gone.
+      drag.el.classList.toggle(
+        'leaving',
+        drag.isMember && !!drag.memberPool && pastTheRing(drag.id, drag.memberPool),
+      )
     }
     drag.target = null
     // at either edge you are letting go, not merging — one signal at a time
@@ -6094,7 +6176,7 @@ function mountSky(root: HTMLDivElement) {
     const d = drag
     drag = null
     meter.classList.remove('on', 'zero')
-    d.el.classList.remove('dragging', 'sinking', 'rising')
+    d.el.classList.remove('dragging', 'sinking', 'rising', 'leaving')
     document.body.classList.remove('sky-dragging')
     clearFuse()
     hideTide()
@@ -6145,11 +6227,8 @@ function mountSky(root: HTMLDivElement) {
         return
       }
     }
-    if (d.isMember && d.memberPool && !d.target) {
-      const gp = posOf(d.memberPool)
-      const p = posOf(d.id)
-      const g = view.byId.get(d.memberPool)
-      if (g && Math.hypot(gp.x - p.x, gp.y - p.y) > radiusOf(g) + 70) releaseMember(d.tl.t, d.memberPool)
+    if (d.isMember && d.memberPool && !d.target && pastTheRing(d.id, d.memberPool)) {
+      releaseMember(d.tl.t, d.memberPool)
     }
     if (d.target) {
       const p = posOf(d.id)
