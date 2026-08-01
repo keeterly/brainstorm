@@ -462,6 +462,34 @@ describe('the first breath', () => {
     expect(css).toMatch(/\.opening\.leaving \{[^}]*pointer-events: none/s)
   })
 
+  it('measures the head start from the app, not from where the block landed', () => {
+    /*
+     * "The title plays and that's it."
+     *
+     * A CSS delay counts from when the element is inserted, and these are
+     * inserted when the graph lands. Written flat, a hydrate that took a second
+     * and a half handed the numbers a fresh head start on top of the wait
+     * already served, and they finished arriving after the dissolve had begun.
+     * It looked perfect in every test here, because the demo hydrates in
+     * nothing flat and the fault only appears when the network is real.
+     */
+    expect(css).toMatch(/animation-delay: calc\(var\(--lead, 1150ms\) \+ var\(--i\) \* 230ms\)/)
+    expect(open).toMatch(/lead\.current = Math\.max\(0, LEAD_MS - since\(\)\)/)
+    // …and the hold waits out whatever is left of the arrival, so the slower
+    // the network the less of the moment you got — which was exactly backwards
+    expect(open).toMatch(/Math\.max\(landed\.current, LEAD_MS\) \+ ARRIVE_MS \+ READ_MS/)
+    // with a ceiling, so a graph that never lands cannot hold the screen
+    expect(open).toMatch(/Math\.min\(CEILING_MS,/)
+  })
+
+  it('keeps a clock origin that a zero reading cannot reset', () => {
+    // `performance.now()` is legitimately 0 at the very start of a document's
+    // life. A falsy check re-stamped the origin on every render and left every
+    // elapsed time in here permanently zero.
+    expect(open).toMatch(/const born = useRef<number \| null>\(null\)/)
+    expect(open).toMatch(/if \(born\.current === null\)/)
+  })
+
   it('says what to pick up, not just how much there is', () => {
     // the same rules the Current uses, run offline on the graph as it lands
     expect(open).toMatch(/from '@\/domain\/next-action'/)

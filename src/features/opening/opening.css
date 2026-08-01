@@ -161,8 +161,15 @@
   animation: opening-line 900ms cubic-bezier(0.25, 0.6, 0.25, 1) forwards;
   /* Over the tail of the name rather than after all of it. Waiting for the
      last letter and only then starting made two slow halves; overlapping them
-     makes one slow thing, which is what unhurried actually feels like. */
-  animation-delay: calc(1150ms + var(--i) * 230ms);
+     makes one slow thing, which is what unhurried actually feels like.
+
+     `--lead` rather than a constant, because a CSS delay counts from when the
+     element is inserted and these are inserted when the graph lands. Written
+     flat, a slow hydrate handed them a fresh head start on top of the wait
+     already served, and they arrived after the dissolve had begun. The
+     component works out what is left of it — see Opening.tsx — and the
+     constant here is only the fallback. */
+  animation-delay: calc(var(--lead, 1150ms) + var(--i) * 230ms);
 }
 .opening-line {
   display: flex;

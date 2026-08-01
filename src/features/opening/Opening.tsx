@@ -50,6 +50,20 @@ import './opening.css'
  */
 export const HOLD_MS = 3800
 /**
+ * The head start the numbers wait out, measured from the app opening.
+ *
+ * They come in over the tail of the name rather than after all of it: two slow
+ * halves read as slower than one slow thing. Mirrored in opening.css as the
+ * fallback for `--lead`.
+ */
+export const LEAD_MS = 1150
+/** …and how long the whole set of them takes to arrive, once it starts. */
+export const ARRIVE_MS = 3 * 230 + 900
+/** How long you get with all of it on screen and nothing moving. */
+export const READ_MS = 1100
+/** However slow the graph is, this moment ends. */
+export const CEILING_MS = 6000
+/**
  * Signed out there are no numbers coming — `hydrate` only runs for a session —
  * so the name says its piece and gets out of the way of the form. Still long
  * enough for the word to finish forming, which is the whole of what there is
@@ -117,10 +131,24 @@ export default function Opening() {
   const relationships = useGraph((s) => s.relationships)
   const [gone, setGone] = useState(false)
   const [leaving, setLeaving] = useState(false)
-  const born = useRef(0)
-  if (!born.current) born.current = performance.now()
+  /*
+   * When the app opened, and the one clock everything here is measured against.
+   *
+   * `null` rather than `0` as the "not set yet" value, and checked against
+   * `null` rather than for falsiness. A zero reading is a legitimate one — it
+   * is what `performance.now()` gives at the very start of a document's life,
+   * and what a test's clock gives on its first tick — and a falsy check would
+   * re-stamp the origin on every render, leaving every elapsed time in here
+   * permanently zero. Which is not a hypothetical: it is what happened, and
+   * the only reason it was caught is that a test moved the clock and asked.
+   */
+  const born = useRef<number | null>(null)
+  if (born.current === null) born.current = performance.now()
+  const since = () => performance.now() - (born.current as number)
   /** past the point of no return: the timers that finish the dissolve must live */
   const going = useRef(false)
+  /** when the graph landed, on the app's clock. 0 while it has not. */
+  const landed = useRef(0)
 
   const weather = useMemo(() => readWeather(thoughts, relationships), [thoughts, relationships])
   const anything = weather.pending + weather.inThought + weather.inWorks > 0
@@ -130,6 +158,26 @@ export default function Opening() {
     () => (hydrated ? nextAction(thoughts, relationships, todayISO()) : null),
     [hydrated, thoughts, relationships],
   )
+
+  /*
+   * How much of the head start is left when the numbers finally mount.
+   *
+   * This was the whole of the bug behind "the title plays and that's it". The
+   * lines wait 1150ms before arriving, and that wait was written in CSS — which
+   * counts from the moment the element is *inserted*, not from the moment the
+   * app opened. The element is inserted when the graph lands, so a hydrate that
+   * took a second and a half handed the numbers a fresh second-and-a-half head
+   * start on top of the wait you had already done, and they finished arriving
+   * after the dissolve had started. On a phone on a cellular connection that is
+   * the ordinary case, not the edge one; here it looked fine, because the demo
+   * hydrates in nothing flat and the fault only shows up when the network is
+   * real.
+   *
+   * Fixed once, on the first render that has something to show, so a later
+   * re-render cannot restart an animation that is already playing.
+   */
+  const lead = useRef<number | null>(null)
+  if (hydrated && anything && lead.current === null) lead.current = Math.max(0, LEAD_MS - since())
 
   const skip = () => {
     if (going.current) return
@@ -147,8 +195,22 @@ export default function Opening() {
      * it never comes at all, so this leaves on the short measure rather than
      * sitting on a sign-in form waiting for something that is not coming.
      */
-    const wait = hydrated ? HOLD_MS : BARE_MS
-    const left = Math.max(120, wait - (performance.now() - born.current))
+    const now = since()
+    if (hydrated && !landed.current) landed.current = Math.max(1, now)
+    /*
+     * Long enough to read what is on it, counted from when it got there.
+     *
+     * A fixed length from the app opening is only right when the graph lands
+     * instantly. When it does not, the numbers turn up late and the clock they
+     * were being measured against had been running the whole time — so the
+     * slower the network, the less of the moment you actually got, which is
+     * exactly backwards. This waits out whatever is left of the arrival and
+     * then gives it a beat of stillness, and the ceiling means a graph that
+     * never lands cannot hold the screen for ever.
+     */
+    const readable = Math.max(landed.current, LEAD_MS) + ARRIVE_MS + READ_MS
+    const wait = hydrated ? Math.min(CEILING_MS, Math.max(HOLD_MS, readable)) : BARE_MS
+    const left = Math.max(120, wait - now)
     const a = setTimeout(() => {
       going.current = true
       setLeaving(true)
@@ -185,7 +247,10 @@ export default function Opening() {
             empty store and then jumping as it lands is worse than a beat of
             the name on its own. */}
         {hydrated && anything && (
-          <div className="opening-said">
+          <div
+            className="opening-said"
+            style={{ '--lead': `${Math.round(lead.current ?? LEAD_MS)}ms` } as React.CSSProperties}
+          >
             {WORDS.map(([k, word], i) => (
               <div className="opening-line" style={{ '--i': i } as React.CSSProperties} key={k}>
                 <span className="n">{weather[k]}</span>
