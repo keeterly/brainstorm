@@ -445,11 +445,19 @@ describe('the first breath', () => {
     // the app's whole metaphor is vapour becoming water, and the word arrives
     // the same way: out of focus and weightless, gathering left to right
     expect(css).toMatch(/@keyframes opening-letter/)
-    expect(css).toMatch(/\.opening-name span \{[^}]*filter: blur\(14px\)/s)
+    expect(css).toMatch(/\.opening-name span \{[^}]*filter: blur\(11px\)/s)
     expect(css).toMatch(/animation-delay: calc\(var\(--i\) \* 82ms\)/)
     // …and barely travels. Calm is less movement over more time, not more of
     // both: almost all the change is focus and light, not distance.
-    expect(css).toMatch(/\.opening-name span \{[^}]*transform: translateY\(0\.05em\) scale\(1\.05\)/s)
+    expect(css).toMatch(/\.opening-name span \{[^}]*transform: translate\(calc\(var\(--i\) \* 0\.05em\), 0\.05em\) scale\(1\.05\)/s)
+    // …and closes the spacing with a transform rather than a margin. A margin
+    // is layout: every letter that landed reflowed the word and shifted every
+    // letter after it, and the name's box visibly shrank 239px to 222px across
+    // the animation. That twitch was the glitch.
+    // the colon matters: without it this matches the comment that explains why
+    // the margin is gone, and passes for exactly the wrong reason
+    expect(css).not.toMatch(/\.opening-name span \{[^}]*margin-right:/s)
+    expect(css).not.toMatch(/@keyframes opening-letter \{[^@]*margin-right:/s)
   })
 
   it('lets a thumb end it early', () => {

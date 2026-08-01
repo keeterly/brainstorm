@@ -28,6 +28,14 @@
      which reads as a cut with a softener on it rather than as one thing
      becoming another. */
   transition: opacity 900ms cubic-bezier(0.4, 0, 0.35, 1);
+  /* Declared up front, not at the moment it starts to go — the point of it is
+     to have the layer ready *before* the fade, and asking for one as the fade
+     begins is asking too late. It is a full-screen layer for the few seconds
+     this is on screen, and then it and the element are gone together. Without
+     it the dissolve composites a full-screen sheet against a sky that is
+     itself still moving, which is where the only frames over 32ms outside of
+     boot were landing. */
+  will-change: opacity;
 }
 .opening.leaving {
   opacity: 0;
@@ -93,15 +101,32 @@
 .opening-name span {
   display: inline-block;
   opacity: 0;
-  filter: blur(14px);
-  /* a breath of drift, not a slide: at 0.16em and a sixth bigger these read as
-     ten letters flying in, which is the opposite of the thing being aimed at */
-  transform: translateY(0.05em) scale(1.05);
-  /* the space each letter came in with, closing as it lands */
-  margin-right: 0.035em;
+  filter: blur(11px);
+  /*
+   * The gathering, done entirely on the compositor.
+   *
+   * This was a `margin-right` closing from 0.035em to nothing as each letter
+   * landed — which is a *layout* change, so every letter that arrived reflowed
+   * the whole word and shifted every letter after it. Measured: the name's box
+   * shrank from 239px to 222px, one pixel at a time, across the whole animation.
+   * That twitch is the glitch, and it was also making the browser re-lay-out ten
+   * elements over and over while it was blurring them.
+   *
+   * The same idea as a transform instead: each letter starts a little further
+   * right than the one before it, and they all close to nothing. Identical to
+   * look at, no layout at all, and the glow behind the word stops being resized
+   * every frame as a side effect.
+   *
+   * A breath of drift, not a slide — at 0.16em and a sixth bigger these read as
+   * ten letters flying in, which is the opposite of what is wanted here.
+   */
+  transform: translate(calc(var(--i) * 0.05em), 0.05em) scale(1.05);
   animation: opening-letter 1500ms cubic-bezier(0.25, 0.6, 0.25, 1) forwards;
   animation-delay: calc(var(--i) * 82ms);
-  will-change: opacity, filter, transform;
+  /* opacity and transform only. Naming `filter` here asks the browser to hold
+     an offscreen buffer for each of ten letters for a second and a half, which
+     is a lot of memory to reserve for a blur that is on its way to zero. */
+  will-change: opacity, transform;
 }
 @keyframes opening-letter {
   70% {
@@ -111,7 +136,6 @@
     opacity: 1;
     filter: blur(0);
     transform: none;
-    margin-right: 0;
   }
 }
 /* the light it condenses out of */
@@ -249,7 +273,6 @@
     opacity: 1;
     filter: none;
     transform: none;
-    margin-right: 0;
   }
   .opening-name::before {
     animation: none;
