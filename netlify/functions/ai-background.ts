@@ -11,7 +11,7 @@ import { corsHeaders, originAllowed } from './_lib/guard'
 import { verifyUser } from './_lib/auth'
 import { actionFor, recordFailure, recordOutcome, runToValidated, type RunRequest } from './_lib/engine'
 import { allowRun, insertRun } from './_lib/runs'
-import { MODEL_FOR_TIER } from '../../shared/ai/pricing'
+import { MODEL_FOR_TIER, weighInput } from '../../shared/ai/pricing'
 import { notifyUser } from './_lib/notify'
 import { runNote } from './_lib/note'
 
@@ -75,7 +75,7 @@ export default async (req: Request): Promise<Response> => {
     user.id,
     def,
     model,
-    JSON.stringify(parsedInput.data).length,
+    weighInput(parsedInput.data),
     searchMaxUses,
     user.email,
   )

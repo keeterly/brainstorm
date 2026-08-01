@@ -14,7 +14,7 @@
 // spent is not a guard.
 import { z } from 'zod'
 import { ACTION_REGISTRY } from '../../shared/ai/registry'
-import { MODEL_FOR_TIER } from '../../shared/ai/pricing'
+import { MODEL_FOR_TIER, weighInput } from '../../shared/ai/pricing'
 import type { PromptCtx } from '../../shared/ai/types'
 import { corsHeaders, originAllowed } from './_lib/guard'
 import { verifyUser } from './_lib/auth'
@@ -92,7 +92,7 @@ export default async (req: Request): Promise<Response> => {
     user.id,
     def,
     model,
-    JSON.stringify(parsedInput.data).length,
+    weighInput(parsedInput.data),
     searchMaxUses,
     user.email,
   )

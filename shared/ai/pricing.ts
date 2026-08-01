@@ -56,46 +56,73 @@ export const DAILY_USD_CAP = 6
  */
 export const DAILY_RUN_CAP = 400
 
-/** what a page of search results adds to the next turn's input */
-export const SEARCH_TOKENS = 2000
+/**
+ * What one web search really adds to the bill.
+ *
+ * This was 2,000, which was a guess, and the guess was wrong by a factor of
+ * six. Measured over 154 real runs: `find_like` with three searches averaged
+ * **78,986 input tokens**, `deepen` with four averaged 63,144. A page of
+ * results is a few thousand tokens — but every turn re-sends the whole
+ * transcript, so the results of search one are paid for again on turn two,
+ * again on turn three, and again on turn four.
+ *
+ * That is why the growth is quadratic below rather than linear, and 12,000 per
+ * search with that shape reproduces the measured figure for `find_like` almost
+ * exactly and over-states the others, which is the direction a gate should err
+ * in. Before this, the ceiling on `find_like` was $0.126 against a real cost of
+ * $0.363: the spend cap could be walked past threefold by the most expensive
+ * action in the app.
+ */
+export const SEARCH_TOKENS = 12_000
 /** the system prompt, the memory block and the tool schema, together */
 export const SYSTEM_TOKENS = 1400
 
 /**
- * What a run might cost, worked out before it is allowed to start.
+ * What a run's input weighs, which is not the length of its JSON.
  *
- * A dollar cap is worth having only if it cannot be walked straight past by
- * the run that reaches it. Metering purely after the fact leaves the last run
- * of the day unbounded — so every run is charged its estimate the moment it is
- * opened, and the true figure replaces the estimate when it finishes. That
- * also means a run still in flight, or one that died without ever finishing,
- * is counted rather than sitting at zero for ever.
- *
- * Deliberately an over-estimate, and these are the assumptions:
- *
- *  - Output at `maxTokens`. Almost nothing fills its budget; the ones that
- *    matter come close.
- *  - Input at the serialized input plus a fixed allowance for the system
- *    prompt, the memory block and the tool schema. Three and a half characters
- *    to the token is about right for English prose with JSON in it.
- *  - Every search allowed is a search made, and each one puts a page of
- *    results into the next turn's input.
- *  - One retry. The engine has a transport retry and a schema-repair retry,
- *    and a run that uses either pays for its input twice.
- *
- * The result is high — commonly two or three times what a run really costs —
- * which is the right direction to be wrong in for a thing whose job is to
- * refuse.
+ * A photograph travels as base64 inside the input, so measuring the input by
+ * its character count charges a 200KB picture as ninety thousand tokens of
+ * prose — per turn — and `find_like`, which is entirely about photographs,
+ * would have been refused for a dollar it was never going to spend. An image
+ * costs about 1,600 tokens whatever its file size, so it is counted as one
+ * thing rather than as a very long string.
  */
+export const IMAGE_TOKENS = 1600
+export function weighInput(input: unknown): { chars: number; images: number } {
+  let images = 0
+  const json = JSON.stringify(input, (k, v) => {
+    if (k === 'dataB64' && typeof v === 'string') {
+      images++
+      return ''
+    }
+    return v
+  })
+  return { chars: json?.length ?? 0, images }
+}
+
 export function estimateUSD(
   def: { maxTokens: number; searchMaxUses?: number },
   model: string,
   inputChars = 0,
+  images = 0,
 ): number {
   const p = PRICING[model]
   if (!p) return 0
   const searches = def.searchMaxUses ?? 0
-  const inTok = Math.ceil(inputChars / 3.5) + SYSTEM_TOKENS + searches * SEARCH_TOKENS
-  const tokens = (inTok * 2 * p.in + def.maxTokens * p.out) / 1_000_000
-  return tokens + searches * SEARCH_USD
+  // One turn to ask, and one more for each search it is allowed to make.
+  const turns = 1 + searches
+  // The prompt is re-sent every turn, and so is every result already gathered
+  // — which is where the quadratic comes from, and why the old linear guess
+  // was out by a factor of three on the runs that matter.
+  const base = Math.ceil(inputChars / 3.5) + SYSTEM_TOKENS + images * IMAGE_TOKENS
+  const inTok = base * turns + (SEARCH_TOKENS * searches * (searches + 1)) / 2
+  // `maxTokens` is a per-turn ceiling, not a total: a searching run emits on
+  // every turn. Measured at about half of it per turn.
+  const outTok = def.maxTokens * turns * 0.5
+  const cost = (inTok * p.in + outTok * p.out) / 1_000_000 + searches * SEARCH_USD
+  // A tenth on top. Not superstition: checked against the measured averages,
+  // the closest of them — `cluster` — came out within a twentieth of a per
+  // cent *under*, and a ceiling that is right on the nose is a ceiling that
+  // goes under the moment a prompt grows by a sentence.
+  return cost * 1.1
 }

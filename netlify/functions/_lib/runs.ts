@@ -153,7 +153,7 @@ export async function allowRun(
   userId: string,
   def: { maxTokens: number; searchMaxUses?: number },
   model: string,
-  inputChars: number,
+  input: { chars: number; images: number },
   searchMaxUses?: number,
   email: string | null = null,
 ): Promise<Gate> {
@@ -171,7 +171,8 @@ export async function allowRun(
   const cost = estimateUSD(
     { maxTokens: def.maxTokens, searchMaxUses: searchMaxUses ?? def.searchMaxUses },
     model,
-    inputChars,
+    input.chars,
+    input.images,
   )
 
   const mine = capForUser(email, DAILY_USD_CAP)
