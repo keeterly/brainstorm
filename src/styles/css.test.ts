@@ -445,8 +445,11 @@ describe('the first breath', () => {
     // the app's whole metaphor is vapour becoming water, and the word arrives
     // the same way: out of focus and weightless, gathering left to right
     expect(css).toMatch(/@keyframes opening-letter/)
-    expect(css).toMatch(/\.opening-name span \{[^}]*filter: blur\(12px\)/s)
-    expect(css).toMatch(/animation-delay: calc\(var\(--i\) \* 54ms\)/)
+    expect(css).toMatch(/\.opening-name span \{[^}]*filter: blur\(14px\)/s)
+    expect(css).toMatch(/animation-delay: calc\(var\(--i\) \* 82ms\)/)
+    // …and barely travels. Calm is less movement over more time, not more of
+    // both: almost all the change is focus and light, not distance.
+    expect(css).toMatch(/\.opening-name span \{[^}]*transform: translateY\(0\.05em\) scale\(1\.05\)/s)
   })
 
   it('lets a thumb end it early', () => {

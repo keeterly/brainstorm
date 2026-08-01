@@ -28,15 +28,36 @@ import { nextAction } from '@/domain/next-action'
 import { todayISO } from '@/domain/prioritize-prepass'
 import './opening.css'
 
-/** Long enough to read three short numbers and a line; short enough not to be a wait. */
-export const HOLD_MS = 2300
+/*
+ * How long the whole moment lasts.
+ *
+ * Slower than it was, on purpose. The first version put the name, three
+ * numbers and a thing to do on screen and took them away again inside two and
+ * a half seconds, which is enough time to *see* all of it and not enough to
+ * read any of it — so it registered as something flashing past rather than as
+ * a pause. This is meant to be the beat before you start, and a beat you have
+ * to hurry to catch is not one.
+ *
+ * Measured on the built app: the name has finished forming by about 2.2s and
+ * the last line has landed by 2.7s, which leaves a full second of complete
+ * stillness with everything readable before the dissolve starts. The stillness
+ * is the part that reads as calm — motion that never stops is busy however
+ * slowly it moves — so it is deliberate rather than slack.
+ *
+ * The cost of a slow opening is real and it is paid every launch, which is why
+ * touching anywhere skips the rest of it. That is the trade: unhurried by
+ * default, and one thumb away from gone.
+ */
+export const HOLD_MS = 3800
 /**
  * Signed out there are no numbers coming — `hydrate` only runs for a session —
- * so the name says its piece and gets out of the way of the form.
+ * so the name says its piece and gets out of the way of the form. Still long
+ * enough for the word to finish forming, which is the whole of what there is
+ * to see in that case.
  */
-export const BARE_MS = 1250
-/** …and the dissolve on the end of it. */
-export const FADE_MS = 620
+export const BARE_MS = 2400
+/** …and the dissolve on the end of it, long enough to read as one. */
+export const FADE_MS = 900
 
 /** Ten letters, each one a beat behind the last. See opening.css. */
 export const NAME = 'Brainstorm'
