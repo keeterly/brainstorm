@@ -48,6 +48,12 @@ function sampleInput(name: string): never {
     gauge: { subject: ref, context: ['book the space'], kind: 'plan' },
     reshape: { subject: ref, inside: [ref], news: 'the studio fell through, Ana offered her garage' },
     notice: { thoughts: [ref], pools: [], recentlyDone: [] },
+    find_like: {
+      subject: { id: 'p1', title: 'A black-shrouded seated figure' },
+      context: ['shoot on expired film'],
+      under: 'SS28 The Cave',
+      image: { mediaType: 'image/jpeg', dataB64: 'AAAAAAAAAAAAAAAA' },
+    },
   }
   return inputs[name] as never
 }

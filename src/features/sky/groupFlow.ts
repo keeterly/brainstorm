@@ -78,16 +78,41 @@ export function rename(id: string, name: string): Undone | null {
   }
 }
 
-/** Take one thing out of the group it is in, and leave it in the sky. */
+/**
+ * Take one thing out of the group it is in — and out means *up*, not out of
+ * everything.
+ *
+ * A group inside a group is the ordinary case here: "the black-shrouded
+ * figure" sits inside "references", which sits inside "SS28 The Cave". Pulling
+ * the photograph out of "references" used to drop it into open sky, four
+ * levels from where it belongs, so a small correction inside one collection
+ * threw the thing clean out of the collection. Every time, the fix was to drag
+ * it back into the parent by hand — which is the app making you undo half of
+ * what you asked for.
+ *
+ * Out of a top-level group there is nowhere up to go, and it lands in the sky
+ * exactly as before. That case is unchanged and it is the only one that was
+ * ever right.
+ */
 export function takeOut(memberId: string): Undone | null {
   const rel = S().relationships.find((r) => r.type === 'part_of' && r.from_id === memberId)
   const t = S().thoughts.find((x) => x.id === memberId)
   if (!rel || !t) return null
   const to = rel.to_id
+  // where the group it is leaving lives, which is where it is going
+  const up = S().relationships.find((r) => r.type === 'part_of' && r.from_id === to)?.to_id
   S().deleteRelationship(rel.id)
+  // Checked after the removal, against the graph as it now is — the edge just
+  // deleted was itself part of any chain worth worrying about.
+  const home = up && !wouldCircle(memberId, up, S().relationships) ? up : null
+  const landed = home ? S().addRelationship(memberId, home, 'part_of') : null
+  const into = home ? S().thoughts.find((x) => x.id === home) : null
   return {
-    note: `“${label(t)}” is loose again`,
-    undo: () => S().addRelationship(memberId, to, 'part_of'),
+    note: into ? `“${label(t)}” moved up to “${label(into)}”` : `“${label(t)}” is loose again`,
+    undo: () => {
+      if (landed) S().deleteRelationship(landed.id)
+      S().addRelationship(memberId, to, 'part_of')
+    },
   }
 }
 

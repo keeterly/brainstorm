@@ -56,19 +56,51 @@ describe('naming a thing yourself', () => {
 })
 
 describe('taking one thing out', () => {
-  it('leaves it in the sky rather than throwing it away', () => {
-    const { g, a } = seed()
+  it('moves it up one level, not out of everything', () => {
+    // "Fares" is in "Travel", which is in "SS27". Out of Travel means into
+    // SS27. It used to mean into open sky — so a small correction inside one
+    // collection threw the thing clean out of the collection, and putting it
+    // back where it obviously belonged was a second drag, every time.
+    const { top, g, a } = seed()
     const u = takeOut(a.id)!
-    expect(partOf(a.id)).toBeUndefined()
-    expect(openIds()).toContain(a.id)
+    expect(partOf(a.id)).toBe(top.id)
     expect(membersOf(g.id).map((m) => m.id)).not.toContain(a.id)
     u.undo()
     expect(partOf(a.id)).toBe(g.id)
   })
 
-  it('says which one, because three rows of "removed" tell you nothing', () => {
-    const { a } = seed()
+  it('leaves it in the sky when there is nowhere up to go', () => {
+    // out of a top-level group — the one case that was always right
+    const { top, g } = seed()
+    const u = takeOut(g.id)!
+    expect(partOf(g.id)).toBeUndefined()
+    expect(openIds()).toContain(g.id)
+    u.undo()
+    expect(partOf(g.id)).toBe(top.id)
+  })
+
+  it('puts back exactly one edge, not two', () => {
+    // the undo has to lift the new home as well as restore the old one, or
+    // taking a thing out and changing your mind leaves it in two groups
+    const { top, g, a } = seed()
+    takeOut(a.id)!.undo()
+    const homes = S().relationships.filter((r) => r.type === 'part_of' && r.from_id === a.id)
+    expect(homes).toHaveLength(1)
+    expect(homes[0].to_id).toBe(g.id)
+    expect(membersOf(top.id).map((m) => m.id)).not.toContain(a.id)
+  })
+
+  it('says which one, and where it ended up', () => {
+    // three rows of "removed" tell you nothing, and "loose again" is a lie
+    // when it is not loose
+    const { a, g } = seed()
     expect(takeOut(a.id)!.note).toContain('Fares')
+    expect(takeOut(g.id)!.note).toContain('loose again')
+  })
+
+  it('names the group it moved up into, so it does not read as lost', () => {
+    const { a } = seed()
+    expect(takeOut(a.id)!.note).toContain('SS27')
   })
 })
 

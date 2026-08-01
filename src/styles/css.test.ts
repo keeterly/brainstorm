@@ -163,6 +163,22 @@ describe('somewhere to put a thumb', () => {
     expect(pick).toMatch(/width: 100%/)
   })
 
+  it('gives the wall two real columns rather than a multicol', () => {
+    // Not fussiness. `columns: 2` inside a scrolling flex container takes its
+    // height from the container rather than from its own content, so the wall
+    // rendered past the bottom of the page and the last cards floated over the
+    // sky with the paper ending above them. Two flex columns filled in code
+    // scroll, because the content really is that tall.
+    const wall = block('.sky-page .pans .wall')
+    expect(wall).toMatch(/display: flex/)
+    expect(wall).not.toMatch(/columns:/)
+    expect(block('.sky-page .pans .wall .col')).toMatch(/flex-direction: column/)
+  })
+
+  it(`keeps the wall own buttons at 44 as well`, () => {
+    expect(block('.sky-page .pans .find .acts .ctl')).toMatch(/min-height: 44px/)
+  })
+
   it('grows the quiet controls without growing how loud they look', () => {
     // A take-out is a secondary act; a 44pt pill on every row would shout it.
     // So it keeps the size it looks and grows the size it is, via a
@@ -388,11 +404,12 @@ describe('what the agent is doing, while it does it', () => {
   const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
   const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
 
-  it('runs all four waits through one watch', () => {
-    // deepen, draft, answer — and the fourth, picking up a run that was
-    // already going before this page existed, which was the longest and least
-    // legible wait in the app and had one static line for the whole of it
-    expect([...page.matchAll(/watchWork\(tl,/g)].length).toBe(4)
+  it('runs every long wait through one watch', () => {
+    // deepen, draft, answer, finding more like a picture — and the one that
+    // picks up a run already going before this page existed, which was the
+    // longest and least legible wait in the app and had one static line for
+    // the whole of it
+    expect([...page.matchAll(/watchWork\(tl,/g)].length).toBe(5)
     // and none of them keeps a hand-rolled ticker any more
     expect(page).not.toMatch(/const tick = \(\) => \{\s*if \(working !== tl\.t\.id\)/)
   })

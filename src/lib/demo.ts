@@ -170,6 +170,25 @@ export const DEMO_SEED = {
  * These are canned, and labelled as such where it matters — the point is that
  * the shape of a real reply can be seen and read, not that it is true.
  */
+
+/**
+ * The wall the demo shows for `find_like`.
+ *
+ * The real thing reads each page's own Open Graph image; the demo has no
+ * server, so these stand in for the works. Flat gradients rather than
+ * borrowed photographs — the point of the demo is that the shape of the
+ * reply can be seen, and putting somebody else's picture of somebody else's
+ * sculpture in a public build to make a screenshot look better is not a
+ * trade worth making.
+ */
+export const DEMO_PREVIEW: Record<string, string> = {
+    'https://www.labiennale.org/en/art/2024': 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNTIwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMyYTJiMzAiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNjOWM0YmIiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjUyMCIgZmlsbD0idXJsKCNnKSIvPjwvc3ZnPg==',
+    'https://www.henry-moore.org/collections': 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMzAwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiM0YTQ3NDAiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNkOGQzYzgiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0idXJsKCNnKSIvPjwvc3ZnPg==',
+    'https://smak.be/en/collection': 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDYwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMxZTIwMjQiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNiOWI2YWUiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQ2MCIgZmlsbD0idXJsKCNnKSIvPjwvc3ZnPg==',
+    'https://www.artforum.com/features/butoh': 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMyNjI2MmEiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM5ZDlhOTQiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0idXJsKCNnKSIvPjwvc3ZnPg==',
+    'https://www.centrepompidou.fr/en/collection': 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMzQwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMzMzMwMmIiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNjZmM5YmQiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjM0MCIgZmlsbD0idXJsKCNnKSIvPjwvc3ZnPg==',
+}
+
 export const DEMO_OUTPUT: Record<string, unknown> = {
   // The commonest real answer, and the one the old code could not give.
   remember: { ops: [] },
@@ -287,5 +306,51 @@ export const DEMO_OUTPUT: Record<string, unknown> = {
     ],
     learned: [],
     settled: false,
+  },
+  find_like: {
+    reading: 'A cloth-draped seated figure — the De Bruyckere / Moore lineage, mass without edges',
+    finds: [
+      {
+        title: 'City of Refuge III',
+        who: 'Berlinde De Bruyckere',
+        where: 'Venice Biennale, 2024',
+        why: 'faceless cloth-draped figures, the fabric carrying the identity',
+        url: 'https://www.labiennale.org/en/art/2024',
+      },
+      {
+        title: 'Draped Seated Woman',
+        who: 'Henry Moore',
+        where: 'Yorkshire Sculpture Park',
+        why: 'mass without edges — the drape is the whole form',
+        url: 'https://www.henry-moore.org/collections',
+      },
+      {
+        title: 'Untitled (Shroud)',
+        who: 'Kris Martin',
+        where: 'S.M.A.K., Ghent',
+        why: 'a covered body at rest, in a white room, at your scale',
+        url: 'https://smak.be/en/collection',
+      },
+      {
+        title: 'Ankoku Butoh, 1965',
+        who: 'Hijikata Tatsumi',
+        where: 'Keio University archive',
+        why: 'the body erased under cloth rather than dressed in it',
+        url: 'https://www.artforum.com/features/butoh',
+      },
+      {
+        title: 'Cloth-covered figure study',
+        who: 'Christian Boltanski',
+        where: 'Centre Pompidou',
+        why: 'the covering as the subject, lit from a single side',
+        url: 'https://www.centrepompidou.fr/en/collection',
+      },
+    ],
+    searches: [
+      'Berlinde De Bruyckere blanket sculpture',
+      'Henry Moore draped seated figure',
+      'Butoh shrouded body photography',
+      'Christian Boltanski cloth figure installation',
+    ],
   },
 }

@@ -41,6 +41,7 @@ import {
 } from './groupFlow'
 import { branchOf, dropAt, type Drop, type Line } from './arrange'
 import { editsPending, flushEdits, forgetEdit, keepEdit, watchForLeaving } from './autosave'
+import { findLikeThis, imageSearchUrl, keepImage, type Find } from './findFlow'
 import { awaitRun, markApplied, pendingRuns, subjectOf } from '@/ai/pending'
 import { reshapeTally, reshapeThought } from './reshapeFlow'
 import { haptics } from '@/lib/haptics'
@@ -790,6 +791,17 @@ function mountSky(root: HTMLDivElement) {
    * round.
    */
   const fullOf = (t: Thought) => (ex(t).full as string | undefined) ?? imgOf(t)
+  /**
+   * The wall of neighbours this photograph already found, if it has been out.
+   *
+   * Kept on the thought rather than as a brief, because a brief is prose and
+   * this is a set of pictures with the pages they came from. It is a minute of
+   * searching either way, and a minute of work that only exists until you
+   * close the page is a minute thrown away — which is the fault this app has
+   * fixed twice already, for ⚡ and for the answer.
+   */
+  const likeOf = (t: Thought) =>
+    ex(t).like as { reading: string; finds: Find[]; searches: string[]; at?: string } | undefined
   const patchExtra = (t: Thought, patch: Record<string, unknown>) =>
     S().updateThought(t.id, { extra: { ...ex(t), ...patch } })
 
@@ -2262,10 +2274,21 @@ function mountSky(root: HTMLDivElement) {
     splash(at.x)
     haptics.join()
   }
+  /**
+   * Dragged out past the edge of the ring.
+   *
+   * One level up, not all the way out — see takeOut, which is the same act on
+   * the group page and now the same rule. Pulling a photograph out of the
+   * references inside a collection used to leave it loose in open sky, and
+   * putting it back where it obviously belonged was a second drag every time.
+   *
+   * The drag is its own undo, so this does not offer one; it only says where
+   * the thing went, because "released from the pool" did not say and the
+   * answer was not always the sky.
+   */
   function releaseMember(t: Thought, poolId: string) {
-    const rel = partOfRel(t.id)
-    if (rel) S().deleteRelationship(rel.id)
-    say('released from the pool')
+    const done = takeOut(t.id)
+    say(done ? done.note : 'released from the pool')
     const remaining = view.byId.get(poolId)?.members.filter((m) => m.id !== t.id) ?? []
     if (remaining.length === 0) openPool = null
   }
@@ -2419,7 +2442,7 @@ function mountSky(root: HTMLDivElement) {
   })
 
   // ---------- the light page ----------
-  type PageMode = 'capture' | 'say' | 'ask' | 'brief' | 'open' | 'aside'
+  type PageMode = 'capture' | 'say' | 'ask' | 'brief' | 'open' | 'aside' | 'like'
   /** The brief ⚡ brought back for this thought, if it went out for one. */
   const briefOf = (id: string) => S().artifacts.find((a) => a.thought_id === id) ?? null
   /**
@@ -2530,7 +2553,7 @@ function mountSky(root: HTMLDivElement) {
     nameFor = null
     pageA.style.display = 'none'
     pageA.innerHTML = ''
-    const reading = mode === 'brief' || mode === 'aside'
+    const reading = mode === 'brief' || mode === 'aside' || mode === 'like'
     pageT.style.display = reading ? 'none' : ''
     page.classList.toggle('path', reading)
     page.classList.toggle('brief', mode === 'brief')
@@ -2543,7 +2566,9 @@ function mountSky(root: HTMLDivElement) {
     // cleared here so it cannot survive into a page that is not one.
     page.classList.remove('asked')
     pageD.textContent =
-      mode === 'brief'
+      mode === 'like'
+        ? 'Done looking'
+        : mode === 'brief'
         ? 'Done reading'
         : mode === 'aside'
           ? 'Done'
@@ -2552,7 +2577,90 @@ function mountSky(root: HTMLDivElement) {
             : mode === 'ask'
               ? 'Ask'
               : 'Done'
-    if (mode === 'brief' && tl) {
+    if (mode === 'like' && tl) {
+      /*
+       * The wall.
+       *
+       * What "find me more inspiration like this" has always meant, and what
+       * the app kept answering with an essay. Every card is a real work with
+       * the page that shows it, and the picture on it is the picture that page
+       * declares as its own — so this is the things themselves, not a list of
+       * links to them.
+       *
+       * A card whose page had no Open Graph image on it still appears, as
+       * words. Sorting the pictures to the front is enough; dropping the rest
+       * would quietly lose real works for a reason that is about markup.
+       */
+      // Read from the store, not from the TL that was handed in. `runFindLike`
+      // writes the wall and then opens this page, and the TL it is holding was
+      // captured before the write — so the page it opened was empty, every
+      // time, on the one path that matters. A page whose content lives on a
+      // thought looks that thought up.
+      const live = S().thoughts.find((x) => x.id === tl.t.id) ?? tl.t
+      const like = likeOf(live)
+      pageQ.textContent = like?.reading || 'More like this'
+      pageN.textContent = like?.at ? `found ${humanDate(like.at.slice(0, 10), todayISO())}` : ''
+      pageA.style.display = 'block'
+      const finds = like?.finds ?? []
+      const searches = like?.searches ?? []
+      pageA.innerHTML =
+        (finds.length ? `<div class="lab">what it found</div><div class="wall"><div class="col"></div><div class="col"></div></div>` : '') +
+        (searches.length
+          ? `<div class="lab">and worth searching yourself</div>` +
+            searches.map(() => `<button class="ctl pick" type="button"></button>`).join('')
+          : '')
+      const cols = [...pageA.querySelectorAll('.wall .col')] as HTMLDivElement[]
+      if (cols.length === 2) {
+        finds.forEach((f, i) => {
+          const card = document.createElement('div')
+          card.className = 'find' + (f.image ? '' : ' bare')
+          card.innerHTML =
+            (f.image ? `<button class="shot" type="button"><img alt="" loading="lazy" /></button>` : '') +
+            `<div class="meta"><div class="h"></div><div class="d"></div><div class="w"></div></div>` +
+            `<div class="acts"><button class="ctl open" type="button">open it</button>` +
+            (f.image ? `<button class="ctl keep" type="button">keep it</button>` : '') +
+            `</div>`
+          // textContent for every one of these: they are a model's words about
+          // pages it read on the open web, and this is a page on our origin
+          ;(card.querySelector('.h') as HTMLElement).textContent = f.title
+          ;(card.querySelector('.d') as HTMLElement).textContent = [f.who, f.where].filter(Boolean).join(' · ')
+          ;(card.querySelector('.w') as HTMLElement).textContent = f.why
+          const im = card.querySelector('img') as HTMLImageElement | null
+          if (im && f.image) {
+            im.src = f.image
+            // A hole in a wall of pictures reads as the app being broken. A
+            // page that has moved its image since we read it simply becomes
+            // one of the word-only cards.
+            im.onerror = () => card.classList.add('bare', 'lost')
+          }
+          const go = () => window.open(f.url, '_blank', 'noopener,noreferrer')
+          card.querySelector('.shot')?.addEventListener('click', (e) => {
+            e.stopPropagation()
+            go()
+          })
+          card.querySelector('.open')?.addEventListener('click', (e) => {
+            e.stopPropagation()
+            go()
+          })
+          card.querySelector('.keep')?.addEventListener('click', (e) => {
+            e.stopPropagation()
+            void keepFind(tl, f, card.querySelector('.keep') as HTMLButtonElement)
+          })
+          // Dealt left, right, left. Which column a picture lands in is not
+          // information, and any cleverer rule needs the image's proportions —
+          // which nobody has until it has loaded, by which time moving it is a
+          // wall that rearranges itself while you are looking at it.
+          cols[i % 2].appendChild(card)
+        })
+      }
+      pageA.querySelectorAll('.pick').forEach((b, i) => {
+        b.textContent = searches[i]
+        b.addEventListener('click', (e) => {
+          e.stopPropagation()
+          window.open(imageSearchUrl(searches[i]), '_blank', 'noopener,noreferrer')
+        })
+      })
+    } else if (mode === 'brief' && tl) {
       // What ⚡ actually came back with. It ran for the best part of a minute
       // and wrote all of this down; before, the only trace of it was four
       // seconds of text at the top of the sky and then nothing.
@@ -4372,6 +4480,33 @@ function mountSky(root: HTMLDivElement) {
         run: () => void runLook(tl),
       }
     }
+    /*
+     * A single photograph, and the thing you actually want from one.
+     *
+     * The answer to a reference is more references. Standing in front of one
+     * photograph, the whole of what a person wants is to see the neighbours —
+     * and this app had no gesture for it at all, so the request went through
+     * `ask`, which answers questions with sentences, and came back with four
+     * paragraphs about the artist. Correct, sourced, and not pictures.
+     *
+     * Above `asking`, deliberately. A photograph named with a question — which
+     * is what happens when you type the request into the field under it — would
+     * otherwise still offer to answer it in words, which is the exact failure
+     * this exists to end.
+     */
+    if (tl.kind === 'drop' && !!imgOf(tl.t)) {
+      const already = !!likeOf(tl.t)
+      return {
+        icon: 'look',
+        lb: already ? 'what it found' : 'find like it',
+        dim: !already && S().offline,
+        run: () => {
+          const q = posOf(tl.t.id)
+          if (already) openPage('like', tl, toScreenX(q.x), toScreenY(q.y))
+          else void runFindLike(tl)
+        },
+      }
+    }
     return {
       icon: made ? 'brief' : asking ? 'ask' : doable ? 'make' : ready && canRain ? 'rain' : 'work',
       // Always 'rain', never 'path'. A cloud that has rained once and been
@@ -4606,6 +4741,144 @@ function mountSky(root: HTMLDivElement) {
    * so it can be read again from the moon that reads briefs — and so `rain`
    * picks it up as `found` and can turn a reading into the work that follows.
    */
+  /**
+   * Go and find the neighbours of one photograph.
+   *
+   * The whole of the ask "find me more inspiration like this", which the app
+   * used to route through `answer` — and `answer` writes sentences, so a
+   * request for pictures came back as four paragraphs about the artist. Right
+   * about the artist, and not the thing that was wanted.
+   *
+   * What lands is kept on the drop, not held in a variable: it is a minute of
+   * searching, and a minute of work that only exists until you close the page
+   * is a minute thrown away.
+   */
+  async function runFindLike(tl: TL) {
+    if (working || S().offline) return
+    closeMoons()
+    const pic = fullOf(tl.t) ?? imgOf(tl.t)
+    if (!pic || !pic.includes(',')) {
+      say('there is no picture on this one')
+      return
+    }
+    setWorking(tl.t.id)
+    /*
+     * No gauge on this one.
+     *
+     * Every other long action asks `gauge` first, because how much looking-up
+     * a thing needs is a real question with a cheap answer. Here it is not a
+     * question: finding works that resemble a photograph means going out and
+     * looking, every time, and a run to decide that would be a run spent
+     * deciding something already known. So it goes straight out, and the
+     * panel says so from the first frame instead of saying "sizing it up"
+     * about a size that was never in doubt.
+     */
+    const sizing: Sizing = { ...fullDepth(3), why: 'looking for the neighbours' }
+    const watch = watchWork(tl, () => sizing)
+    watch.at('out')
+    const parentId = S().relationships.find((r) => r.type === 'part_of' && r.from_id === tl.t.id)?.to_id
+    const parent = parentId ? S().thoughts.find((t) => t.id === parentId) : null
+    const siblings = parentId
+      ? S()
+          .relationships.filter((r) => r.type === 'part_of' && r.to_id === parentId && r.from_id !== tl.t.id)
+          .map((r) => S().thoughts.find((t) => t.id === r.from_id))
+          .filter((t): t is Thought => !!t)
+          .map((t) => label(t))
+          .slice(0, 20)
+      : []
+    const res = await findLikeThis(
+      { id: tl.t.id, title: label(tl.t), summary: tl.t.summary },
+      { mediaType: 'image/jpeg', dataB64: pic.split(',')[1] },
+      { context: siblings, under: parent ? label(parent) : undefined, sizing },
+    )
+    watch.at('landing')
+    watch.stop()
+    setWorking(null)
+    if (dead) return
+    if (res.kind === 'failed') {
+      hold(res.why ?? 'could not get out there just now', trim(label(tl.t), 34))
+      offerAction('', 'again', () => {
+        hold(null)
+        void runFindLike(tl)
+      })
+      return
+    }
+    if (res.kind === 'nothing') {
+      // It looked and found nothing it could stand behind. The searches are
+      // still worth having — often they are the most useful part — so they are
+      // kept and the wall opens with them on it rather than with an apology.
+      patchExtra(tl.t, {
+        like: { reading: res.reading, finds: [], searches: res.searches, at: new Date().toISOString() },
+      })
+      rebuild()
+      hold(res.reading, trim(label(tl.t), 34))
+      offerAction('', 'the searches', () => {
+        hold(null)
+        const q = posOf(tl.t.id)
+        openPage('like', tl, toScreenX(q.x), toScreenY(q.y))
+      })
+      return
+    }
+    patchExtra(tl.t, {
+      like: { reading: res.reading, finds: res.finds, searches: res.searches, at: new Date().toISOString() },
+    })
+    rebuild()
+    paintAll()
+    haptics.arrive()
+    const shown = res.finds.filter((f) => f.image).length
+    record(`looked for more like it · ${shown || res.finds.length} found`, trim(label(tl.t), 40))
+    hold(null)
+    const q = posOf(tl.t.id)
+    openPage('like', tl, toScreenX(q.x), toScreenY(q.y))
+  }
+
+  /**
+   * Keep one of them.
+   *
+   * It comes down through the server as bytes rather than staying a link,
+   * because a reference that lives at somebody else's URL stops being a
+   * reference the day they reorganise their site — and because a cross-origin
+   * image taints a canvas, so the browser could not do it alone even if we
+   * wanted it to.
+   *
+   * It lands in the same group the photograph it came from is in, which is the
+   * group the wall was searched on behalf of.
+   */
+  async function keepFind(tl: TL, f: Find, btn: HTMLButtonElement) {
+    if (!f.image || btn.disabled) return
+    btn.disabled = true
+    btn.textContent = 'keeping…'
+    const dataUrl = await keepImage(f.image)
+    if (!dataUrl) {
+      btn.disabled = false
+      btn.textContent = 'keep it'
+      pageN.textContent = 'that one would not come down'
+      return
+    }
+    const name = [f.title, f.who].filter(Boolean).join(' — ').slice(0, 200) || 'Reference'
+    const made = S().addThought({
+      raw_content: name,
+      title: name,
+      summary: f.why || null,
+      extra: { img: dataUrl, full: dataUrl, from: f.url },
+    })
+    const parentId = S().relationships.find((r) => r.type === 'part_of' && r.from_id === tl.t.id)?.to_id
+    if (parentId) S().addRelationship(made.id, parentId, 'part_of')
+    // beside the one it is like, so it arrives where you were looking
+    const home = posOf(tl.t.id)
+    const p = posOf(made.id)
+    const a = Math.random() * Math.PI * 2
+    p.x = p.rx = Math.max(60, Math.min(worldW() - 60, home.x + Math.cos(a) * 150))
+    p.y = p.ry = Math.max(140, Math.min(waterlineY() - 90, home.y + Math.sin(a) * 120))
+    p.s = 0.2
+    btn.textContent = 'kept'
+    rebuild()
+    paintAll()
+    haptics.join()
+    record(`kept · ${trim(name, 46)}`, trim(label(tl.t), 40))
+    persistLayout()
+  }
+
   async function runLook(tl: TL) {
     if (working || S().offline) return
     closeMoons()
