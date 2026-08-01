@@ -148,6 +148,78 @@ describe('asking one thing on the map', () => {
   })
 })
 
+describe('asking back, instead of answering the wrong question', () => {
+  // The failure this exists for: asked to find more pictures like a photograph,
+  // it went away for a minute and came back with prose about artists — words,
+  // for a request that was plainly for images — and wrote that down as the
+  // answer. What must never happen again is the writing-down.
+  const BACK: AnswerOutput = {
+    ...OUT,
+    asked: 'Find more images like this one',
+    answer: 'I can only hand back words — I cannot return pictures.',
+    facts: [],
+    unknown: [],
+    next: [],
+    sources: [],
+    learned: [],
+    settled: false,
+    clarify: {
+      question: 'What would you like instead of the pictures themselves?',
+      because: 'I can describe, name and link — I cannot return images.',
+      options: [
+        'Name the qualities this picture shares with my other references',
+        'Name artists and collections working in this register',
+        'Write the search terms that would find more of these',
+      ],
+    },
+  }
+
+  it('comes back as a question, not as an answer', async () => {
+    const { q } = seed()
+    run.mockResolvedValue({ runId: 'r1', output: BACK })
+    const res = await answerThought(q.id)
+    expect(res.kind).toBe('clarify')
+    if (res.kind !== 'clarify') return
+    expect(res.ask).toBe('What would you like instead of the pictures themselves?')
+    expect(res.options).toHaveLength(3)
+  })
+
+  it('writes nothing to the thing it was asked about', async () => {
+    // no summary, no answered_at: a thought it has explicitly not answered
+    // must still read as unanswered, or the app records having done something
+    // it just said it could not do
+    const { q } = seed()
+    run.mockResolvedValue({ runId: 'r1', output: BACK })
+    await answerThought(q.id)
+    const t = useGraph.getState().thoughts.find((x) => x.id === q.id)!
+    expect(t.summary).toBeNull()
+    expect(t.extra.answered_at).toBeUndefined()
+  })
+
+  it('leaves no brief behind, so there is nothing to read that says otherwise', async () => {
+    const { q } = seed()
+    run.mockResolvedValue({ runId: 'r1', output: BACK })
+    const before = useGraph.getState().thoughts.length
+    await answerThought(q.id)
+    expect(useGraph.getState().artifacts).toHaveLength(0)
+    expect(useGraph.getState().thoughts).toHaveLength(before)
+  })
+
+  it('does not offer anything to memory off the back of a question it did not answer', async () => {
+    const { q } = seed()
+    run.mockResolvedValue({ runId: 'r1', output: { ...BACK, learned: ['something it inferred anyway'] } })
+    await answerThought(q.id)
+    expect(run.mock.calls.find((c) => c[0] === 'remember')).toBeUndefined()
+  })
+
+  it('passes the reading you picked back through as the question', async () => {
+    const { q } = seed()
+    await answerThought(q.id, { question: 'Name artists working in this register' })
+    const input = run.mock.calls[0][1] as { question?: string }
+    expect(input.question).toBe('Name artists working in this register')
+  })
+})
+
 describe('the answer, written down', () => {
   it('leads with the answer itself, above everything else', () => {
     const md = answerMarkdown(OUT)

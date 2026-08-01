@@ -2235,7 +2235,13 @@ function mountSky(root: HTMLDivElement) {
       // a group made inside a group stays inside it
       if (parent && parent !== g.id) S().addRelationship(g.id, parent, 'part_of')
       const texts = [a, b].flatMap((tl) => (tl.kind === 'pool' ? tl.members.map(label) : [label(tl.t)]))
-      nameThePool(g.id, texts)
+      // …and only over the guess. Type a name of your own in the meantime and
+      // that is the name, whatever comes back.
+      nameThePool(g.id, texts, name, (better) => {
+        rebuild()
+        paintAll()
+        say(`called it “${better}”`)
+      })
       say(parent ? `a group inside — “${name}”` : `pooled — “${name}”`)
       record(parent ? `a group inside — “${name}”` : `pooled — “${name}”`)
     }
@@ -2446,6 +2452,14 @@ function mountSky(root: HTMLDivElement) {
    * them all first. Nothing here depends on an event arriving in time.
    */
   let pending: (() => void)[] = []
+  /**
+   * A question the agent put back, waiting for the ask page to show it.
+   *
+   * Set immediately before the ask page is reopened, and read once by it. A
+   * variable rather than another argument to `openPage`, which already carries
+   * five and would make every other caller pass an empty one.
+   */
+  let pendingClarify: { ask: string; because: string; options: string[] } | null = null
   /** Ignore whatever is left of the press that opened the page. */
   let deafT: ReturnType<typeof setTimeout> | null = null
   function deafenPage() {
@@ -2511,6 +2525,9 @@ function mountSky(root: HTMLDivElement) {
     // the two want very different amounts of room. Capping both at a name's
     // worth is what made the drop's own page a separate mode for so long.
     page.classList.toggle('solo', mode === 'open' && tl?.kind !== 'pool')
+    // …and the ask page, when it is the agent's turn. Set in the branch below,
+    // cleared here so it cannot survive into a page that is not one.
+    page.classList.remove('asked')
     pageD.textContent =
       mode === 'brief'
         ? 'Done reading'
@@ -2895,11 +2912,17 @@ function mountSky(root: HTMLDivElement) {
       groupBtn.addEventListener('click', (e) => {
         e.stopPropagation()
         const chosen = inside.filter((m) => picked.has(m.id))
-        const res = groupInto(tl.t.id, chosen.map((m) => m.id), conceptName(chosen.map(label)))
+        const guess = conceptName(chosen.map(label))
+        const res = groupInto(tl.t.id, chosen.map((m) => m.id), guess)
         if (!res) return
         landUndo(res.undone)
-        // the local guess lands instantly; a real name replaces it a moment later
-        nameThePool(res.groupId, res.texts)
+        // the local guess lands instantly; a real name replaces it a moment
+        // later — and only if the guess is still what it is called
+        nameThePool(res.groupId, res.texts, guess, (better) => {
+          rebuild()
+          paintAll()
+          say(`called it “${better}”`)
+        })
         closePage(false)
         openPool = tl.t.id
         paintAll()
@@ -3032,10 +3055,60 @@ function mountSky(root: HTMLDivElement) {
        * worked on and never asked about.
        */
       pendingImage = null
-      pageQ.textContent = 'Ask about this'
+      /*
+       * …and the same page, when it is the agent's turn to ask.
+       *
+       * A question that came back instead of an answer arrives here rather
+       * than in a bar at the foot of the sky, because the reply to it is
+       * typing — and this is the page for typing a question about this thing.
+       * You are looking at exactly what you were looking at, with the
+       * agent's question where the prompt was and its readings of your ask
+       * as rows you can tap.
+       *
+       * Nothing about it is a dead end. The box is still yours: the options
+       * are a shortcut to a phrasing, not a menu you have to choose from, and
+       * closing the page leaves the thought precisely as it was — a question
+       * back writes nothing, which is the whole point of it.
+       */
+      const cl = pendingClarify
+      pendingClarify = null
+      pageQ.textContent = cl ? cl.ask : 'Ask about this'
       pageT.value = ''
-      asking('Anything you want to know…')
+      asking(cl ? 'Say which, or put it another way…' : 'Anything you want to know…')
+      // The subject, either way. The reason it is asking goes in the panel with
+      // the readings and not here: this is a footnote beside the mic, it holds
+      // about thirty characters before it clips, and a sentence explaining that
+      // the app cannot hand you pictures is not a footnote.
       pageN.textContent = trim(label(tl.t), 46)
+      if (cl) {
+        // The writing box gives up the room it was not using. Asking normally,
+        // the box is the page — you are composing. Being asked, what you are
+        // mostly doing is reading three lines and touching one, and a full
+        // screen of empty field between the question and the answer to it is
+        // six hundred pixels of nothing.
+        page.classList.add('asked')
+        pageA.style.display = 'block'
+        pageA.innerHTML =
+          (cl.because ? `<div class="why"></div>` : '') +
+          (cl.options.length
+            ? `<div class="lab">did you mean</div>` +
+              cl.options.map(() => `<button class="ctl pick" type="button"></button>`).join('')
+            : '')
+        // textContent throughout, never interpolation: these words came back
+        // from a model that had web pages in front of it, and this is a page on
+        // our own origin.
+        const why = pageA.querySelector('.why')
+        if (why) why.textContent = cl.because
+        pageA.querySelectorAll('.pick').forEach((b, i) => {
+          b.textContent = cl.options[i]
+          b.addEventListener('click', (e) => {
+            e.stopPropagation()
+            const chosen = cl.options[i]
+            closePage(false)
+            void runAnswer(tl, chosen)
+          })
+        })
+      }
     } else if (tl) {
       pageQ.textContent = 'Inside this drop'
       pageT.value = tl.t.raw_content
@@ -4179,8 +4252,20 @@ function mountSky(root: HTMLDivElement) {
     pageAbsorb.classList.remove('busy')
     page.classList.remove('reading')
     if (res.kind === 'organized') {
-      // the picture now knows what it shows
-      if (photoId && res.source) S().updateThought(photoId, { title: res.source, raw_content: res.source })
+      /*
+       * The picture now knows what it shows.
+       *
+       * Only while it is still called "Photo", which is what it is born as.
+       * `runOrganize` is also the path a picture takes when it is attached to
+       * words you typed, and it is asked to name the picture in the same
+       * breath as reading them — so a picture you had already named, or one
+       * whose name came out of your own sentence rather than out of the image,
+       * would have had that overwritten. The placeholder is the only thing
+       * this is allowed to replace.
+       */
+      const shot = photoId ? S().thoughts.find((t) => t.id === photoId) : null
+      const unnamed = !!shot && (shot.title || shot.raw_content || '').trim().toLowerCase() === 'photo'
+      if (photoId && res.source && unnamed) S().updateThought(photoId, { title: res.source, raw_content: res.source })
       pageT.value = ''
       dropDraft() // the words are drops now
       micUsed = false
@@ -4833,6 +4918,19 @@ function mountSky(root: HTMLDivElement) {
       const res = applyAnswer(tl.t.id, output as Parameters<typeof applyAnswer>[1], runId)
       void markApplied(runId)
       if (res.kind === 'answered') landAnswer(tl, res, true)
+      // A question that came back while you were away. It gets an offer rather
+      // than a page: the sky does not rearrange itself behind your back, and
+      // opening a writing box over a screen you have only just come back to is
+      // exactly that.
+      else if (res.kind === 'clarify') {
+        hold(res.ask, trim(label(tl.t), 34))
+        offerAction(res.because || 'it needs one thing settled', 'answer that', () => {
+          hold(null)
+          pendingClarify = { ask: res.ask, because: res.because, options: res.options }
+          const q = posOf(tl.t.id)
+          openPage('ask', tl, toScreenX(q.x), toScreenY(q.y))
+        })
+      }
       return
     }
     if (action === 'draft') {
@@ -5062,6 +5160,23 @@ function mountSky(root: HTMLDivElement) {
         hold(null)
         void runAnswer(tl, question)
       })
+      return
+    }
+    /*
+     * It asked instead of answering.
+     *
+     * The graph is untouched — see applyAnswer — so there is nothing to land
+     * and nothing to undo. What there is, is a question with your name on it,
+     * and it goes where questions are typed. Straight there rather than into a
+     * bar you have to tap: you were waiting on this, you are still holding the
+     * phone, and an extra tap between a question and answering it is a tap
+     * spent on nothing.
+     */
+    if (res.kind === 'clarify') {
+      hold(null)
+      pendingClarify = { ask: res.ask, because: res.because, options: res.options }
+      const q = posOf(tl.t.id)
+      openPage('ask', tl, toScreenX(q.x), toScreenY(q.y))
       return
     }
     landAnswer(tl, res, false)

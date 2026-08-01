@@ -59,6 +59,13 @@ export default function CurrentPage() {
     done: boolean
   } | null>(null)
   const [askFailed, setAskFailed] = useState<string | null>(null)
+  /** …and when it came back with a question rather than an answer. */
+  const [askedBack, setAskedBack] = useState<{
+    id: string
+    ask: string
+    because: string
+    options: string[]
+  } | null>(null)
   const [waited, setWaited] = useState(0)
   const [sizing, setSizing] = useState<Sizing | null>(null)
 
@@ -170,6 +177,7 @@ export default function CurrentPage() {
   const primaryMakes = !!primary && isMakeable(primary.title || primary.raw_content)
   const answerHere = askedFor && primary && askedFor.id === primary.id ? askedFor.out : null
   const draftHere = drafted && primary && drafted.id === primary.id ? drafted : null
+  const backHere = askedBack && primary && askedBack.id === primary.id ? askedBack : null
 
   async function doIt(t: Thought) {
     if (asking || offline) return
@@ -198,11 +206,12 @@ export default function CurrentPage() {
     else setAskFailed(res.why ?? 'could not do that just now')
   }
 
-  async function askIt(t: Thought) {
+  async function askIt(t: Thought, question?: string) {
     if (asking || offline) return
     setAsking(t.id)
     setAskFailed(null)
     setAskedFor(null)
+    setAskedBack(null)
     setDrafted(null)
     setWaited(0)
     setSizing(null)
@@ -213,11 +222,16 @@ export default function CurrentPage() {
     const tick = setInterval(() => setWaited(Math.round((Date.now() - began) / 1000)), 1000)
     const sz = await sizeUp(t.id, 'answer', 3)
     setSizing(sz)
-    const res = await answerThought(t.id, { sizing: sz })
+    const res = await answerThought(t.id, { sizing: sz, question })
     clearInterval(tick)
     setAsking(null)
     setSizing(null)
     if (res.kind === 'answered') setAskedFor({ id: t.id, out: res.output })
+    // It asked instead of answering. Nothing was written — see applyAnswer —
+    // so this is the whole of what happened, and it goes where the answer
+    // would have gone rather than into the error line: a question back is not
+    // a failure and must not be dressed as one.
+    else if (res.kind === 'clarify') setAskedBack({ id: t.id, ...res })
     else setAskFailed(res.why ?? 'could not get out there just now')
   }
 
@@ -348,6 +362,32 @@ export default function CurrentPage() {
                 try again
               </button>
             </p>
+          )}
+          {/* It asked back.
+              A card and not the error line, because nothing went wrong: the
+              question had more than one reading, or wanted something words
+              cannot be. Each reading is a button that asks it again that way,
+              so the reply is one tap — this screen has no writing box, and a
+              question you cannot answer where you are standing is a dead end. */}
+          {backHere && !asking && (
+            <div className="card" style={{ marginTop: 12 }}>
+              <p style={{ fontSize: 'var(--fs-body)', fontWeight: 500 }}>{backHere.ask}</p>
+              {backHere.because && (
+                <p className="faint" style={{ fontSize: 'var(--fs-label)', marginTop: 6 }}>
+                  {backHere.because}
+                </p>
+              )}
+              {backHere.options.map((o) => (
+                <button
+                  key={o}
+                  className="hit"
+                  style={{ display: 'block', textAlign: 'left', marginTop: 10, color: 'var(--accent)' }}
+                  onClick={() => void askIt(primary, o)}
+                >
+                  {o}
+                </button>
+              ))}
+            </div>
           )}
           {answerHere && (
             <Answered

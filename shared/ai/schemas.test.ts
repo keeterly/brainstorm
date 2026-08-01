@@ -386,6 +386,58 @@ describe('answer — the other half of ⚡, for the things that are questions', 
     delete without.settled
     expect(answer.outputSchema.safeParse(without).success).toBe(false)
   })
+
+  it('is told what it cannot hand back, so it stops substituting prose for it', () => {
+    // Asked to find more pictures like a photograph, it went away for a minute
+    // and came back with paragraphs about artists — words, for a request that
+    // was plainly for images — and nothing anywhere said so.
+    const p = answer.buildPrompt({ subject: { id: 'q1', title: 'x' }, context: [] }, ctx)
+    expect(p.system).toContain('cannot return pictures')
+    expect(p.system).toContain('never silently substitute prose')
+  })
+
+  it('is told that asking back is for two cases, and not for hard questions', () => {
+    const p = answer.buildPrompt({ subject: { id: 'q1', title: 'x' }, context: [] }, ctx)
+    expect(p.system).toContain('materially different reading')
+    expect(p.system).toContain('not a way of avoiding a hard question')
+  })
+
+  it('takes a question back in place of an answer', () => {
+    const back = {
+      ...good,
+      answer: 'I can only hand back words — I cannot return pictures.',
+      facts: [],
+      unknown: [],
+      sources: [],
+      learned: [],
+      settled: false,
+      clarify: {
+        question: 'What would you like instead of the pictures themselves?',
+        because: 'I can describe, name and link — I cannot return images.',
+        options: ['Name the qualities it shares with my other references', 'Name artists working in this register'],
+      },
+    }
+    expect(answer.outputSchema.safeParse(back).success).toBe(true)
+  })
+
+  it('leaves it out of an ordinary answer, which is nearly every answer', () => {
+    // optional and absent, not present and empty: an app that checks before
+    // every answer is worse than one that guesses
+    expect(answer.outputSchema.parse(good).clarify).toBeUndefined()
+  })
+
+  it('caps the readings it offers, so asking back cannot become a questionnaire', () => {
+    const opts = ['a', 'b', 'c', 'd', 'e']
+    const cl = { question: 'which?', because: '', options: opts }
+    expect(answer.outputSchema.safeParse({ ...good, clarify: cl }).success).toBe(false)
+    expect(answer.outputSchema.safeParse({ ...good, clarify: { ...cl, options: opts.slice(0, 4) } }).success).toBe(true)
+  })
+
+  it('will not take a question back with no question in it', () => {
+    expect(
+      answer.outputSchema.safeParse({ ...good, clarify: { question: '', because: '', options: [] } }).success,
+    ).toBe(false)
+  })
 })
 
 describe('draft — the end of the funnel, where the work actually gets made', () => {

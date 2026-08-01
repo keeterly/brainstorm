@@ -153,6 +153,16 @@ describe('somewhere to put a thumb', () => {
     expect(block('.sky-page .pans .danger .d')).toMatch(/min-height: 44px/)
   })
 
+  it('gives a reading of your question the room of a sentence, not of a pill', () => {
+    // These are three ways of finishing what you started asking, so they are
+    // full-width lines you read — a row of capsules reads as a menu you have
+    // to choose from, and the writing box above them is still the real reply.
+    const pick = block('.sky-page .pans .pick')
+    expect(pick).toMatch(/min-height: 44px/)
+    expect(pick).toMatch(/text-align: left/)
+    expect(pick).toMatch(/width: 100%/)
+  })
+
   it('grows the quiet controls without growing how loud they look', () => {
     // A take-out is a secondary act; a 44pt pill on every row would shout it.
     // So it keeps the size it looks and grows the size it is, via a

@@ -1412,6 +1412,50 @@ body.sky-dragging .sky-undo.show {
 }
 .sky-page .pans .ctl:active::before { opacity: 0; }
 
+/* Being asked, rather than asking.
+   The same page and the same box; what changes is who is waiting on whom. Your
+   own reply is a sentence at most — the readings below do the rest — so the
+   field keeps three lines and the panel takes the screen, the same trade the
+   group page already makes for the same reason. */
+.sky-page.asked > textarea { flex: 0 0 auto; min-height: 0; max-height: 4.6em; }
+.sky-page.asked .pans { max-height: none; flex: 1; }
+
+/* Why it is asking rather than answering — what it cannot hand back, or what
+   about the question has two readings. A sentence, so it is set as one: the
+   note beside the mic is thirty characters wide and this is the substance of
+   the reply, not a caption on it. */
+.sky-page .pans .why {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--paper-soft, #5b6b7e);
+  margin-bottom: 14px;
+}
+
+/*
+ * A reading of your question, offered back.
+ *
+ * Full width and left-aligned, because these are sentences and not commands.
+ * A row of pills would read as three buttons to choose between; what they
+ * actually are is three ways of finishing the thing you already started
+ * asking. The writing box above them is still the real reply — these are a
+ * shortcut to a phrasing, not a menu you have to pick from.
+ *
+ * 44 tall at the floor, like everything else in this app you can touch.
+ */
+.sky-page .pans .pick {
+  display: block;
+  width: 100%;
+  text-align: left;
+  min-height: 44px;
+  padding: 11px 16px;
+  margin-bottom: 8px;
+  font-size: 14.5px;
+  line-height: 1.4;
+  color: var(--paper-ink, #3d4b5c);
+  /* a sentence, not a capsule: the corners follow the block of text */
+  border-radius: 16px;
+}
+
 .sky-page .pans .lab.head .sel {
   font-size: 9.5px;
   font-weight: 600;

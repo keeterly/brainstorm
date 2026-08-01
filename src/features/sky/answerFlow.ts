@@ -15,6 +15,16 @@ import { learnFacts } from '@/ai/memoryFlow'
 
 export type AnswerResult =
   | { kind: 'answered'; line: string; added: number; settled: boolean; output: AnswerOutput }
+  /**
+   * It came back with a question rather than an answer.
+   *
+   * Nothing is written to the graph for one of these — see applyAnswer. A
+   * question back is not a result, and a thought that has been asked about and
+   * not yet answered must still read as unanswered: no summary, no brief, no
+   * `answered_at`. Otherwise the app records having answered something it
+   * explicitly said it could not.
+   */
+  | { kind: 'clarify'; ask: string; because: string; options: string[] }
   | { kind: 'failed'; why?: string }
 
 export async function answerThought(
@@ -87,6 +97,25 @@ export function applyAnswer(subjectId: string, output: AnswerOutput, runId: stri
   const s = useGraph.getState()
   const subject = s.thoughts.find((t) => t.id === subjectId)
   if (!subject) return { kind: 'failed' }
+
+  /*
+   * A question back, before anything is written.
+   *
+   * Deliberately the first thing here and an early return rather than a branch
+   * further down: everything below this line records that the thing was
+   * answered, and it was not. The run is still marked applied — it happened,
+   * it cost what it cost, and it must not be re-landed on the next load — but
+   * the graph is left exactly as it was found.
+   */
+  if (output.clarify) {
+    if (runId) void markApplied(runId)
+    return {
+      kind: 'clarify',
+      ask: output.clarify.question.trim(),
+      because: output.clarify.because.trim(),
+      options: output.clarify.options.map((o) => o.trim()).filter(Boolean),
+    }
+  }
 
   s.updateThought(subject.id, {
     // the drop now knows something; say so where the drop is read

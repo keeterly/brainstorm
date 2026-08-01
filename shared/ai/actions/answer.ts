@@ -102,6 +102,36 @@ const Output = z.object({
   /** whether asking this is now finished — the answer is in hand and there is
    *  nothing left of it to do */
   settled: z.boolean(),
+  /**
+   * Instead of an answer: the one thing that has to be settled first.
+   *
+   * This exists because of a specific failure. Asked "find me more inspiration
+   * like this" in front of a photograph, the app went away for the best part of
+   * a minute and came back with four paragraphs of prose about artists — words,
+   * for a request that was plainly for pictures. Nothing in it was untrue and
+   * none of it was what was asked for, and the app never said so. It quietly
+   * substituted what it can do for what it had been asked to do, and presented
+   * the result as the answer.
+   *
+   * The honest move in that moment is to say what it can and cannot hand back,
+   * and to ask which of the things it *can* do was meant. One question back
+   * costs a tap; the wrong reading costs a minute and is worth nothing.
+   *
+   * Deliberately narrow. A question you can answer three-quarters of is
+   * answered, with the last quarter in `unknown` — asking back is not a way of
+   * avoiding a hard question, and an app that checks before every answer is
+   * worse than one that guesses.
+   */
+  clarify: z
+    .object({
+      /** the one thing that needs settling, in one plain line */
+      question: z.string().min(1).max(160),
+      /** why it changes the answer — or what cannot be handed back, and why */
+      because: z.string().max(220),
+      /** concrete readings to pick from, each a complete ask on its own */
+      options: z.array(z.string().min(1).max(120)).max(4),
+    })
+    .optional(),
 })
 
 export type AnswerInput = z.infer<typeof Input>
@@ -110,7 +140,8 @@ export type AnswerOutput = z.infer<typeof Output>
 export const answer: ActionDef<AnswerInput, AnswerOutput> = {
   name: 'answer',
   // 2: a question can now be *about* the subject rather than be it
-  version: 2,
+  // 3: it may ask one question back rather than answer the wrong reading
+  version: 3,
   modelTier: 'smart',
   maxTokens: 6000,
   // A question is narrower than a brief, so it converges sooner: four searches
@@ -141,7 +172,17 @@ export const answer: ActionDef<AnswerInput, AnswerOutput> = {
         `You are forbidden from handing back the errand. "Open ITA Matrix and enter your dates" is not an ` +
         `answer; the fare is. If the exact figure is behind something you cannot reach, give the real range you ` +
         `can source, say plainly that it is a range and why, and put the one thing that would settle it in ` +
-        `\`unknown\` — never invent a precise number to look decisive.`,
+        `\`unknown\` — never invent a precise number to look decisive.\n\n` +
+        `Two asks are worth putting one question back rather than guessing at, and only two.\n` +
+        `1. It has more than one materially different reading, and the wrong one wastes the whole run.\n` +
+        `2. It is for something you cannot hand back at all. You return words: a written answer, facts, ` +
+        `links, and at most a few small steps. You cannot return pictures, files, audio or video; you ` +
+        `cannot buy, book, send, post or open anything. If that is what was asked for, say so in one plain ` +
+        `line and offer the nearest thing words can actually do — never silently substitute prose for the ` +
+        `thing they asked for and present it as the answer.\n` +
+        `In either case fill \`clarify\` and stop: no searching, no facts, no sources, no next steps. ` +
+        `Everything else, answer. A question you can answer three-quarters of is answered, with the rest ` +
+        `in \`unknown\` — asking back is not a way of avoiding a hard question.`,
       user:
         (q
           ? `Answer their question.\n\n"${q}"\n\nThey asked it while looking at this, which is the frame ` +
@@ -167,7 +208,13 @@ export const answer: ActionDef<AnswerInput, AnswerOutput> = {
         `learned: anything durable you now know about *them* — how they travel, what they are building, what ` +
         `they already hold. Not about this question. Nothing you were already told. Omit if nothing.\n` +
         `settled: true if knowing this is the whole of it and the item can be closed; false if they still have ` +
-        `to act on what you found.`,
+        `to act on what you found.\n` +
+        `clarify: omit it entirely unless one of the two cases above holds. When it does, this is the whole ` +
+        `of your reply — put the plain statement of what you can and cannot do in \`answer\`, leave facts, ` +
+        `unknown, next and sources empty, set settled false, and fill: question — the one thing you need ` +
+        `settled, one line, no preamble. because — why it changes the answer, or what you cannot hand back ` +
+        `and why, one line. options — two to four concrete readings they can pick from, each phrased as a ` +
+        `complete ask you could act on immediately and each genuinely different from the others.`,
       images: input.image ? [input.image] : undefined,
     }
   },

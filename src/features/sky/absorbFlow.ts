@@ -138,16 +138,42 @@ export async function organizeText(
   }
 }
 
-// Name a pool properly, a moment after it forms. The drag stays instant — the
-// local guess appears at once and the real name replaces it when it lands.
-export function nameThePool(goalId: string, members: string[]) {
+/*
+ * Name a pool properly, a moment after it forms.
+ *
+ * The drag stays instant: the local guess appears at once, and a better name
+ * replaces it when it lands.
+ *
+ * `guess` is what the group was called at the moment this was asked for, and
+ * it is the whole of the difference between naming something and renaming it.
+ * This used to write unconditionally, which made it the one place in the app
+ * that changed words on your map with no offer, no undo and nothing said — so
+ * a group you had named yourself and then dragged one more thing into came
+ * back a second later called something else. If the title is no longer the
+ * guess, somebody has had an opinion about it since, and their opinion beats
+ * anything a model has to say.
+ *
+ * `onNamed` is how the sky gets to mention it, which is the other half. The
+ * name changing under you in silence leaves you unable to tell a rename from
+ * a misremembering.
+ */
+export function nameThePool(goalId: string, members: string[], guess?: string, onNamed?: (name: string) => void) {
   if (members.length < 2) return
-  const s = useGraph.getState()
-  if (s.offline) return
+  if (useGraph.getState().offline) return
   void runAction<NamePoolOutput>('name_pool', { members: members.slice(0, 20).map((m) => m.slice(0, 300)) })
     .then(({ output }) => {
       const name = output.name.trim().replace(/^["'“”]|["'“”.]$/g, '')
-      if (name) s.updateThought(goalId, { title: name, raw_content: name })
+      if (!name) return
+      // Re-read rather than closing over the store: this lands a second or
+      // more after the call went out, and the graph has been live throughout.
+      const now = useGraph.getState()
+      const g = now.thoughts.find((t) => t.id === goalId)
+      if (!g) return
+      const called = (g.title || g.raw_content || '').trim()
+      if (guess !== undefined && called !== guess.trim()) return
+      if (called === name) return
+      now.updateThought(goalId, { title: name, raw_content: name })
+      onNamed?.(name)
     })
     .catch(() => {
       /* the local guess stands */
