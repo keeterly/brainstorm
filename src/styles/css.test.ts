@@ -323,6 +323,45 @@ describe('swiping a row to uncover its take-out', () => {
 // wide pill saying the word "Photo". And opening its page put the picture in
 // at 120px, a stamp in the corner of a screen whose entire content is that
 // picture, with more of it visible in the bubble you tapped to get there.
+// The top of the glass is not the top of the screen.
+//
+// On an installed PWA the first fifty-nine pixels belong to iOS — the clock,
+// the signal, the battery — and every gesture in the sky that reaches for the
+// top adds `sat()` to find the real edge. One function did not: `bringIntoView`,
+// whose whole documented job is to bring the thing you are reading fully onto
+// the glass, had a bare `ceil = 68`. Nine pixels of clearance. A photograph
+// opened near the top of a group came up under the clock with a third of the
+// picture off the screen, which is what it looked like on the phone.
+//
+// The floor of the same function was already right — `waterlineY()` measures
+// the tab bar and the safe area off the DOM — so one end of it knew about the
+// notch and the other did not. That asymmetry is the thing to pin.
+describe('what you are reading stays on the glass', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+
+  it('measures the ceiling from below the status bar', () => {
+    const fn = page.slice(page.indexOf('function bringIntoView'))
+    const body = fn.slice(0, fn.indexOf('\n  }'))
+    expect(body).toMatch(/const ceil = sat\(\)/)
+  })
+
+  it('still measures the floor from the water, which already knows', () => {
+    const fn = page.slice(page.indexOf('function bringIntoView'))
+    const body = fn.slice(0, fn.indexOf('\n  }'))
+    expect(body).toMatch(/const floor = waterlineY\(\)/)
+  })
+
+  it('moves the camera and never the card', () => {
+    // the card opens where it stood; moving it to fix the framing is the one
+    // thing it must not do, or reading a thing relocates it
+    const fn = page.slice(page.indexOf('function bringIntoView'))
+    const body = fn.slice(0, fn.indexOf('\n  }'))
+    expect(body).toMatch(/camTarget = \{/)
+    expect(body).not.toMatch(/\bp\.y \+?=/)
+    expect(body).not.toMatch(/\bp\.x \+?=/)
+  })
+})
+
 describe('opening a photograph', () => {
   const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
   const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')

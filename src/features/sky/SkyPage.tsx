@@ -1443,7 +1443,21 @@ function mountSky(root: HTMLDivElement) {
     if (right - left > W - pad * 2) dx = W / 2 - (left + right) / 2
     else if (left < pad) dx = pad - left
     else if (right > W - pad) dx = W - pad - right
-    const ceil = 68
+    /*
+     * The ceiling moves with the notch.
+     *
+     * It was a flat 68, written when the sky was a web page. On an installed
+     * PWA the top 59 pixels of the glass are the status bar — the clock, the
+     * signal, the battery — so 68 left nine pixels of clearance and a
+     * photograph opened near the top of a group came up *under the clock*,
+     * with the top third of the picture off the screen and its caption jammed
+     * against the edge.
+     *
+     * `SKY_EDGE` is the line the rest of the sky already treats as the top of
+     * the world, and it is measured from below the safe area everywhere else
+     * this file mentions it. Here it was not mentioned at all.
+     */
+    const ceil = sat() + SKY_EDGE + 12
     const floor = waterlineY() - 108
     if (bottom - top > floor - ceil) dy = (ceil + floor) / 2 - (top + bottom) / 2
     else if (top < ceil) dy = ceil - top
@@ -4664,9 +4678,24 @@ function mountSky(root: HTMLDivElement) {
     // opened by tapping a bubble, so the two sat on top of each other and
     // neither could be read.
     paintNext()
+    /*
+     * Where it stands is layoutMoons's problem, not this one.
+     *
+     * There was a line here that shoved the drop down to `radiusOf(tl) + 170`
+     * so the actions would have room under it. Two things wrong with it, and
+     * the second is what put a photograph half off the top of the screen.
+     *
+     * `radiusOf` on a drop tops out at 112, and a photograph you have opened
+     * is not a disc — it is a card as tall as the picture, up to 54% of the
+     * glass. So the room reserved was less than half what the thing needed and
+     * its top went under the status bar.
+     *
+     * And it ran once, on the tap. The card *grows* into its size over about
+     * half a second, so even the measured height is not knowable yet at the
+     * moment this fires. The rule belongs in the frame loop, where the true
+     * size is already known and can be corrected as it changes.
+     */
     const p = posOf(tl.t.id)
-    // an opened pool has already been framed by the camera; leave it where it is
-    if (openPool !== tl.t.id) p.y = Math.max(p.y, radiusOf(tl) + 170)
     /*
      * Three. Always the same three, always in this order.
      *
@@ -4794,6 +4823,7 @@ function mountSky(root: HTMLDivElement) {
     const below = open
       ? Math.max(orbitR(tl), ringR) + memberR(tl.members.length) + 46
       : (peek === tl.t.id && grown ? grown.hh : radiusOf(tl)) + 52
+
     // As wide as they can be and still all fit — worked out in screen pixels,
     // because the glass is measured in screen pixels and a moon undoes the
     // camera's scale to keep its real size. The old sum did the spacing in
