@@ -1909,9 +1909,23 @@ function mountSky(root: HTMLDivElement) {
    * With no `ms` it stays. Undo has to expire — an offer to reverse something
    * you did ten minutes ago is noise — but a result you waited a minute for
    * must not, because the waiting is exactly when you put the phone down.
+   *
+   * An empty `lb` is a bar with nothing but its verb on it, and it is the
+   * right shape whenever the pill above is already saying what happened.
+   *
+   * That was most of them. Every landing said its outcome twice — once as
+   * prose in the pill, and again as forty characters of the same thing in the
+   * bar underneath, next to the button. Two dark panels stacked over the tab
+   * bar, both about the same event, one of them a truncation of the other. The
+   * division is: **the pill says what happened, the bar says what you can do
+   * about it.** A bar that also narrates is a second voice arguing with the
+   * first in a smaller font.
    */
   function offerAction(lb: string, go: string, fn: () => void, ms?: number) {
     undoLb.textContent = lb
+    // hidden rather than empty, so the flex gap does not leave the verb
+    // floating off-centre in a bar that is otherwise nothing
+    undoLb.hidden = !lb
     undoGo.textContent = go
     undoFn = fn
     undoEl.classList.add('show')
@@ -4606,7 +4620,7 @@ function mountSky(root: HTMLDivElement) {
     }
     if (res.kind === 'failed') {
       hold(res.why ?? 'could not read them just now', trim(label(tl.t), 34))
-      offerAction('tap to try again', 'again', () => {
+      offerAction('', 'again', () => {
         hold(null)
         void runLook(tl)
       })
@@ -4617,7 +4631,7 @@ function mountSky(root: HTMLDivElement) {
     haptics.arrive()
     hold(res.note || res.output.read, trim(label(tl.t), 34))
     record(`looked · ${trim(res.output.read, 46)}`, trim(label(tl.t), 40))
-    offerAction(trim(res.output.read, 42), 'read it', () => {
+    offerAction('', 'read it', () => {
       hold(null)
       const q = posOf(tl.t.id)
       const now = view.byId.get(tl.t.id)
@@ -4657,7 +4671,7 @@ function mountSky(root: HTMLDivElement) {
 
     if (res.kind === 'failed') {
       hold(res.why ?? 'nothing fell just now', trim(label(tl.t), 34))
-      offerAction('tap to try again', 'again', () => {
+      offerAction('', 'again', () => {
         hold(null)
         void rain(tl)
       })
@@ -4924,7 +4938,9 @@ function mountSky(root: HTMLDivElement) {
       // exactly that.
       else if (res.kind === 'clarify') {
         hold(res.ask, trim(label(tl.t), 34))
-        offerAction(res.because || 'it needs one thing settled', 'answer that', () => {
+        // the reason waits on the page you are one tap from, rather than
+        // being a second panel of prose under the first
+        offerAction('', 'answer that', () => {
           hold(null)
           pendingClarify = { ask: res.ask, because: res.because, options: res.options }
           const q = posOf(tl.t.id)
@@ -4952,7 +4968,7 @@ function mountSky(root: HTMLDivElement) {
     hold(whileAway ? `while you were away — ${res.note || 'it finished'}` : res.note, trim(label(tl.t), 34))
     record(`⚡ came back with ${res.added} step${res.added === 1 ? '' : 's'}`, trim(label(tl.t), 40))
     if (briefOf(tl.t.id)) {
-      offerAction(trim(label(tl.t), 30), 'read it', () => {
+      offerAction('', 'read it', () => {
         hold(null)
         const q = posOf(tl.t.id)
         openPage('brief', tl, toScreenX(q.x), toScreenY(q.y))
@@ -4996,7 +5012,7 @@ function mountSky(root: HTMLDivElement) {
       // a minute of waiting deserves better than four seconds of apology, and
       // an offer to try again rather than hunting for the button
       hold(res.why ?? 'could not get out there just now', trim(label(tl.t), 34))
-      offerAction('tap to try again', 'again', () => {
+      offerAction('', 'again', () => {
         hold(null)
         void runDeepen(tl)
       })
@@ -5030,7 +5046,7 @@ function mountSky(root: HTMLDivElement) {
     hold(res.note || parts.join(' · ') || 'back from finding out', trim(label(tl.t), 34))
     record(`⚡ ${parts.join(' · ') || 'came back'}`, trim(label(tl.t), 40))
     if (briefOf(tl.t.id)) {
-      offerAction(parts.join(' · ') || 'it wrote something down', 'read it', () => {
+      offerAction('', 'read it', () => {
         hold(null)
         const q = posOf(tl.t.id)
         openPage('brief', tl, toScreenX(q.x), toScreenY(q.y))
@@ -5070,7 +5086,7 @@ function mountSky(root: HTMLDivElement) {
     if (dead) return
     if (res.kind === 'failed') {
       hold(res.why ?? 'could not do that just now', trim(label(tl.t), 34))
-      offerAction('tap to try again', 'again', () => {
+      offerAction('', 'again', () => {
         hold(null)
         void runDraft(tl, intent)
       })
@@ -5094,7 +5110,7 @@ function mountSky(root: HTMLDivElement) {
     // else, in which case the sky does not rearrange itself behind your back.
     if (whileAway || pageFor) {
       hold(whileAway ? `while you were away — ${res.title}` : res.title, trim(label(tl.t), 34))
-      offerAction(trim(res.line, 46), 'read it', () => {
+      offerAction('', 'read it', () => {
         hold(null)
         openPage('brief', tl, toScreenX(q.x), toScreenY(q.y))
       })
@@ -5156,7 +5172,7 @@ function mountSky(root: HTMLDivElement) {
     if (dead) return
     if (res.kind === 'failed') {
       hold(res.why ?? 'could not get out there just now', trim(label(tl.t), 34))
-      offerAction('tap to try again', 'again', () => {
+      offerAction('', 'again', () => {
         hold(null)
         void runAnswer(tl, question)
       })
@@ -5212,7 +5228,7 @@ function mountSky(root: HTMLDivElement) {
     // sky does not rearrange itself behind your back; it offers.
     if (whileAway || pageFor) {
       hold(whileAway ? `while you were away — ${res.line}` : res.line, trim(label(tl.t), 34))
-      offerAction(trim(res.line, 46), 'read it', () => {
+      offerAction('', 'read it', () => {
         hold(null)
         const q = posOf(tl.t.id)
         openPage('brief', tl, toScreenX(q.x), toScreenY(q.y))
