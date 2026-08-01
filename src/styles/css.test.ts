@@ -559,3 +559,47 @@ describe('what you wrote, arriving', () => {
     expect(page).toMatch(/if \(rad === 0\) p\.rx = p\.x/)
   })
 })
+
+// How wide the app is allowed to speak.
+//
+// Every message at the foot of the sky was sized in `vw` — the voice ran the
+// full width of the glass, the recommendation was capped at 62vw, the undo bar
+// at 92vw. That is a reasonable measure on a phone and a nonsense one anywhere
+// else: there is no breakpoint in this app, so a monitor turned 92vw into two
+// thousand pixels and a four-word greeting arrived as a bar the width of a
+// desk. A line of prose has a comfortable length in *characters*; past the
+// width where that is satisfied, a wider screen should simply be emptier.
+describe('the width of the app’s voice', () => {
+  const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
+
+  it('has one measure, and it stops growing', () => {
+    expect(sky).toMatch(/--say: min\(92vw, 480px\)/)
+  })
+
+  it('sizes the voice to what it has to say', () => {
+    // "welcome back" was arriving as a full-bleed bar laid across two drops,
+    // because the pill was pinned to both edges whatever was in it
+    expect(sky).toMatch(/\.sky-voice \{[^}]*width: max-content/s)
+    expect(sky).toMatch(/\.sky-voice \{[^}]*max-width: var\(--say\)/s)
+    expect(sky).not.toMatch(/\.sky-voice \{[^}]*right: 14px/s)
+  })
+
+  it('puts everything that stands in that slot in the same place', () => {
+    // the voice and the recommendation swap back and forth — see paintNext —
+    // so anchored left while the other was centred, the one message in this
+    // place appeared to jump sideways depending on which was speaking
+    expect(sky).toMatch(/\.sky-voice \{[^}]*left: 50%/s)
+    expect(sky).toMatch(/\.sky-next \{[^}]*left: 50%/s)
+    expect(sky).toMatch(/\.sky-voice\.show \{[^}]*transform: translateX\(-50%\)/s)
+    // …and the press keeps the centring, or it jumps on touch
+    expect(sky).toMatch(/\.sky-next:active \{ transform: translateX\(-50%\) scale\(0\.97\)/)
+  })
+
+  it('leaves no vw-only cap on anything that speaks', () => {
+    for (const rule of ['.sky-undo {', '.sky-next {']) {
+      const block = sky.slice(sky.indexOf(rule), sky.indexOf('}', sky.indexOf(rule)))
+      const cap = block.match(/max-width: ([^;]+);/)?.[1] ?? ''
+      expect(cap, `${rule} caps its width at ${cap}`).toMatch(/var\(--say\)|min\(/)
+    }
+  })
+})

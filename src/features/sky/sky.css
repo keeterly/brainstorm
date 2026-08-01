@@ -372,11 +372,34 @@ body.sky-held {
  * because the app suggesting something and the app telling you something are
  * one voice and should never be in two places at once.
  */
+/*
+ * How wide the app is allowed to speak.
+ *
+ * Every message down here was sized in `vw` — the voice ran the full width of
+ * the glass, the recommendation was capped at 62vw, the undo bar at 92vw —
+ * which is a reasonable measure on a phone and a nonsense one anywhere else. A
+ * monitor turns 92vw into two thousand pixels, so a four-word greeting arrives
+ * as a bar the width of a desk and a sentence sets as a single unreadable line.
+ * There is no breakpoint anywhere in this app and there does not need to be
+ * one: a line of prose has a comfortable length in *characters*, and past the
+ * width where that is satisfied a wider screen should simply be emptier.
+ *
+ * 480px is roughly sixty characters at the size these are set in. On a phone
+ * the vw term still wins, so nothing about the small screen changes.
+ */
+:root {
+  --say: min(92vw, 480px);
+}
+
 .sky-voice {
   position: fixed;
   z-index: 6;
-  left: 14px;
-  right: 14px;
+  /* As wide as what it has to say, up to the measure — not the width of the
+     screen. "welcome back" was arriving as a full-bleed bar laid across two
+     drops, because the pill was pinned to both edges whatever was in it. */
+  left: 50%;
+  width: max-content;
+  max-width: var(--say);
   bottom: calc(var(--water-line-up, 86px) + 44px);
   display: none;
   flex-direction: column;
@@ -396,10 +419,10 @@ body.sky-held {
     0 12px 30px rgba(0, 0, 0, 0.44);
   pointer-events: none;
   opacity: 0;
-  transform: translateY(6px);
+  transform: translateX(-50%) translateY(6px);
   transition: opacity 380ms ease, transform 380ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.sky-voice.show { display: flex; opacity: 1; transform: none; }
+.sky-voice.show { display: flex; opacity: 1; transform: translateX(-50%); }
 /* Out of the way of the undo bar.
    Both live at the foot of the sky and both appear on the same act — you let
    something go, and the app says so *and* offers to put it back — so the
@@ -570,9 +593,16 @@ body.sky-offering .sky-voice { bottom: calc(var(--water-line-up, 86px) + 106px);
 .sky-next {
   position: fixed;
   z-index: 6;
-  left: 14px;
+  /* Centred, because the app's own voice stands in this exact slot and the two
+     swap back and forth — see paintNext, which hides this the moment the voice
+     has something to say. Anchored left while the voice was centred, the one
+     message in this place appeared to jump sideways depending on which of them
+     was speaking. */
+  left: 50%;
   bottom: calc(var(--water-line-up, 86px) + 44px);
-  max-width: 62vw;
+  /* narrower than the measure: a recommendation leaves room for the sky it is
+     a recommendation about */
+  max-width: min(62vw, 400px);
   display: none;
   flex-direction: column;
   align-items: flex-start;
@@ -586,10 +616,11 @@ body.sky-offering .sky-voice { bottom: calc(var(--water-line-up, 86px) + 106px);
   -webkit-backdrop-filter: blur(14px);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  transform: translateX(-50%);
   transition: opacity 420ms ease, transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .sky-next.show { display: flex; }
-.sky-next:active { transform: scale(0.97); }
+.sky-next:active { transform: translateX(-50%) scale(0.97); }
 .sky-next .lb {
   font-size: 12.5px;
   line-height: 1.3;
@@ -630,7 +661,7 @@ body.sky-offering .sky-voice { bottom: calc(var(--water-line-up, 86px) + 106px);
      than its own sentence and ellipsised the verb off the end of it — and the
      verb is the whole message: done, taken out and put away all end there. */
   width: max-content;
-  max-width: 92vw;
+  max-width: var(--say);
   padding: 11px 18px;
   border-radius: 999px;
   background: rgba(15, 22, 32, 0.88);
