@@ -1,6 +1,7 @@
 // agent_runs bookkeeping — all writes go through Supabase REST *as the user*
 // (their JWT is forwarded), so RLS applies and no service-role key exists here.
 import { DAILY_RUN_CAP, DAILY_USD_CAP, estimateUSD } from '../../../shared/ai/pricing'
+import { capForUser, onTheList, totalCap } from './who'
 
 function rest(path: string): string {
   return `${process.env.SUPABASE_URL}/rest/v1/${path}`
@@ -125,7 +126,7 @@ export async function spentToday(userToken: string, userId: string): Promise<Spe
 /** May this run start, and what shall we charge it while it is going. */
 export type Gate =
   | { ok: true; cost: number; spend: Spend }
-  | { ok: false; status: 429 | 503; error: string }
+  | { ok: false; status: 403 | 429 | 503; error: string }
 
 const money = (n: number) => `$${n.toFixed(2)}`
 
@@ -134,7 +135,9 @@ const money = (n: number) => `$${n.toFixed(2)}`
  * way. They did not: the synchronous one measured the gate and the background
  * one did not, and any change to the rule had to be made twice.
  *
- * Three ways to be refused, and they are three different things:
+ * Four ways to be refused, and they are four different things:
+ *
+ *  - Not on the guest list → 403. Signing in is not permission; see who.ts.
  *
  *  - The meter cannot be read → 503. Not the user's fault and not their
  *    limit; the app should say it could not check and let them try again,
@@ -152,7 +155,13 @@ export async function allowRun(
   model: string,
   inputChars: number,
   searchMaxUses?: number,
+  email: string | null = null,
 ): Promise<Gate> {
+  // Before anything is measured: signing in is not permission. See who.ts.
+  if (!onTheList(email)) {
+    return { ok: false, status: 403, error: 'This account is not on the list for AI actions.' }
+  }
+
   let spend: Spend
   try {
     spend = await spentToday(userToken, userId)
@@ -164,17 +173,64 @@ export async function allowRun(
     model,
     inputChars,
   )
-  if (spend.usd + cost > DAILY_USD_CAP) {
+
+  const mine = capForUser(email, DAILY_USD_CAP)
+  if (spend.usd + cost > mine) {
     return {
       ok: false,
       status: 429,
-      error:
-        `Daily AI limit reached — ${money(spend.usd)} of ${money(DAILY_USD_CAP)} used today. ` +
-        `It resets at midnight UTC.`,
+      error: `Daily AI limit reached — ${money(spend.usd)} of ${money(mine)} used today. It resets at midnight UTC.`,
     }
   }
   if (spend.runs >= DAILY_RUN_CAP) {
     return { ok: false, status: 429, error: `Daily AI limit reached (${DAILY_RUN_CAP} runs). Try again tomorrow.` }
   }
+
+  /*
+   * …and the ceiling over everybody together.
+   *
+   * Last, because it is the only one that costs a second round trip, and it is
+   * asked only when there is a total to compare against. It fails closed for
+   * the same reason the per-user meter does: the moment the total cannot be
+   * read is the moment it is worth the most.
+   */
+  const all = totalCap()
+  if (all !== null) {
+    let used: number
+    try {
+      used = await spentTodayEverybody(userToken)
+    } catch {
+      return { ok: false, status: 503, error: 'Could not check today’s usage. Try again in a moment.' }
+    }
+    if (used + cost > all) {
+      return {
+        ok: false,
+        status: 429,
+        error: `Everyone’s AI budget for today is used up (${money(used)} of ${money(all)}). It resets at midnight UTC.`,
+      }
+    }
+  }
   return { ok: true, cost, spend }
+}
+
+/**
+ * What everybody has spent today, across every account.
+ *
+ * Through a `security definer` function rather than a service-role key: there
+ * is no service-role key anywhere in this app and there is not going to be
+ * one. RLS means a user's own token can only ever see their own runs, so a sum
+ * across all of them has to be computed by something that is allowed to — and
+ * `public.ai_spend_today()` hands back exactly one number and nothing else.
+ * See supabase/migrations/0007.
+ */
+export async function spentTodayEverybody(userToken: string): Promise<number> {
+  const r = await fetch(rest('rpc/ai_spend_today'), {
+    method: 'POST',
+    headers: headers(userToken),
+    body: '{}',
+  })
+  if (!r.ok) throw new Error(`total usage read failed (${r.status})`)
+  const n = Number(await r.json())
+  if (!Number.isFinite(n)) throw new Error('total usage read was not a number')
+  return n
 }

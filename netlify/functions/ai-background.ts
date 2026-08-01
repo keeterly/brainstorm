@@ -77,6 +77,7 @@ export default async (req: Request): Promise<Response> => {
     model,
     JSON.stringify(parsedInput.data).length,
     searchMaxUses,
+    user.email,
   )
   if (!gate.ok) return json(gate.status, { error: gate.error }, cors)
 

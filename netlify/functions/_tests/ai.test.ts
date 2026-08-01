@@ -19,6 +19,8 @@ interface MockState {
   todayRuns: { cost_usd: number | null }[]
   /** make the usage read fail, so failing closed can be tested */
   usageDown: boolean
+  /** what everybody together has spent today — see ai_spend_today */
+  everyoneToday: number
   anthropicResponses: Array<Record<string, unknown> | { __status: number }>
   anthropicCalls: Record<string, unknown>[]
 }
@@ -42,9 +44,17 @@ beforeEach(() => {
     runPatches: [],
     todayRuns: [],
     usageDown: false,
+    everyoneToday: 0,
     anthropicResponses: [],
     anthropicCalls: [],
   }
+  // Each test starts with no guest list and no ceilings — the shape of a
+  // deployment with one person on it. Left set, they leak into every test
+  // after the one that needed them.
+  delete process.env.AI_ALLOWED_EMAILS
+  delete process.env.AI_OWNER_EMAILS
+  delete process.env.AI_GUEST_USD_CAP
+  delete process.env.AI_TOTAL_USD_CAP
   Object.assign(process.env, ENV)
   vi.stubGlobal(
     'fetch',
@@ -70,6 +80,10 @@ beforeEach(() => {
           if (state.usageDown) return new Response('{}', { status: 500 })
           return new Response(JSON.stringify(state.todayRuns), { status: 200 })
         }
+      }
+      if (u.includes('/rest/v1/rpc/ai_spend_today')) {
+        if (state.usageDown) return new Response('{}', { status: 500 })
+        return new Response(JSON.stringify(state.everyoneToday), { status: 200 })
       }
       if (u.includes('api.anthropic.com')) {
         state.anthropicCalls.push(JSON.parse(String(init?.body)))
@@ -208,6 +222,55 @@ describe('/api/ai', () => {
     const r = await handler(req(VALID))
     expect(r.status).toBe(429)
     expect(((await r.json()) as { error: string }).error).toContain('400 runs')
+  })
+
+  it('turns away an account that is not on the guest list', async () => {
+    // Supabase auth is open by default, so anybody who ends up with the URL
+    // can make an account — and an account was a licence to spend.
+    process.env.AI_ALLOWED_EMAILS = 'someone@else.com'
+    const r = await handler(req(VALID))
+    expect(r.status).toBe(403)
+    expect(state.anthropicCalls).toHaveLength(0)
+  })
+
+  it('lets somebody on it through', async () => {
+    process.env.AI_ALLOWED_EMAILS = 'k@test.com, other@x.com'
+    state.anthropicResponses = [anthropicToolResponse(GOOD_OUTPUT)]
+    expect((await handler(req(VALID))).status).toBe(200)
+  })
+
+  it('holds a guest to the guest figure, not to the owner\u2019s', async () => {
+    process.env.AI_OWNER_EMAILS = 'someone@else.com'
+    process.env.AI_GUEST_USD_CAP = '0.50'
+    state.todayRuns = [{ cost_usd: 0.5 }]
+    const r = await handler(req(VALID))
+    expect(r.status).toBe(429)
+    expect(((await r.json()) as { error: string }).error).toContain('of $0.50')
+  })
+
+  it('stops everybody when everybody together has spent the day', async () => {
+    // The per-user cap bounds nothing on its own: ten testers at six dollars
+    // is sixty dollars, and the cap did its job every time.
+    process.env.AI_TOTAL_USD_CAP = '20'
+    state.everyoneToday = 20
+    const r = await handler(req(VALID))
+    expect(r.status).toBe(429)
+    expect(((await r.json()) as { error: string }).error).toContain('Everyone')
+    expect(state.anthropicCalls).toHaveLength(0)
+  })
+
+  it('does not ask what everybody spent when there is no ceiling to compare it to', async () => {
+    state.anthropicResponses = [anthropicToolResponse(GOOD_OUTPUT)]
+    await handler(req(VALID))
+    const asked = (fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls
+    expect(asked.some(([u]) => String(u).includes('ai_spend_today'))).toBe(false)
+  })
+
+  it('fails closed on the total as well, not just on its own', async () => {
+    process.env.AI_TOTAL_USD_CAP = '20'
+    state.usageDown = true
+    expect((await handler(req(VALID))).status).toBe(503)
+    expect(state.anthropicCalls).toHaveLength(0)
   })
 
   it('fails closed when the meter cannot be read', async () => {
