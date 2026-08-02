@@ -750,3 +750,90 @@ describe('a thumb on the other surfaces', () => {
     expect(memory).toMatch(/minWidth: 44/)
   })
 })
+
+// The quiet classify pass runs on every capture, and for months it did two
+// wrong things at once. It wrote `title: output.title` — the model's rewording
+// of your words, applied silently to every single thing you typed, the same
+// act as the group rename that got banned, done everywhere. And it *dropped*
+// `suggestedDue` on the floor: classify has always pulled "by Friday" out of
+// the words, and not one line of the app read it, so a person typing "renew
+// insurance by Friday" got a drop with no date and a Current that could not
+// rank it. A playtest persona caught both in an afternoon.
+describe('classify listens without rewording', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+  const fn = page.slice(page.indexOf('function classifyQuiet'))
+  const body = fn.slice(0, fn.indexOf('\n  }'))
+
+  it('keeps the words you typed as the title', () => {
+    expect(body).not.toMatch(/title:/)
+  })
+
+  it('lands the date the model heard in the words', () => {
+    expect(body).toMatch(/due_date: output\.suggestedDue/)
+    // …but only when it heard one — spreading an empty patch, not null-ing a
+    // date the person set by hand
+    expect(body).toMatch(/output\.suggestedDue \?/)
+  })
+
+  it('still keeps its opinion where opinions live', () => {
+    expect(body).toMatch(/summary: output\.summary/)
+  })
+})
+
+// Pooling is the one drag outcome a thumb produces by accident — a pan that
+// grazes a group files the thing you were carrying inside it. Finishing,
+// letting go and resting all offered their way back; pooling did not, and a
+// playtester spent five minutes reversing by other means what one tap should
+// have. Every branch of poolTogether now offers the tap.
+describe('an accidental pooling can be tapped back apart', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+  const fn = page.slice(page.indexOf('function poolTogether'))
+  const body = fn.slice(0, fn.indexOf('\n  }\n'))
+
+  it('offers the way back from all three ways of joining', () => {
+    expect(body.match(/offerUndo\(/g)?.length).toBe(3)
+  })
+
+  it('remembers the old home before anything moves', () => {
+    // captured before coalesce — after it, the positions are already the
+    // meeting point and there is nothing left to go back to
+    expect(body.indexOf('const wasA')).toBeGreaterThan(-1)
+    expect(body.indexOf('const wasA')).toBeLessThan(body.indexOf('coalesce('))
+  })
+
+  it('unmakes a pool that existed only to hold the two of them', () => {
+    expect(body).toMatch(/S\(\)\.deleteThought\(g\.id\)/)
+  })
+
+  it('does not announce a name for a pool that was unmade in flight', () => {
+    expect(body).toMatch(/!S\(\)\.thoughts\.some\(\(x\) => x\.id === g\.id\)/)
+  })
+})
+
+// "Where you were standing is where it goes" filed two playtesters' entire
+// week inside a seeded campaign group, and neither found a way back out. The
+// filing stands — writing inside a group meaning that group is right — but
+// the one tap out has to be offered, and for longer than an accident gets.
+describe('a capture filed into the open group offers the way out', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+
+  it('offers to keep the new things loose instead', () => {
+    expect(page).toMatch(/filed\.length === 1 \? 'keep it loose' : 'keep them loose'/)
+  })
+
+  it('only unhooks what this capture filed, and only from that group', () => {
+    expect(page).toMatch(/if \(r && r\.to_id === into\) S\(\)\.deleteRelationship\(r\.id\)/)
+  })
+})
+
+// Every offer that reverses something must expire — offerAction with no ms
+// stays forever, and a select-mode take-out parked its bar over the tab bar
+// for a playtester's whole session.
+describe('the select-mode undo bar does not outstay the evening', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+
+  it('gives put-them-back a lifetime', () => {
+    const at = page.indexOf("'put them back'")
+    expect(page.slice(at, at + 400)).toMatch(/9000/)
+  })
+})

@@ -2299,6 +2299,26 @@ function mountSky(root: HTMLDivElement) {
     }
     const pa = posOf(a.t.id)
     const pb = posOf(b.t.id)
+    /*
+     * Remembered before anything moves, because pooling is the one drag
+     * outcome a thumb produces by accident. Finishing, letting go, resting —
+     * every other consequence of a drag has offered its way back, and this
+     * one did not: a pan that grazed a group filed your errand inside
+     * somebody's campaign, the pill announced it, and the bar underneath
+     * either wasn't there or belonged to something else. A playtester spent
+     * five minutes trying to reverse by other means what one tap should have.
+     */
+    const wasA = partOfRel(a.t.id)?.to_id ?? null
+    const wasB = partOfRel(b.t.id)?.to_id ?? null
+    const stood = { ax: pa.x, ay: pa.y, bx: pb.x, by: pb.y }
+    const backHome = (id: string, to: string | null, x: number, y: number) => {
+      const now = partOfRel(id)
+      if (now) S().deleteRelationship(now.id)
+      if (to) S().addRelationship(id, to, 'part_of')
+      const p = posOf(id)
+      p.x = p.rx = x
+      p.y = p.ry = y
+    }
     coalesce(
       [
         { x: pa.x, y: pa.y, r: radiusOf(a) },
@@ -2326,11 +2346,21 @@ function mountSky(root: HTMLDivElement) {
       rehome(b.t.id, a.t.id)
       say(`“${trim(label(b.t), 20)}” is inside “${trim(label(a.t), 20)}”`)
       record(`“${trim(label(b.t), 26)}” inside “${trim(label(a.t), 26)}”`)
+      offerUndo('', () => {
+        backHome(b.t.id, wasB, stood.bx, stood.by)
+        say('back out on its own')
+      })
     } else if (a.kind === 'pool' || b.kind === 'pool') {
       const pool = a.kind === 'pool' ? a : b
       const drop = a.kind === 'pool' ? b : a
+      const wasDrop = drop === a ? wasA : wasB
+      const stoodAt = drop === a ? { x: stood.ax, y: stood.ay } : { x: stood.bx, y: stood.by }
       rehome(drop.t.id, pool.t.id)
       say(`inside “${label(pool.t)}”`)
+      offerUndo('', () => {
+        backHome(drop.t.id, wasDrop, stoodAt.x, stoodAt.y)
+        say('back out on its own')
+      })
     } else {
       // the local guess lands instantly so the drag never waits; a real name
       // replaces it a moment later
@@ -2348,12 +2378,22 @@ function mountSky(root: HTMLDivElement) {
       // …and only over the guess. Type a name of your own in the meantime and
       // that is the name, whatever comes back.
       nameThePool(g.id, texts, name, (better) => {
+        // the pool may have been unmade while the name was in flight
+        if (!S().thoughts.some((x) => x.id === g.id)) return
         rebuild()
         paintAll()
         say(`called it “${better}”`)
       })
       say(parent ? `a group inside — “${name}”` : `pooled — “${name}”`)
       record(parent ? `a group inside — “${name}”` : `pooled — “${name}”`)
+      offerUndo('', () => {
+        // the group existed only to hold these two; unmaking it takes its
+        // edges with it — see deleteThought — and each goes back where it stood
+        S().deleteThought(g.id)
+        backHome(a.t.id, wasA, stood.ax, stood.ay)
+        backHome(b.t.id, wasB, stood.bx, stood.by)
+        say('apart again')
+      })
     }
     splash(at.x)
     haptics.join()
@@ -3166,13 +3206,21 @@ function mountSky(root: HTMLDivElement) {
         paintAll()
         const note = undos.length === 1 ? undos[0].note : `${undos.length} ${word}`
         record(note)
-        offerAction(note, 'put them back', () => {
-          for (const u of [...undos].reverse()) u.undo()
-          rebuild()
-          paintAll()
-          redrawGroupPage()
-          say('back the way it was')
-        })
+        // With a lifetime, like every other undo. Without one, a select-mode
+        // take-out parked this bar over the tab bar for the rest of the
+        // session — a playtester reported it covering rows an hour later.
+        offerAction(
+          note,
+          'put them back',
+          () => {
+            for (const u of [...undos].reverse()) u.undo()
+            rebuild()
+            paintAll()
+            redrawGroupPage()
+            say('back the way it was')
+          },
+          9000,
+        )
         openPage('open', tl, ox, oy)
       }
       takeBtn.addEventListener('click', bulk(takeOut, 'loose again'))
@@ -3423,15 +3471,32 @@ function mountSky(root: HTMLDivElement) {
   }
 
 
+  /*
+   * What kind of thing this is — settled quietly, without rewording it.
+   *
+   * Two corrections here, both found by watching somebody actually use it.
+   *
+   * **The date now lands.** classify has always pulled "by Friday" out of the
+   * words and into `suggestedDue` — and nothing anywhere read it. Grepped: not
+   * one consumer. So a person typing "Renew car insurance by Friday" got a
+   * drop with no date, the Current could never rank it against anything, and
+   * the one seeded thing wearing "due Wednesday" made it look deliberate.
+   *
+   * **The title is yours.** This used to write `title: output.title` — the
+   * model's rewording of your words, applied silently, every capture. It is
+   * the same act as the group rename that was banned two days ago, done to
+   * every single thing you write. The model's opinion of what you meant goes
+   * in `summary`, where opinions live; the bubble keeps saying what you said.
+   */
   function classifyQuiet(t: Thought) {
     if (S().offline) return
     void runAction<ClassifyOutput>('classify_thought', { raw_content: t.raw_content })
       .then(({ output }) =>
         S().updateThought(t.id, {
           type: output.type === 'goal' ? 'idea' : output.type,
-          title: output.title,
           summary: output.summary || null,
           confidence: output.confidence,
+          ...(output.suggestedDue ? { due_date: output.suggestedDue } : {}),
         }),
       )
       .catch(() => {})
@@ -3546,6 +3611,9 @@ function mountSky(root: HTMLDivElement) {
        * and any layout saved mid-flight are of where things are going.
        */
       const leaving: { p: Pos; at: number }[] = []
+      // what got filed into the group you were standing in — see the offer
+      // after the storm settles
+      const filed: string[] = []
       const born = (id: string, x: number, y: number) => {
         const p = posOf(id)
         p.x = x
@@ -3561,7 +3629,10 @@ function mountSky(root: HTMLDivElement) {
         if (b.children.length) {
           pools++
           const g = S().addThought({ raw_content: b.title, title: b.title, type: 'goal', due_date: b.due })
-          if (into) S().addRelationship(g.id, into, 'part_of')
+          if (into) {
+            S().addRelationship(g.id, into, 'part_of')
+            filed.push(g.id)
+          }
           const gp = born(
             g.id,
             pf.ox + (Math.random() - 0.5) * 60,
@@ -3585,7 +3656,10 @@ function mountSky(root: HTMLDivElement) {
           for (const line of b.body.split(/\n+/).map((s) => s.trim()).filter(Boolean)) {
             drops++
             const t = S().addThought({ raw_content: line, due_date: b.due, source: micUsed ? 'voice' : 'text' })
-            if (into) S().addRelationship(t.id, into, 'part_of')
+            if (into) {
+              S().addRelationship(t.id, into, 'part_of')
+              filed.push(t.id)
+            }
             const a = Math.random() * Math.PI * 2
             const rad = drops === 1 && pools === 0 ? 0 : 100 + (drops % 3) * 46
             const p = born(
@@ -3633,6 +3707,30 @@ function mountSky(root: HTMLDivElement) {
               ? `the storm settles — ${drops} drops in the sky`
               : 'it’s yours — drag it, grow it, pool it',
       )
+      /*
+       * "Where you were standing is where it goes" is right most of the time
+       * and infuriating the rest: two playtesters wrote their whole week while
+       * a seeded group happened to be open, watched it all get filed inside
+       * somebody else's campaign, and found no way back — one spent five
+       * minutes hunting for one. The filing stands, but the one tap out of it
+       * has to be there, and for longer than the six seconds an accident gets:
+       * you notice this one only after the page has closed and the pill has
+       * said where things went.
+       */
+      if (home && filed.length) {
+        offerAction(
+          '',
+          filed.length === 1 ? 'keep it loose' : 'keep them loose',
+          () => {
+            for (const id of filed) {
+              const r = partOfRel(id)
+              if (r && r.to_id === into) S().deleteRelationship(r.id)
+            }
+            say('loose in the sky instead')
+          },
+          9000,
+        )
+      }
     } else if (pf.mode === 'say' && pf.tl) {
       const txt = v.trim()
       const img = pendingImage
