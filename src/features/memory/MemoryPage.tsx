@@ -13,6 +13,7 @@ import { TypeBadge } from '@/components/TypeBadge'
 import { humanDate } from '@/domain/human-date'
 import { todayISO } from '@/domain/prioritize-prepass'
 import { learn, type Learned } from '@/ai/memoryFlow'
+import { Find } from './Find'
 import type { Memory, MemoryEvent } from '@/domain/types'
 
 
@@ -89,6 +90,10 @@ export default function MemoryPage() {
           ⚙
         </Link>
       </div>
+
+      {/* Finding comes first: it is the errand people arrive with. Everything
+          below is reading; this is the one part of the page that answers. */}
+      <Find />
 
       <section className="card" style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>Known about you</h2>
