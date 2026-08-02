@@ -34,6 +34,27 @@ function sheets(): { file: string; css: string }[] {
 const all = sheets()
 
 /**
+ * Whether a rule sits inside a `prefers-reduced-motion: no-preference` guard.
+ *
+ * Walks back from the rule to the nearest unclosed `@media`, so it does not
+ * care how many guarded blocks the file has or what order they are in — which
+ * is exactly what broke the first version of this check.
+ */
+function guarded(css: string, rule: string): boolean {
+  const at = css.indexOf(rule)
+  if (at < 0) return false
+  const before = css.slice(0, at)
+  const open = before.lastIndexOf('@media')
+  if (open < 0) return false
+  // a block that has already closed between the @media and the rule means the
+  // rule is not inside it
+  const between = before.slice(open)
+  if ((between.match(/\{/g) ?? []).length <= (between.match(/\}/g) ?? []).length) return false
+  return /prefers-reduced-motion:\s*no-preference/.test(css.slice(open, open + 80))
+}
+
+
+/**
  * A stylesheet with its comments taken out.
  *
  * For asserting that something is *absent*. Prose explaining why a declaration
@@ -886,9 +907,10 @@ describe('the drawer breathes once', () => {
   })
 
   it('stays still for those who asked things to', () => {
-    const guard = sky.slice(sky.indexOf('@media (prefers-reduced-motion: no-preference)'))
-    expect(guard.indexOf('.row.peek')).toBeGreaterThan(-1)
-    expect(guard.indexOf('.row.peek')).toBeLessThan(guard.indexOf('}\n\n'))
+    // located from the rule outward rather than from the first media block in
+    // the file — a later no-preference guard added above it (the drops'
+    // arrival) made "the first one" the wrong one and this pass silently
+    expect(guarded(sky, '.sky-page .pans .row.peek {')).toBe(true)
   })
 })
 
@@ -1152,5 +1174,83 @@ describe('the agent asks to keep what it added', () => {
     // cannot offer to take away work you wrote yourself
     const deep = page.slice(page.indexOf('async function runDeepen'))
     expect(deep.slice(0, 700)).toMatch(/const hadKids = new Set\(/)
+  })
+})
+
+// The opening and the sky were two clocks with nothing joining them, and in
+// the losing order the curtain lifted on an empty sky and every drop appeared
+// three hundred milliseconds later, at full size, together. That is the pop.
+describe('the sky condenses instead of appearing', () => {
+  const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+  const open = readFileSync(join('src/features/opening', 'Opening.tsx'), 'utf8')
+
+  it('arrives the way the app’s own name arrives', () => {
+    // blur to nothing and opacity coming on — see opening.css
+    const kf = sky.slice(sky.indexOf('@keyframes skyb-arrive'))
+    expect(kf.slice(0, 240)).toMatch(/filter: blur\(13px\)/)
+    expect(kf.slice(0, 240)).toMatch(/opacity: 0/)
+  })
+
+  it('condenses out of the world’s own grain', () => {
+    expect(sky).toMatch(/\.skyb\.arrive:not\(\.working\)::after/)
+    expect(sky).toMatch(/@keyframes skyb-grain/)
+  })
+
+  it('never animates transform, which the frame loop owns', () => {
+    // the loop writes transform on every drop on every frame; anything
+    // animated there is overwritten sixty times a second
+    const kf = sky.slice(sky.indexOf('@keyframes skyb-arrive'), sky.indexOf('@keyframes skyb-grain'))
+    expect(kf).not.toMatch(/transform/)
+  })
+
+  it('staggers them, and stays still for those who asked it to', () => {
+    expect(sky).toMatch(/animation-delay: calc\(var\(--n, 0\) \* 64ms\)/)
+    expect(guarded(sky, '.skyb.arrive {')).toBe(true)
+    // …and the stagger is capped, so thirty drops are weather rather than a queue
+    expect(page).toMatch(/Math\.min\(9, arriving\+\+\)/)
+  })
+
+  it('becomes vapour on the frame it is first in the right place', () => {
+    // marked at mount it would hold a thing standing at the field's origin
+    const at = page.indexOf('if (el.style.visibility) {')
+    expect(at).toBeGreaterThan(-1)
+    expect(page.slice(at, at + 1400)).toMatch(/el\.classList\.add\('vapour'\)/)
+    expect(sky).toMatch(/\.skyb\.vapour \{[^}]*filter: blur\(13px\)/s)
+  })
+
+  it('turns to water as the curtain goes, not behind it', () => {
+    // measured before this: the whole cascade finished two and a half seconds
+    // before the opening lifted, so nobody ever saw it
+    const at = page.indexOf('whenCurtainLifts(() => {')
+    expect(at).toBeGreaterThan(-1)
+    expect(page.slice(at, at + 320)).toMatch(/remove\('vapour'\)[\s\S]*add\('arrive'\)/)
+    expect(open).toMatch(/markCurtainLifting\(\)/)
+  })
+
+  it('takes the filter back off when it has landed', () => {
+    const at = page.indexOf("el.classList.add('arrive')")
+    expect(page.slice(at, at + 220)).toMatch(/animationend[\s\S]*remove\('arrive'\)/)
+  })
+
+  it('waits longer than the opening can possibly last', () => {
+    // The behaviour is tested in ready.test.ts; what cannot be tested there is
+    // that the two files agree. A fallback shorter than the opening's own hard
+    // ceiling expires *during* a slow opening and plays the whole arrival
+    // behind the curtain — which is precisely the bug, measured at 1200ms
+    // against an opening that ran for 3.7s.
+    const ready = readFileSync(join('src/features/sky', 'ready.ts'), 'utf8')
+    const fallback = Number(/fallbackMs = (\d+)/.exec(ready)?.[1])
+    const ceiling = Number(/CEILING_MS = (\d+)/.exec(open)?.[1])
+    const fade = Number(/FADE_MS = (\d+)/.exec(open)?.[1])
+    expect(fallback).toBeGreaterThan(ceiling + fade)
+  })
+
+  it('holds the curtain until there is a sky behind it', () => {
+    expect(page).toMatch(/markSkyReady\(\)/)
+    expect(open).toMatch(/onSkyReady\(\(\) => setPainted\(true\)\)/)
+    expect(open).toMatch(/const held = painted \? 0 : CEILING_MS/)
+    // …and the ceiling still wins, so a sky that never mounts cannot hang it
+    expect(open).toMatch(/Math\.min\(CEILING_MS, Math\.max\(HOLD_MS, readable, held\)\)/)
   })
 })

@@ -19,6 +19,7 @@ import { applyDeepen, deepenThought } from './deepenFlow'
 import { applyAnswer, answerThought } from './answerFlow'
 import { applyDraft, draftThought } from './draftFlow'
 import { rainThought } from './rainFlow'
+import { curtainLifted, markSkyReady, whenCurtainLifts } from './ready'
 import { faceOf, isWall, lookAtWall } from './lookFlow'
 import { learnFromLettingGo } from './letGoFlow'
 import { closeGoal, evaporateGoal } from './finishFlow'
@@ -7087,6 +7088,8 @@ function mountSky(root: HTMLDivElement) {
   let t = 0
   let raf = 0
   let dead = false
+  /** how many drops have condensed in so far — their stagger, see .arrive */
+  let arriving = 0
   function step() {
     if (dead) return
     t += 0.016
@@ -7473,7 +7476,40 @@ function mountSky(root: HTMLDivElement) {
       const p = pos.get(id)
       if (!p) continue
       // it has a place now, so it may be seen — see mountEl
-      if (el.style.visibility) el.style.visibility = ''
+      if (el.style.visibility) {
+        el.style.visibility = ''
+        /*
+         * …and it condenses rather than appears.
+         *
+         * The same arrival the app's own name makes in the opening: out of
+         * focus and gathering — blur to nothing, opacity coming on, its own
+         * grain dissolving with it. Started here rather than at mount because
+         * this is the first frame the drop is in the right place; a class
+         * added any earlier animates a thing standing at the origin.
+         *
+         * Staggered by the order they are revealed in, capped at ten slots so
+         * that a sky of thirty is still weather forming rather than a queue.
+         * Cleared on the way out: `filter` on thirty elements is not something
+         * to leave lying around, and the arrival happens once.
+         */
+        if (!reduced) {
+          // Vapour until the curtain moves. The drop is placed and sized and
+          // simply not water yet; `whenCurtainLifts` turns it, so the name
+          // going out of focus and the drops coming into it are one movement
+          // rather than two that happened to be near each other.
+          el.classList.add('vapour')
+          // Staggered only for the sky you open onto. A drop written later
+          // arrives on its own and has no queue to be part of — and the
+          // counter would otherwise climb all session and hand the twentieth
+          // thing you wrote half a second of nothing.
+          el.style.setProperty('--n', String(curtainLifted() ? 0 : Math.min(9, arriving++)))
+          whenCurtainLifts(() => {
+            el.classList.remove('vapour')
+            el.classList.add('arrive')
+            el.addEventListener('animationend', () => el.classList.remove('arrive'), { once: true })
+          })
+        }
+      }
       // half of each axis: the opened card is wider than it is tall, and using
       // one number for both hangs it off its own centre
       const rx = el.clientWidth / 2 || 40
@@ -7543,6 +7579,10 @@ function mountSky(root: HTMLDivElement) {
       }
     }
     for (let i = lineUsed; i < linePool.length; i++) linePool[i].setAttribute('class', 'off')
+    // The sky is on the glass — every drop placed, sized and visible. The
+    // opening waits for this before it dissolves, so the curtain never lifts
+    // on an empty sky. Latched, so it is only ever the first frame.
+    markSkyReady()
     raf = requestAnimationFrame(step)
   }
 

@@ -26,6 +26,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useGraph } from '@/store/graph'
 import { nextAction } from '@/domain/next-action'
 import { todayISO } from '@/domain/prioritize-prepass'
+import { markCurtainLifting, markCurtainUp, onSkyReady, skyReadyAt } from '@/features/sky/ready'
 import './opening.css'
 
 /*
@@ -143,7 +144,13 @@ export default function Opening() {
    * the only reason it was caught is that a test moved the clock and asked.
    */
   const born = useRef<number | null>(null)
-  if (born.current === null) born.current = performance.now()
+  if (born.current === null) {
+    born.current = performance.now()
+    // Told during render, which is over before the sky's first frame — that
+    // runs on a rAF, after paint. The sky holds its drops as vapour only
+    // because this said there was something to hold them for.
+    markCurtainUp()
+  }
   const since = () => performance.now() - (born.current as number)
   /** past the point of no return: the timers that finish the dissolve must live */
   const going = useRef(false)
@@ -179,9 +186,25 @@ export default function Opening() {
   const lead = useRef<number | null>(null)
   if (hydrated && anything && lead.current === null) lead.current = Math.max(0, LEAD_MS - since())
 
+  /*
+   * Whether there is a sky behind this to be revealed.
+   *
+   * The two were independent clocks: this left on a measure of its own, and
+   * the sky painted whenever hydration and the auth check happened to finish.
+   * Traced on the built app, both orders occur — and in the losing one the
+   * curtain lifts on an empty sky and every drop appears three hundred
+   * milliseconds later, at full size, together. Waiting costs nothing in the
+   * ordinary case, where the sky is up long before the name has finished
+   * forming.
+   */
+  const [painted, setPainted] = useState(skyReadyAt() > 0)
+  useEffect(() => onSkyReady(() => setPainted(true)), [])
+
   const skip = () => {
     if (going.current) return
     going.current = true
+    // the drops condense as this goes out of focus — see whenCurtainLifts
+    markCurtainLifting()
     setLeaving(true)
     setTimeout(() => setGone(true), FADE_MS)
   }
@@ -209,10 +232,15 @@ export default function Opening() {
      * never lands cannot hold the screen for ever.
      */
     const readable = Math.max(landed.current, LEAD_MS) + ARRIVE_MS + READ_MS
-    const wait = hydrated ? Math.min(CEILING_MS, Math.max(HOLD_MS, readable)) : BARE_MS
+    // …and never before the sky behind it exists. Held at the ceiling until
+    // it does, so this cannot sit here for ever if the sky never mounts —
+    // and the moment it paints, the effect re-runs on the real measure.
+    const held = painted ? 0 : CEILING_MS
+    const wait = hydrated ? Math.min(CEILING_MS, Math.max(HOLD_MS, readable, held)) : BARE_MS
     const left = Math.max(120, wait - now)
     const a = setTimeout(() => {
       going.current = true
+      markCurtainLifting()
       setLeaving(true)
     }, left)
     const b = setTimeout(() => setGone(true), left + FADE_MS)
@@ -224,7 +252,7 @@ export default function Opening() {
       clearTimeout(a)
       clearTimeout(b)
     }
-  }, [hydrated])
+  }, [hydrated, painted])
 
   if (gone) return null
   const title = next ? (next.thought.title || next.thought.raw_content).trim().slice(0, 72) : ''

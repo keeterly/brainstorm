@@ -90,6 +90,71 @@ body.sky-held {
     0 14px 34px rgba(0, 0, 0, 0.44);
   isolation: isolate;
 }
+/*
+ * Condensing, rather than appearing.
+ *
+ * The app's own name arrives this way — out of focus and gathering, blur to
+ * nothing and opacity coming on — and the drops did not: they were simply
+ * there, at full size, on whichever frame the physics first placed them. When
+ * the sky won its race with the opening you never saw it; when it lost, the
+ * curtain lifted on nothing and then seven discs appeared at once. That is
+ * the pop. This is the same movement as the name, on the things the name was
+ * about.
+ *
+ * Only opacity, blur and a grain that dissolves. Not transform: the frame
+ * loop writes `transform` on every drop on every frame, so anything animated
+ * there is overwritten sixty times a second — the swelling is the physics'
+ * own job and it already does it (see `born` in posOf).
+ *
+ * Staggered by the order they are revealed in, capped at ten slots in the
+ * loop, so a sky of thirty reads as weather forming rather than as a queue.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  /* Placed, sized, and not water yet. It waits here — however long the
+     opening takes — so that the arrival belongs to the dissolve rather than
+     happening behind it. Measured before this: the whole cascade finished two
+     and a half seconds before the curtain lifted. */
+  .skyb.vapour {
+    opacity: 0;
+    filter: blur(13px);
+  }
+  .skyb.arrive {
+    animation: skyb-arrive 900ms cubic-bezier(0.25, 0.6, 0.25, 1) both;
+    animation-delay: calc(var(--n, 0) * 64ms);
+  }
+  /* the grain it condenses out of — the world's own texture, held over the
+     drop while it is still vapour and gone by the time it is water */
+  .skyb.arrive:not(.working)::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    mix-blend-mode: overlay;
+    background-size: 160px 160px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+    animation: skyb-grain 900ms cubic-bezier(0.25, 0.6, 0.25, 1) both;
+    animation-delay: calc(var(--n, 0) * 64ms);
+  }
+}
+@keyframes skyb-arrive {
+  from {
+    opacity: 0;
+    filter: blur(13px);
+  }
+  60% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+@keyframes skyb-grain {
+  from { opacity: 0.5; }
+  to { opacity: 0; }
+}
+
 /* The rim refracts rather than outlines: bright on the lit side, the hour's
    own colour on the shadow side, and only ever a hairline wide. This is what
    makes an edge read as thickness instead of as a drawn line. */
