@@ -1196,6 +1196,40 @@ body.sky-dragging .sky-undo.show {
   clip-path: inset(-40px -24px -40px var(--tick-out));
 }
 
+/* Registered so the peek below can animate it — an unregistered custom
+   property snaps between keyframes instead of travelling. Inherits, because
+   the row sets it and the slide and the pill both read it. */
+@property --sw {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+/*
+ * One breath of the drawer, the first time a group page opens.
+ *
+ * The take-out pill is uncoverable only by a swipe nobody was told about —
+ * two playtesters failed at it for minutes and escaped through Select mode.
+ * So the top row exhales once: slides open far enough to read the word,
+ * holds a beat, and closes. Not a tooltip, not a coach mark — the row
+ * performs the gesture on itself, which is also exactly what it teaches.
+ * Once per app session, first row only — see the peek in SkyPage.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .sky-page .pans .row.peek {
+    animation: out-peek 1600ms cubic-bezier(0.2, 0.8, 0.2, 1) 650ms 1 both;
+  }
+  @keyframes out-peek {
+    0%,
+    100% {
+      --sw: 0;
+    }
+    34%,
+    62% {
+      --sw: 0.92;
+    }
+  }
+}
+
 .sky-page .pans .row .out {
   position: absolute;
   right: 0;

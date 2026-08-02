@@ -837,3 +837,68 @@ describe('the select-mode undo bar does not outstay the evening', () => {
     expect(page.slice(at, at + 400)).toMatch(/9000/)
   })
 })
+
+// A drag re-decided its merge target every frame by nearest-wins, in a sky
+// that moves under the finger — so a neighbour shoved closer at the last
+// moment stole the merge, and a bubble brushed mid-path stayed the target
+// for ever. "Aimed at one, pooled with another", as the playtest put it.
+describe('what you were shown fusing is what you get', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+
+  it('lets the current fuse keep the job while it still qualifies', () => {
+    expect(page).toMatch(/fuse && fuse\.a === drag\.id && best && best\.t\.id !== fuse\.b/)
+  })
+
+  it('clears the target the moment the bodies part', () => {
+    expect(page).toMatch(/drag\.target = touching \? best : null/)
+    // …and in the no-candidate branch too, or a brush on the way to open
+    // water still merges on release
+    const at = page.indexOf('drag.target = touching ? best : null')
+    const after = page.slice(at, at + 600)
+    expect(after).toMatch(/drag\.touching = false\s*\n\s*drag\.target = null/)
+  })
+})
+
+// The take-out pill is uncoverable only by an untold swipe — two playtesters
+// failed at it for minutes. The first row of the first group page of a
+// session performs the gesture on itself once.
+describe('the drawer breathes once', () => {
+  const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+
+  it('registers --sw so the breath can travel rather than snap', () => {
+    const reg = sky.slice(sky.indexOf('@property --sw'))
+    expect(reg.slice(0, 140)).toMatch(/syntax: '<number>'/)
+    // the row sets it, the slide and the pill read it — without inheritance
+    // the registration itself would break the swipe it teaches
+    expect(reg.slice(0, 140)).toMatch(/inherits: true/)
+  })
+
+  it('animates the reveal the swipe itself uses', () => {
+    expect(sky).toMatch(/\.sky-page \.pans \.row\.peek \{\s*animation: out-peek/)
+    expect(sky).toMatch(/@keyframes out-peek/)
+  })
+
+  it('plays once a session and yields to a finger', () => {
+    expect(page).toMatch(/let taughtOut = false/)
+    expect(page).toMatch(/first\.addEventListener\('pointerdown', done, \{ once: true \}\)/)
+  })
+
+  it('stays still for those who asked things to', () => {
+    const guard = sky.slice(sky.indexOf('@media (prefers-reduced-motion: no-preference)'))
+    expect(guard.indexOf('.row.peek')).toBeGreaterThan(-1)
+    expect(guard.indexOf('.row.peek')).toBeLessThan(guard.indexOf('}\n\n'))
+  })
+})
+
+// After the first-ever capture the invitation bubble leaves and nothing ever
+// says how to write the second thought — ten minutes of hunting, in one
+// playtest. One line, once per device.
+describe('the hold is taught once, right after it is learnable', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+
+  it('says the line after the first capture and never again', () => {
+    expect(page).toMatch(/bs-taught-hold/)
+    expect(page).toMatch(/hold any empty sky when the next one comes/)
+  })
+})

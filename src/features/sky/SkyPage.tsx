@@ -584,6 +584,13 @@ export function metaballPath(
   )
 }
 
+/*
+ * Whether the take-out drawer has breathed once this session — module-level,
+ * because the sky remounts on every visit to the tab and a hint that replays
+ * per visit is a tic, not a teaching.
+ */
+let taughtOut = false
+
 function mountSky(root: HTMLDivElement) {
   const $ = <T extends HTMLElement>(k: string) => root.querySelector(`[data-sky="${k}"]`) as T
   const stage = $('stage')
@@ -2424,7 +2431,10 @@ function mountSky(root: HTMLDivElement) {
       .slice(0, 6)
       .filter((k) => k.pool || !hasThread(tl.t.id, k.tl.t.id))
     if (!kin.length) {
-      say('nothing like-minded nearby yet')
+      // named as an outcome of the gesture, not a riddle — "nothing
+      // like-minded nearby yet" with no subject left a playtester unsure
+      // what she had even done
+      say('held to gather — nothing like-minded near it yet')
       return
     }
     closeMoons()
@@ -3050,6 +3060,19 @@ function mountSky(root: HTMLDivElement) {
         refreshPicked()
       })
       refreshPicked()
+
+      // The drawer breathes once — see .row.peek in sky.css. First row, first
+      // group page of the session; a finger arriving takes over immediately.
+      if (!taughtOut && inside.length) {
+        taughtOut = true
+        const first = pageA.querySelector('.row:not(.add)') as HTMLDivElement | null
+        if (first) {
+          first.classList.add('peek')
+          const done = () => first.classList.remove('peek')
+          first.addEventListener('animationend', done, { once: true })
+          first.addEventListener('pointerdown', done, { once: true })
+        }
+      }
 
       // .value, never innerHTML: these are the user's own words and they are
       // not markup
@@ -3717,6 +3740,23 @@ function mountSky(root: HTMLDivElement) {
        * you notice this one only after the page has closed and the pill has
        * said where things went.
        */
+      /*
+       * The gesture, taught once, right after the one moment it is learnable.
+       *
+       * A new sky shows "What's on your mind?" — but that bubble leaves the
+       * moment the first thought lands, and nothing ever says how to write
+       * the second one. A playtester spent the better part of ten minutes
+       * finding the hold. One line, once per device, after the first capture
+       * has settled and its own announcement has had its beat.
+       */
+      try {
+        if (!localStorage.getItem('bs-taught-hold')) {
+          localStorage.setItem('bs-taught-hold', '1')
+          setTimeout(() => say('hold any empty sky when the next one comes'), 3600)
+        }
+      } catch {
+        /* private mode — they will find it the way everybody used to */
+      }
       if (home && filed.length) {
         offerAction(
           '',
@@ -6231,6 +6271,27 @@ function mountSky(root: HTMLDivElement) {
       // one a finger could not hit. Held in screen pixels instead, joining
       // takes the same gesture however far out you are.
       const slop = (siblings ? 46 : 90) / cam.k
+      /*
+       * The one already fusing keeps the job while it still qualifies.
+       *
+       * Nearest-wins re-decided every frame, and the sky moves under a drag —
+       * a neighbour shoved half a radius closer at the last moment stole the
+       * merge from the bubble you had been hovering over the whole time. That
+       * is the mis-merge a playtester described exactly: aimed at one, pooled
+       * with another. What you were shown fusing is what you get, until you
+       * genuinely carry it out of reach.
+       */
+      if (fuse && fuse.a === drag.id && best && best.t.id !== fuse.b) {
+        const held = candidates.find((tl) => tl.t.id === fuse!.b)
+        if (held) {
+          const hp = posOf(held.t.id)
+          const hd = Math.hypot(hp.x - p.x, hp.y - p.y)
+          if (hd < rOf(drag.tl) + rOf(held) + slop) {
+            best = held
+            bestD = hd
+          }
+        }
+      }
       if (best && bestD < rOf(drag.tl) + rOf(best) + slop) {
         const bp = posOf(best.t.id)
         const ra = rOf(drag.tl)
@@ -6252,11 +6313,15 @@ function mountSky(root: HTMLDivElement) {
         meter.classList.toggle('zero', touching)
         if (touching && !drag.touching) haptics.grab()
         drag.touching = touching
-        if (touching) drag.target = best
+        // …and cleared the moment they part. This held its last value: brush
+        // past something on the way to open water, and the release still
+        // merged you with the thing you had visibly left behind.
+        drag.target = touching ? best : null
       } else {
         meter.classList.remove('on', 'zero')
         clearFuse()
         drag.touching = false
+        drag.target = null
       }
     }
   })

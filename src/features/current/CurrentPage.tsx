@@ -1,10 +1,10 @@
 // The Current — one meaningful action, large. Everything else stays folded
 // until asked for. Never a task list first.
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useGraph } from '@/store/graph'
 import { nextAction } from '@/domain/next-action'
 import { prioritizePrepass, todayISO } from '@/domain/prioritize-prepass'
-import { humanDue } from '@/domain/human-date'
+import { humanDate, humanDue } from '@/domain/human-date'
 import { useAction } from '@/ai/useAction'
 import type { PrioritizeOutput } from '@shared/ai/actions/prioritize'
 import { evaporateAt } from '@/world/Atmosphere'
@@ -68,6 +68,17 @@ export default function CurrentPage() {
   } | null>(null)
   const [waited, setWaited] = useState(0)
   const [sizing, setSizing] = useState<Sizing | null>(null)
+  /*
+   * What just went to rest, said out loud.
+   *
+   * The snooze was one tap and the row simply vanished — to where, for how
+   * long, it never said, and a playtester's verdict was exactly that: "to
+   * where, it never said". The sky's version of this gesture answers both
+   * ("rising into the high clouds — back tomorrow"); this page answered
+   * neither, and it is the page where snoozing happens most.
+   */
+  const [rested, setRested] = useState<{ id: string; title: string; until: string } | null>(null)
+  const restedT = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const today = todayISO()
   const prepass = useMemo(
@@ -484,7 +495,11 @@ export default function CurrentPage() {
                     onClick={() => {
                       const d = new Date()
                       d.setDate(d.getDate() + 7)
-                      updateThought(t.id, { snooze_until: d.toISOString().slice(0, 10) })
+                      const until = d.toISOString().slice(0, 10)
+                      updateThought(t.id, { snooze_until: until })
+                      if (restedT.current) clearTimeout(restedT.current)
+                      setRested({ id: t.id, title: t.title || t.raw_content.slice(0, 60), until })
+                      restedT.current = setTimeout(() => setRested(null), 9000)
                     }}
                     style={{ padding: '0 4px' }}
                   >
@@ -537,6 +552,23 @@ export default function CurrentPage() {
             </button>
           )}
         </div>
+      )}
+
+      {rested && (
+        <p className="faint" role="status" style={{ fontSize: 'var(--fs-label)', textAlign: 'center', marginTop: 14 }}>
+          “{rested.title}” is resting — back {humanDate(rested.until, today)} ·{' '}
+          <button
+            className="hit"
+            style={{ color: 'var(--accent)' }}
+            onClick={() => {
+              updateThought(rested.id, { snooze_until: null })
+              if (restedT.current) clearTimeout(restedT.current)
+              setRested(null)
+            }}
+          >
+            wake it
+          </button>
+        </p>
       )}
 
       {/* "N more wait in the world", pointing at the sky, was the line that made
