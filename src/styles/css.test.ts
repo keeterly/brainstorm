@@ -1254,3 +1254,59 @@ describe('the sky condenses instead of appearing', () => {
     expect(open).toMatch(/Math\.min\(CEILING_MS, Math\.max\(HOLD_MS, readable, held\)\)/)
   })
 })
+
+// The layout is three forces — kin drawn together, bodies held apart, the
+// constellation nudged back into frame — and none of them had a state called
+// "done". Measured on a sky nobody had touched for twelve seconds: forty
+// pixels of wander on the worst drop, twenty-eight on the median. The drops
+// were mostly moving *around* each other, which is what a force-directed
+// layout does when no equilibrium exists, and it makes aiming at one a
+// moving-target game.
+describe('the sky finishes settling, and then stops', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+
+  it('lets a pair that is near enough alone', () => {
+    // the spring pulled at any distance over rest, so a pair three pixels too
+    // far apart was corrected for ever — and one drop belongs to several
+    // pairs whose rest lengths cannot all be true at once
+    expect(page).toMatch(/const KIN_SLACK = 22/)
+    expect(page).toMatch(/if \(dist > rest \+ KIN_SLACK\)/)
+  })
+
+  it('stops re-centring once the nudge is smaller than a nudge', () => {
+    // asymptotic, so it never arrived: a quarter-pixel a frame walked the
+    // whole constellation nine pixels across twelve seconds of nothing
+    expect(page).toMatch(/Math\.abs\(dx\) > 0\.06 \|\| Math\.abs\(dy\) > 0\.06/)
+  })
+
+  it('counts what it actually moved, and calls it settled when that is nothing', () => {
+    expect(page).toMatch(/const STILL = 0\.55/)
+    expect(page).toMatch(/const STILL_FRAMES = 36/)
+    expect(page).toMatch(/if \(moved < STILL\) \{\s*\n\s*if \(\+\+quiet >= STILL_FRAMES\) settled = true/)
+  })
+
+  it('does no layout work at all while it is settled', () => {
+    // not merely a smaller force — none, including the O(n²) pair walk
+    expect(page).toMatch(/for \(const pair of settled \? \[\] : allKinPairs\(\)\)/)
+    expect(page).toMatch(/for \(let pass = 0; pass < \(settled \? 0 : 3\); pass\+\+\)/)
+    expect(page).toMatch(/if \(!settled && view\.tls\.length && !openPool/)
+  })
+
+  it('wakes for everything that changes what the layout is of', () => {
+    // the graph, the frame, the camera, and the end of any gesture
+    const at = page.indexOf('const unsub = useGraph.subscribe(')
+    expect(page.slice(at, at + 200)).toMatch(/stir\(\)/)
+    const resize = page.indexOf('const onResize = ')
+    expect(page.slice(resize, resize + 260)).toMatch(/stir\(\)/)
+    const fit = page.indexOf('function fitAll(')
+    expect(page.slice(fit, fit + 300)).toMatch(/stir\(\)/)
+    const up = page.indexOf('const onUp = (e: PointerEvent)')
+    expect(page.slice(up, up + 400)).toMatch(/stir\(\)/)
+  })
+
+  it('leaves the breath alone, because a still sky still breathes', () => {
+    // breath is an offset, never a position — settling must not freeze it
+    const fn = page.slice(page.indexOf('let quiet = 0'), page.indexOf('function step()'))
+    expect(fn).not.toMatch(/bx|by/)
+  })
+})

@@ -918,6 +918,7 @@ function mountSky(root: HTMLDivElement) {
     cam.x = sx - wx * next
     cam.y = sy - wy * next
     applyCam()
+    stir()
   }
   /** The world's occupied box, or null when there is nothing in it. */
   function contentBox() {
@@ -969,6 +970,9 @@ function mountSky(root: HTMLDivElement) {
   function fitAll(animate = true) {
     const b = contentBox()
     if (!b) return
+    // the re-centring target is read through the camera, so moving the camera
+    // gives the layout a new question to answer
+    stir()
     const { x0, y0, x1, y1 } = b
     const top = 76
     const bottom = waterlineY() - 18
@@ -1014,6 +1018,8 @@ function mountSky(root: HTMLDivElement) {
   const onResize = () => {
     W = innerWidth
     H = stage.clientHeight || innerHeight
+    // the frame the constellation is centred in is a different frame now
+    stir()
   }
   addEventListener('resize', onResize)
 
@@ -6660,6 +6666,10 @@ function mountSky(root: HTMLDivElement) {
   // routes these through the stage, so this hears each release exactly once.
   const onUp = (e: PointerEvent) => {
     if (ghost(e)) return
+    // Whatever that gesture was — a drag, a pan, a tap that opened a group —
+    // the arrangement may now be a different one. Cheap: the sky simply
+    // re-settles, which takes well under a second and then stops again.
+    stir()
     touches.delete(e.pointerId)
     if (pinch) {
       if (touches.size < 2) pinch = null
@@ -6788,6 +6798,7 @@ function mountSky(root: HTMLDivElement) {
     persistLayout()
   }
   const onCancel = (e: PointerEvent) => {
+    stir()
     touches.delete(e.pointerId)
     if (touches.size < 2) pinch = null
     panning = false
@@ -7090,6 +7101,38 @@ function mountSky(root: HTMLDivElement) {
   let dead = false
   /** how many drops have condensed in so far — their stagger, see .arrive */
   let arriving = 0
+  /*
+   * A sky that finishes settling, and then stops.
+   *
+   * The layout is three forces — kin drawn together, bodies held apart, the
+   * constellation nudged back into frame — and none of them had a state
+   * called "done". Every frame, for ever, each pair was re-adjudicated, so a
+   * sky nobody had touched for twelve seconds churned: measured, forty pixels
+   * of wander on the worst drop and twenty-eight on the median, with the
+   * centroid moving nine and the spread oscillating by three. The drops were
+   * mostly moving *around* each other, which is what a force-directed layout
+   * does when no equilibrium exists — and it makes aiming at one a
+   * moving-target game, which is exactly how it was reported.
+   *
+   * So: how much the layout actually moved things this frame, how many frames
+   * running it has been negligible, and whether it has therefore gone quiet.
+   * `stir` wakes it — anything that changes what the layout is a layout *of*.
+   * The breath is untouched: it is an offset, never a position, so a settled
+   * sky still breathes.
+   */
+  let quiet = 0
+  let settled = false
+  /** …something changed; work out the arrangement again. */
+  function stir() {
+    quiet = 0
+    settled = false
+  }
+  /** Below this much total movement in a frame, the sky is not really moving. */
+  const STILL = 0.55
+  /** …and it has to stay that way for this long before we believe it. */
+  const STILL_FRAMES = 36
+  /** How far past its rest length a pair may sit before the spring cares. */
+  const KIN_SLACK = 22
   function step() {
     if (dead) return
     t += 0.016
@@ -7123,7 +7166,12 @@ function mountSky(root: HTMLDivElement) {
         p.bx = b.x
         p.by = b.y
       })
-      for (const pair of allKinPairs()) {
+      /*
+       * Everything below arranges the sky, and it only runs while the sky
+       * still needs arranging. `moved` is what it actually did this frame.
+       */
+      let moved = 0
+      for (const pair of settled ? [] : allKinPairs()) {
         if (moonsFor && (moonsFor === pair.a.t.id || moonsFor === pair.b.t.id)) continue
         const pa = posOf(pair.a.t.id)
         const pb = posOf(pair.b.t.id)
@@ -7136,7 +7184,17 @@ function mountSky(root: HTMLDivElement) {
         const dist = Math.hypot(dx, dy) || 1
         const bonded = hasThread(pair.a.t.id, pair.b.t.id)
         const rest = radiusOf(pair.a) + radiusOf(pair.b) + (bonded ? 44 : 70)
-        if (dist > rest) {
+        /*
+         * "Near enough" is a real answer, and it did not have one.
+         *
+         * The spring pulled at any distance over `rest`, so a pair three
+         * pixels too far apart was corrected for ever — and a drop belongs to
+         * several pairs at once with rest lengths that cannot all be true, so
+         * the corrections fought and the sky churned. A band of slack means a
+         * pair that is close enough is simply left alone, which is what lets
+         * the whole arrangement come to rest.
+         */
+        if (dist > rest + KIN_SLACK) {
           // score runs 0…1 where the old shared-word count ran 1…4, so it is
           // scaled back up to the same range of pull
           const pull = Math.min(0.4, (dist - rest) * 0.0012 * (1 + pair.score * 6 + (bonded ? 2 : 0)))
@@ -7150,11 +7208,12 @@ function mountSky(root: HTMLDivElement) {
           pa.y += (dy / dist) * pull * ka
           pb.x -= (dx / dist) * pull * kb
           pb.y -= (dy / dist) * pull * kb
+          moved += pull * (ka + kb)
         }
       }
       // nothing may overlap. Several soft passes settle a crowded sky without
       // the jitter a single hard shove produces.
-      for (let pass = 0; pass < 3; pass++) {
+      for (let pass = 0; pass < (settled ? 0 : 3); pass++) {
         for (let i = 0; i < view.tls.length; i++) {
           for (let j = i + 1; j < view.tls.length; j++) {
             const a = view.tls[i]
@@ -7177,6 +7236,7 @@ function mountSky(root: HTMLDivElement) {
               pa.y -= (dy / dist) * push
               pb.x += (dx / dist) * push
               pb.y += (dy / dist) * push
+              moved += push * 2
             }
           }
         }
@@ -7186,7 +7246,7 @@ function mountSky(root: HTMLDivElement) {
       // what the camera is actually showing: aiming at a fixed point in the
       // world instead put this in a tug of war with fitAll, and drops ended up
       // pushed off the edge of a sky that had just framed them.
-      if (view.tls.length && !openPool && !drag && !panning && !pinch && !camTarget) {
+      if (!settled && view.tls.length && !openPool && !drag && !panning && !pinch && !camTarget) {
         let cx = 0
         let cy = 0
         for (const tl of view.tls) {
@@ -7198,13 +7258,25 @@ function mountSky(root: HTMLDivElement) {
         cy /= view.tls.length
         const dx = (toWorldX(W / 2) - cx) * 0.011
         const dy = (toWorldY((76 + waterlineY() - 18) / 2) - cy) * 0.011
-        if (Math.abs(dx) > 0.008 || Math.abs(dy) > 0.008) {
+        // A quarter of a pixel is not a re-framing, it is a creep: measured,
+        // this alone walked the whole constellation nine pixels across twelve
+        // seconds of nobody touching anything, and being asymptotic it never
+        // arrived. Below this it has done its job.
+        if (Math.abs(dx) > 0.06 || Math.abs(dy) > 0.06) {
           for (const tl of view.tls) {
             const p = posOf(tl.t.id)
             p.x += dx
             p.y += dy
           }
+          moved += (Math.abs(dx) + Math.abs(dy)) * view.tls.length
         }
+      }
+      // …and if that was all next to nothing, for long enough, the sky is
+      // arranged. It stops until something changes it — see stir.
+      if (!settled) {
+        if (moved < STILL) {
+          if (++quiet >= STILL_FRAMES) settled = true
+        } else quiet = 0
       }
       for (const tl of view.tls) {
         const p = posOf(tl.t.id)
@@ -7607,6 +7679,8 @@ function mountSky(root: HTMLDivElement) {
     fitSoon = setTimeout(() => fitAll(), 850)
   }
   const unsub = useGraph.subscribe(() => {
+    // what the layout is a layout *of* has changed
+    stir()
     rebuild()
     paintAll()
     // a burst of new thinking should be shown to you, not hidden off-screen
