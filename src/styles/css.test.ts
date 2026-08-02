@@ -992,3 +992,45 @@ describe('a row can be refused, not only finished or exiled', () => {
     expect(sky).toMatch(/\.row \.away \{[^}]*color: #b4534b/s)
   })
 })
+
+// Round two of the persona playtests. Five findings, five behaviours pinned.
+describe('what the second playtest taught', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+  const flow = readFileSync(join('src/features/sky', 'groupFlow.ts'), 'utf8')
+  const tabs = readFileSync(join('src/components', 'TabBar.tsx'), 'utf8')
+
+  it('tidy cannot die silently or brick itself', () => {
+    // a rejection used to skip both the failure message and the reset of the
+    // in-flight flag — one bad tap and the button was dead for the session
+    const wire = page.slice(page.indexOf("tidyEl.addEventListener('click'"))
+    expect(wire.slice(0, 1400)).toMatch(/catch \{/)
+    expect(wire.slice(0, 1400)).toMatch(/finally \{\s*\n\s*tidying = false/)
+  })
+
+  it('closing an untitled drop is not a rename', () => {
+    // unchanged is judged against what the thing is called — title or its
+    // own words — not against a title that was never set
+    expect(flow).toMatch(/const called = \(\(t\?\.title \?\? ''\)\.trim\(\) \|\| \(t\?\.raw_content \?\? ''\)\)\.trim\(\)/)
+  })
+
+  it('tapping the tab you are on takes you back to all of it', () => {
+    expect(tabs).toMatch(/dispatchEvent\(new CustomEvent\('tab-again'/)
+    expect(page).toMatch(/addEventListener\('tab-again', tabAgain\)/)
+    expect(page).toMatch(/removeEventListener\('tab-again', tabAgain\)/)
+  })
+
+  it('the destination chip never takes the keyboard', () => {
+    expect(page).toMatch(/pageInto\.addEventListener\('pointerdown', \(e\) => e\.preventDefault\(\)\)/)
+    const click = page.slice(page.indexOf("pageInto.addEventListener('click'"))
+    expect(click.slice(0, 300)).toMatch(/pageT\.focus\(\)/)
+  })
+
+  it('a drop wears its due date on its face', () => {
+    const fn = page.slice(page.indexOf('function paintDropEl'))
+    expect(fn.slice(0, 2400)).toMatch(/humanDue\(t\.due_date, todayISO\(\)\)/)
+  })
+
+  it('tidy steps aside for the corner pill whenever it is there', () => {
+    expect(page).toMatch(/'sky-resting', resting \+ aside > 0/)
+  })
+})

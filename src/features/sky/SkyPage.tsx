@@ -12,7 +12,7 @@ import { nameThePool, organizeText, tidySky } from './absorbFlow'
 import { seaLineAt, waterlineY } from '@/world/water'
 import { evaporateAt } from '@/world/Atmosphere'
 import { KIN_EVIDENCE, KIN_POOL, KIN_THREAD, type Kinship, kinship } from '@/domain/kinship'
-import { humanDate } from '@/domain/human-date'
+import { humanDate, humanDue } from '@/domain/human-date'
 import { nextAction } from '@/domain/next-action'
 import { armUpright, stepUpright, worldTilt } from '@/world/upright'
 import { applyDeepen, deepenThought } from './deepenFlow'
@@ -1633,13 +1633,24 @@ function mountSky(root: HTMLDivElement) {
     // A question that has been answered says "answered", not "a brief". The
     // difference is the whole of it: one of those means there is reading still
     // to do, and the other means you already know.
+    /*
+     * The date the words carried, worn where you can see it. "by Friday"
+     * has parsed into a real due date since the first capture — and a
+     * playtester could only prove that by searching for the thing in
+     * Memory, because no surface he would actually look at ever said it.
+     * The one operational fact a drop can have goes on its face.
+     */
+    const due = t.due_date
+      ? `<div class="state ${t.due_date < todayISO() ? 'blue' : ''}">${humanDue(t.due_date, todayISO())}</div>`
+      : ''
     const st = ex(t).answered_at
       ? `<div class="state blue">answered</div>`
       : brief
         ? `<div class="state blue">a brief${brief.sources.length ? ` · ${brief.sources.length} sources` : ''}</div>`
-        : isRipe(t)
-          ? `<div class="state blue">saturated</div>`
-          : dots
+        : due ||
+          (isRipe(t)
+            ? `<div class="state blue">saturated</div>`
+            : dots)
     const photo = imgOf(t) ? `<div class="photo"></div>` : ''
     // …and a mark, so a thing the agent has been out for looks different from
     // one it has not, at a glance, without reading anything. The state line
@@ -1868,10 +1879,13 @@ function mountSky(root: HTMLDivElement) {
           ? `☁ ${aside} put away`
           : `☁ ${resting} resting`
     restEl.classList.toggle('show', resting + aside > 0)
-    // the tidy pill stands beside it rather than across the screen from it,
-    // and needs to know how much room the count is taking
-    document.body.classList.toggle('sky-resting', resting > 0)
-    if (resting > 0) document.documentElement.style.setProperty('--rest-w', `${Math.round(restEl.offsetWidth)}px`)
+    // The tidy pill stands beside it rather than across the screen from it,
+    // and needs to know how much room the count is taking. Beside it whenever
+    // the pill is THERE — this keyed on resting alone, so a corner showing
+    // only "☁ 1 put away" had tidy printed straight across it.
+    document.body.classList.toggle('sky-resting', resting + aside > 0)
+    if (resting + aside > 0)
+      document.documentElement.style.setProperty('--rest-w', `${Math.round(restEl.offsetWidth)}px`)
     measureCorner()
     // first-run invite
     inviteEl.style.display = view.tls.length === 0 ? '' : 'none'
@@ -2233,14 +2247,27 @@ function mountSky(root: HTMLDivElement) {
     if (tidying) return
     tidying = true
     tidyEl.textContent = 'tidying…'
-    const res = await tidySky((goalId, i, total) => {
-      const p = posOf(goalId)
-      const ang = (i / Math.max(1, total)) * Math.PI * 2 - Math.PI / 2
-      p.x = p.rx = worldW() / 2 + Math.cos(ang) * 220
-      p.y = p.ry = worldH() / 2 + Math.sin(ang) * 180
-    })
-    tidying = false
-    tidyEl.textContent = '✦ tidy'
+    /*
+     * The one ✦ that could die without a word. tidySky rejecting — a dropped
+     * connection, an expired session — skipped everything after the await:
+     * no message, and `tidying` stuck true, so every later tap returned at
+     * the door. A playtester pressed the one button that promises what she
+     * came for, twice, and the app said nothing either time.
+     */
+    let res: Awaited<ReturnType<typeof tidySky>>
+    try {
+      res = await tidySky((goalId, i, total) => {
+        const p = posOf(goalId)
+        const ang = (i / Math.max(1, total)) * Math.PI * 2 - Math.PI / 2
+        p.x = p.rx = worldW() / 2 + Math.cos(ang) * 220
+        p.y = p.ry = worldH() / 2 + Math.sin(ang) * 180
+      })
+    } catch {
+      res = { kind: 'failed' } as Awaited<ReturnType<typeof tidySky>>
+    } finally {
+      tidying = false
+      tidyEl.textContent = '✦ tidy'
+    }
     if (res.kind === 'tidied') {
       haptics.join()
       fitWhenSettled()
@@ -2286,6 +2313,14 @@ function mountSky(root: HTMLDivElement) {
   }
   writeEl.addEventListener('click', startWriting)
   nextPen.addEventListener('click', startWriting)
+  // Sky, tapped while already in the sky: step out of whatever is focused
+  // and frame all of it — the "take me back" every platform tab bar means.
+  const tabAgain = (e: Event) => {
+    if ((e as CustomEvent).detail !== '/' || pageFor) return
+    clearAll()
+    fitAll()
+  }
+  addEventListener('tab-again', tabAgain)
   // wake anything whose rest is over
   for (const t of S().thoughts) {
     if (t.status === 'snoozed' && t.snooze_until && t.snooze_until <= todayISO()) {
@@ -2733,11 +2768,23 @@ function mountSky(root: HTMLDivElement) {
       ? '→ loose in the sky'
       : `→ into “${trim(label(home), 24)}”`
   }
+  /*
+   * The chip must never take the keyboard.
+   *
+   * A button takes focus on pointerdown, which on a phone dismisses the
+   * keyboard mid-thought — and everything typed after that went nowhere,
+   * ending in a Done on an empty page that closed without a word. A tester
+   * lost a sentence to it, twice, with instrumentation running. Preventing
+   * the default on pointerdown keeps focus where the writing is; the click
+   * still arrives and still flips the destination.
+   */
+  pageInto.addEventListener('pointerdown', (e) => e.preventDefault())
   pageInto.addEventListener('click', (e) => {
     e.stopPropagation()
     if (!pageFor?.into) return
     pageFor.intoOff = !pageFor.intoOff
     paintInto()
+    pageT.focus()
   })
 
   function openPage(mode: PageMode, tl: TL | undefined, ox: number, oy: number, into?: string | null) {
@@ -7419,6 +7466,7 @@ function mountSky(root: HTMLDivElement) {
     if (draftT) clearTimeout(draftT)
     removeEventListener('resize', onResize)
     removeEventListener('pointerup', onUp)
+    removeEventListener('tab-again', tabAgain)
     removeEventListener('pointercancel', onCancel)
     vv?.removeEventListener('resize', measureKeyboard)
     vv?.removeEventListener('scroll', measureKeyboard)

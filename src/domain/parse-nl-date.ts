@@ -20,8 +20,18 @@ const WD_MAP: Record<string, number> = {
 }
 const MO = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
 
+/*
+ * Three stragglers from a playtest, folded in:
+ * - "on" joins the prepositions — "lease renewal on Monday" used to parse
+ *   the Monday and leave "…renewal on" dangling in the title
+ * - "end of August" — any month, not only the current one
+ * - a trailing time — "Dentist Tuesday 3pm" refused to parse at all because
+ *   the phrase was not the very end of the line. The time is kept in the
+ *   text (it is real information the date column cannot hold); only the
+ *   date is lifted out.
+ */
 const TAIL =
-  /(?:\s*[,—–-]?\s*)(?:by|due|before|until)?\s*(today|tonight|tomorrow|next week|end of month|eom|in\s+(\d+)\s+(day|days|week|weeks)|(?:next\s+)?(sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)[a-z]*|(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})|(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*)\s*$/i
+  /(?:\s*[,—–-]?\s*)(?:by|due|before|until|on)?\s*(today|tonight|tomorrow|next week|end of month|eom|end of\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*|in\s+(\d+)\s+(day|days|week|weeks)|(?:next\s+)?(sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)[a-z]*|(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})|(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*)(\s+(?:at\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm))?\s*$/i
 
 function localISO(d: Date): string {
   const y = d.getFullYear()
@@ -54,25 +64,33 @@ export function parseNLDate(text: string, now: Date = new Date()): NLDateResult 
       d = new Date(d.getFullYear(), d.getMonth() + 1, 0, 12)
       due = localISO(d)
     } else if (m[2]) {
-      d.setDate(d.getDate() + parseInt(m[2], 10) * (/week/.test(m[3]) ? 7 : 1))
+      // "end of august" — the last day of that month, next year's if past
+      const mi = MO.indexOf(m[2].toLowerCase().slice(0, 3))
+      d = new Date(d.getFullYear(), mi + 1, 0, 12)
+      if (d < today()) d = new Date(d.getFullYear() + 1, mi + 1, 0, 12)
       due = localISO(d)
-    } else if (m[4]) {
-      const wd = WD_MAP[m[4].toLowerCase()]
+    } else if (m[3]) {
+      d.setDate(d.getDate() + parseInt(m[3], 10) * (/week/.test(m[4]) ? 7 : 1))
+      due = localISO(d)
+    } else if (m[5]) {
+      const wd = WD_MAP[m[5].toLowerCase()]
       const delta = (wd - d.getDay() + 7) % 7 || 7 // "friday" = the NEXT friday, never today
       d.setDate(d.getDate() + delta)
       due = localISO(d)
-    } else if (m[5] && m[6]) {
-      const mi = MO.indexOf(m[5].toLowerCase().slice(0, 3))
-      d = new Date(d.getFullYear(), mi, parseInt(m[6], 10), 12)
-      if (d < today()) d.setFullYear(d.getFullYear() + 1)
-      due = localISO(d)
-    } else if (m[7] && m[8]) {
-      const mi = MO.indexOf(m[8].toLowerCase().slice(0, 3))
+    } else if (m[6] && m[7]) {
+      const mi = MO.indexOf(m[6].toLowerCase().slice(0, 3))
       d = new Date(d.getFullYear(), mi, parseInt(m[7], 10), 12)
       if (d < today()) d.setFullYear(d.getFullYear() + 1)
       due = localISO(d)
+    } else if (m[8] && m[9]) {
+      const mi = MO.indexOf(m[9].toLowerCase().slice(0, 3))
+      d = new Date(d.getFullYear(), mi, parseInt(m[8], 10), 12)
+      if (d < today()) d.setFullYear(d.getFullYear() + 1)
+      due = localISO(d)
     }
-    if (due) {
+    // A time after the date means the line holds more than a date — keep the
+    // words whole rather than leaving "Dentist 3pm" with its day torn out.
+    if (due && !m[10]) {
       const stripped = t
         .slice(0, m.index)
         .replace(/[\s,—–-]+$/, '')

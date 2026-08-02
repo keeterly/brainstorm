@@ -131,6 +131,11 @@ export function TabBar() {
     // reflow, so tapping the same name twice rings twice
     void el.offsetWidth
     el.classList.add('dip')
+    // Tapping the name of the place you are already in means "take me back to
+    // all of it" — every platform tab bar works this way, and a playtester
+    // stuck inside a focused pool reached for exactly this and got nothing.
+    // The sky listens; other tabs have no inner depth to pop.
+    if (el.getAttribute('href') === pathname) dispatchEvent(new CustomEvent('tab-again', { detail: pathname }))
   }
 
   return (

@@ -50,3 +50,34 @@ describe('parseNLDate', () => {
     expect(r.due).toBeNull()
   })
 })
+
+// Three stragglers a playtester typed as any person would, all of which the
+// parser refused or mangled: a weekday with a time after it, "end of
+// August", and "on Monday" leaving its "on" behind in the title.
+describe('the stragglers from the playtest', () => {
+  const now = new Date('2026-08-02T09:00:00') // a Sunday
+
+  it('parses a weekday with a time after it, and keeps the words whole', () => {
+    const r = parseNLDate('Dentist Tuesday 3pm', now)
+    expect(r.due).toBe('2026-08-04')
+    // the time is information the date column cannot hold — the title keeps it
+    expect(r.text).toBe('Dentist Tuesday 3pm')
+  })
+
+  it('parses "by end of August" as the last day of August', () => {
+    const r = parseNLDate('File the sales tax by end of August', now)
+    expect(r.due).toBe('2026-08-31')
+    expect(r.text).toBe('File the sales tax')
+  })
+
+  it('rolls "end of <month>" already past into next year', () => {
+    const r = parseNLDate('Plan the retreat by end of January', now)
+    expect(r.due).toBe('2027-01-31')
+  })
+
+  it('takes "on Monday" without leaving the "on" behind', () => {
+    const r = parseNLDate('Call landlord about lease renewal on Monday', now)
+    expect(r.due).toBe('2026-08-03')
+    expect(r.text).toBe('Call landlord about lease renewal')
+  })
+})

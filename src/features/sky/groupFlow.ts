@@ -53,7 +53,17 @@ const label = (t: Thought) => {
 export function rename(id: string, name: string): Undone | null {
   const t = S().thoughts.find((x) => x.id === id)
   const next = name.trim()
-  if (!t || !next || next === (t.title ?? '')) return null
+  /*
+   * Unchanged means unchanged against what the thing is *called* — its title
+   * when it has one, its own words when it does not. Comparing against the
+   * title alone made every untitled drop "renamed" by the mere act of
+   * closing its page: the field shows raw_content, title is null, the two
+   * never match — and a toast announced the same words renamed to
+   * themselves, sometimes over the top of a real rename of something else.
+   * A playtester hit both in one session.
+   */
+  const called = ((t?.title ?? '').trim() || (t?.raw_content ?? '')).trim()
+  if (!t || !next || next === called) return null
   const wasTitle = t.title
   const wasRaw = t.raw_content
   /*
