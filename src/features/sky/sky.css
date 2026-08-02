@@ -1289,6 +1289,33 @@ body.sky-dragging .sky-undo.show {
   transition: opacity 200ms ease, transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
   pointer-events: none;
 }
+/* What this thing is, and one tap to disagree — see kindLine. Quiet, because
+   it is a statement of fact most of the time; the verb at the end is the only
+   part that asks for anything. Full width and 44 tall, because it is the
+   control that decides whether your work reaches the Current at all. */
+.sky-page .pans .kindline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 6px;
+  padding: 4px 0;
+  text-align: left;
+  font-size: 11.5px;
+  color: var(--paper-soft, rgba(27, 36, 48, 0.62));
+  cursor: pointer;
+}
+.sky-page .pans .kindline b {
+  flex-shrink: 0;
+  font-weight: 600;
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(var(--accent-rgb), 0.95);
+}
+
 /* The aside page's recovery button: always visible, always tappable. It wore
    the swipe pills' class for a while, which styles a button opacity-0 until
    a swipe that page does not have — the one way back, invisible to a finger. */

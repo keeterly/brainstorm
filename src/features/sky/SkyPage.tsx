@@ -52,7 +52,7 @@ import { noteTrail } from '@/lib/trail'
 import { echoRing, wabiBlob, wabiPill, wabiSeed } from '@/world/echo'
 import { rippleAt, WAKE } from '@/world/ripple'
 import { type Body, card, contact, disc, oilPath, pull } from '@/world/shape'
-import type { Thought } from '@/domain/types'
+import type { Thought, ThoughtType } from '@/domain/types'
 import './sky.css'
 
 export default function SkyPage() {
@@ -3103,9 +3103,33 @@ function mountSky(root: HTMLDivElement) {
       const shot = fullOf(tl.t)
       const hasBrief = !!briefOf(tl.t.id)
       const kin = kinOf(tl)
+      /*
+       * What the app decided this is, and one tap to disagree.
+       *
+       * The type is the single most consequential fact about a thought and it
+       * was invisible: the Current and the sky's own suggestion only ever
+       * consider `action` and `task`, so a thing classified `note` is exiled
+       * from everything that answers "what do I do next" — silently, for
+       * ever. A playtester captured six dated tasks, watched every one get
+       * called a note, and never saw his own work recommended once. He could
+       * not have known why, because nothing anywhere said so.
+       *
+       * So the drop's own page says which it is, in the consequence rather
+       * than the vocabulary — "in the current" is a thing you can check, and
+       * "note" is a word only this app uses.
+       */
+      const isDoing = tl.t.type === 'action' || tl.t.type === 'task'
+      const kindLine =
+        tl.kind === 'drop'
+          ? `<button class="kindline" aria-label="${isDoing ? 'Make it a note' : 'Make it something to do'}">` +
+            `<span>${isDoing ? 'something to do · it flows in the Current' : 'a note · it stays out of the Current'}</span>` +
+            `<b>${isDoing ? 'make it a note' : 'make it a to-do'}</b>` +
+            `</button>`
+          : ''
       pageA.style.display = 'block'
       pageA.innerHTML =
         (shot ? `<button class="shot" aria-label="See the photo full screen"><img alt="" /></button>` : '') +
+        kindLine +
         (inside.length
           ? `<div class="lab head"><span>what is inside</span>` +
             `<button class="ctl sel">Select</button></div>` +
@@ -3196,6 +3220,23 @@ function mountSky(root: HTMLDivElement) {
         e.stopPropagation()
         closePage(true)
         setTimeout(() => openPage('brief', tl, ox, oy), reduced ? 0 : 120)
+      })
+      pageA.querySelector('.kindline')?.addEventListener('click', (e) => {
+        e.stopPropagation()
+        // Yours, not the model's. The old type is kept so that turning a
+        // to-do back into a note returns it to whatever it actually was —
+        // an idea, a question, a reference — rather than flattening every
+        // thought in the app to two kinds.
+        const was = ex(tl.t).wasType as ThoughtType | undefined
+        if (isDoing) {
+          S().updateThought(tl.t.id, { type: was ?? 'note' })
+          say('a note — out of the Current')
+        } else {
+          patchExtra(tl.t, { wasType: tl.t.type })
+          S().updateThought(tl.t.id, { type: 'action' })
+          say('something to do — it flows in the Current now')
+        }
+        openPage('open', tl, ox, oy)
       })
       const gatherBtn = pageA.querySelector('[data-act="gather"]')
       gatherBtn?.addEventListener('click', (e) => {
@@ -5504,7 +5545,48 @@ function mountSky(root: HTMLDivElement) {
     haptics.join()
     hold(res.note || `${res.added} thing${res.added === 1 ? '' : 's'} fell out of it`, trim(label(tl.t), 34))
     record(`rained · ${res.added} to do`, trim(label(tl.t), 40))
+    // …and the way to say no to it. See declineAdded.
+    declineAdded([...view.byId.keys()].filter((id) => !before.has(id)))
     fitWhenSettled()
+  }
+  /**
+   * What the agent added, and your right to refuse it.
+   *
+   * Rain and ⚡ both write real thoughts into your map — five steps under a
+   * cloud, two under a drop — and neither had any way back but deleting them
+   * one at a time. A playtester watched two steps about somebody else's
+   * subject appear inside her own pile and called it exactly what it is:
+   * being surprised by your own notes.
+   *
+   * The work still lands, because it ran for a minute and you may well have
+   * put the phone down — losing it to an unanswered question would be worse.
+   * What lands with it is the refusal: one tap, all of them put away
+   * together, recoverable from the cloud like anything else. Twelve seconds,
+   * because this is a verdict on work you did not watch arrive.
+   */
+  function declineAdded(ids: string[]) {
+    if (!ids.length) return
+    const n = ids.length
+    offerAction(
+      `${n} ${n === 1 ? 'thing' : 'things'} added`,
+      n === 1 ? 'not this one' : 'not these',
+      () => {
+        const undos = ids.map(bin).filter((u): u is Undone => !!u)
+        rebuild()
+        paintAll()
+        redrawGroupPage()
+        if (!undos.length) return
+        record(`${n} put away — not asked for`)
+        offerAction(`${n} put away`, 'put them back', () => {
+          for (const u of [...undos].reverse()) u.undo()
+          rebuild()
+          paintAll()
+          redrawGroupPage()
+          say('back the way it was')
+        }, 9000)
+      },
+      12000,
+    )
   }
   // ⚡ — the agent goes away and does the legwork on one drop, and what it
   // finds arrives as real work hanging under it rather than as a wall of prose.
@@ -5775,6 +5857,11 @@ function mountSky(root: HTMLDivElement) {
   async function runDeepen(tl: TL) {
     if (working || S().offline) return
     setWorking(tl.t.id)
+    // what hung off it before it went away, so that what it brings back can
+    // be told apart from what was already yours — see declineAdded
+    const hadKids = new Set(
+      S().relationships.filter((r) => r.type === 'part_of' && r.to_id === tl.t.id).map((r) => r.from_id),
+    )
     // It really is gone for a minute: the research runs as a background job
     // because it does not fit inside a request. So the notice stands for the
     // whole of that, and counts, rather than blinking once and leaving a
@@ -5841,7 +5928,18 @@ function mountSky(root: HTMLDivElement) {
     ].filter(Boolean)
     hold(res.note || parts.join(' · ') || 'back from finding out', trim(label(tl.t), 34))
     record(`⚡ ${parts.join(' · ') || 'came back'}`, trim(label(tl.t), 40))
-    if (briefOf(tl.t.id)) {
+    /*
+     * Refusing what it added outranks reading what it wrote. Both want the
+     * one bar, and only one of them expires: the brief stays on the drop for
+     * ever and is one moon away, whereas "these are not mine" is a verdict
+     * you make in the moment you first see them. Reading is offered when
+     * nothing was added, which is exactly when there is nothing to refuse.
+     */
+    const fresh = S()
+      .relationships.filter((r) => r.type === 'part_of' && r.to_id === tl.t.id && !hadKids.has(r.from_id))
+      .map((r) => r.from_id)
+    if (fresh.length) declineAdded(fresh)
+    else if (briefOf(tl.t.id)) {
       offerAction('', 'read it', () => {
         hold(null)
         const q = posOf(tl.t.id)

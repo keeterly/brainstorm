@@ -1075,3 +1075,82 @@ describe('reversal is bulletproof', () => {
     expect(page).toMatch(/aria-label="Let it rest until tomorrow"/)
   })
 })
+
+// The type is the most consequential fact about a thought and it was
+// invisible: the Current and the sky's own suggestion consider only `action`
+// and `task`, so anything classified `note` is exiled from every surface that
+// answers "what next" — silently, for ever. A playtester captured six dated
+// tasks, watched every one called a note, and never saw his own work
+// recommended once.
+describe('what this is, and one tap to disagree', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+  const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
+
+  it('says it as a consequence rather than as vocabulary', () => {
+    // "note" is a word only this app uses; "it stays out of the Current" is
+    // a claim the person can go and check
+    expect(page).toMatch(/it flows in the Current/)
+    expect(page).toMatch(/it stays out of the Current/)
+  })
+
+  it('turns a note into something the Current can see', () => {
+    const at = page.indexOf("pageA.querySelector('.kindline')")
+    const body = page.slice(at, at + 900)
+    expect(body).toMatch(/S\(\)\.updateThought\(tl\.t\.id, \{ type: 'action' \}\)/)
+  })
+
+  it('remembers what it was, so turning it back is not a flattening', () => {
+    const at = page.indexOf("pageA.querySelector('.kindline')")
+    const body = page.slice(at, at + 900)
+    expect(body).toMatch(/patchExtra\(tl\.t, \{ wasType: tl\.t\.type \}\)/)
+    expect(body).toMatch(/type: was \?\? 'note'/)
+  })
+
+  it('is a control the size of the decision it makes', () => {
+    const rule = sky.slice(sky.indexOf('.sky-page .pans .kindline {'))
+    expect(rule.slice(0, 400)).toMatch(/min-height: 44px/)
+  })
+
+  it('offers it on a drop, never on a group', () => {
+    // a group's type is what makes it a container; flipping that is a
+    // different act with different consequences
+    expect(page).toMatch(/tl\.kind === 'drop'\s*\n\s*\? `<button class="kindline"/)
+  })
+})
+
+// Rain and ⚡ both write real thoughts into your map and neither had a way
+// back but deleting them one at a time. A playtester watched two steps about
+// somebody else's subject appear inside her own pile.
+describe('the agent asks to keep what it added', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+  const fn = page.slice(page.indexOf('function declineAdded'))
+  const body = fn.slice(0, fn.indexOf('\n  }\n'))
+
+  it('offers the refusal by name and count', () => {
+    expect(body).toMatch(/n === 1 \? 'not this one' : 'not these'/)
+  })
+
+  it('puts them away rather than destroying them', () => {
+    // the app deletes nothing; refused work goes to the cloud like anything
+    // else, and the refusal itself is reversible
+    expect(body).toMatch(/ids\.map\(bin\)/)
+    expect(body).toMatch(/'put them back'/)
+  })
+
+  it('lasts longer than an ordinary undo', () => {
+    // a verdict on work that arrived while the phone was face-down
+    expect(body).toMatch(/12000/)
+  })
+
+  it('is offered by both the rain and the ⚡', () => {
+    expect(page).toMatch(/declineAdded\(\[\.\.\.view\.byId\.keys\(\)\]\.filter/)
+    expect(page).toMatch(/if \(fresh\.length\) declineAdded\(fresh\)/)
+  })
+
+  it('tells what arrived apart from what was already yours', () => {
+    // captured before the minute-long await, so a run that adds nothing
+    // cannot offer to take away work you wrote yourself
+    const deep = page.slice(page.indexOf('async function runDeepen'))
+    expect(deep.slice(0, 700)).toMatch(/const hadKids = new Set\(/)
+  })
+})

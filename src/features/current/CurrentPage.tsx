@@ -161,6 +161,23 @@ export default function CurrentPage() {
     setSuggestion(null)
   }
 
+  /*
+   * Your own answer to "what first".
+   *
+   * The page has always had a first thing and never let you be the one to
+   * say what it was: the rules chose, or the agent chose, and a playtester
+   * who came to the app precisely to be told what to do first left with her
+   * priority still only in her head. It writes to the same slot the agent
+   * writes to — `recommended_action` — so the sky's own bar, the weather and
+   * this page all say the one thing, and the reason reads as what it is.
+   */
+  const pinFirst = (t: Thought) =>
+    updateProfileSettings({
+      recommended_action: { id: t.id, why: 'you put this first', at: new Date().toISOString() },
+    })
+  const unpin = () => updateProfileSettings({ recommended_action: null })
+  const pinnedByHand = !!recThought && rec?.why === 'you put this first'
+
   const focusThought = focusId ? thoughts.find((t) => t.id === focusId) : null
   const complete = (t: Thought) => {
     toggleDone(t.id)
@@ -303,6 +320,16 @@ export default function CurrentPage() {
           </div>
           <p className="faint" style={{ fontSize: 'var(--fs-label)', marginTop: 10 }}>
             {primaryWhy}
+            {/* …and the way to hand the choice back. A pin with no release is
+                a decision you can only make once. */}
+            {pinnedByHand && (
+              <>
+                {' · '}
+                <button className="hit" style={{ color: 'var(--accent)' }} onClick={unpin}>
+                  let it choose
+                </button>
+              </>
+            )}
           </p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 18, flexWrap: 'wrap' }}>
             {/* When the thing to do is a question, going and finding out is the
@@ -488,6 +515,17 @@ export default function CurrentPage() {
                         {[goalTitle(t), t.due_date ? humanDue(t.due_date, today) : null].filter(Boolean).join(' · ')}
                       </div>
                     )}
+                  </button>
+                  {/* Say so yourself. The rules are good and they are not you:
+                      "this one, now" is the one judgement the person holding
+                      the phone always makes better. */}
+                  <button
+                    aria-label={`Put “${t.title || t.raw_content.slice(0, 40)}” first`}
+                    className="faint hit"
+                    onClick={() => pinFirst(t)}
+                    style={{ padding: '0 4px' }}
+                  >
+                    ↑
                   </button>
                   <button
                     aria-label="Snooze one week"
