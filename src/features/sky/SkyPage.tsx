@@ -93,19 +93,20 @@ export default function SkyPage() {
       <button className="sky-rest" data-sky="rest" aria-label="Resting thoughts">
         ☁
       </button>
-      <button className="sky-next" data-sky="next" aria-label="What to do next">
-        <span className="lb" data-sky="nextLb" />
-        <span className="why" data-sky="nextWhy" />
-      </button>
+      {/* One bar, two zones: the thing to do next, and the pen. A nested
+          button is not a thing HTML has, so the bar is a div and each zone
+          presses on its own. */}
+      <div className="sky-next" data-sky="next">
+        <button className="go" data-sky="nextGo" aria-label="What to do next">
+          <span className="lb" data-sky="nextLb" />
+          <span className="why" data-sky="nextWhy" />
+        </button>
+        <button className="pen" data-sky="nextPen" aria-label="Write a thought">
+          ✎
+        </button>
+      </div>
       <button className="sky-tidy" data-sky="tidy" aria-label="Gather loose thoughts into pools">
         ✦ tidy
-      </button>
-      {/* The one act the sky is for, no longer a secret. Holding empty sky
-          still works and is still taught — but the app's most important verb
-          deserved a place a first-timer can see. A playtester spent ten
-          minutes finding the hold; nobody should spend ten seconds. */}
-      <button className="sky-write" data-sky="write" aria-label="Write a thought">
-        ✎ write
       </button>
       {/* Where the agent speaks. See say()/hold(). */}
       <div className="sky-voice" data-sky="voice" role="status">
@@ -120,6 +121,12 @@ export default function SkyPage() {
           <div className="note" data-sky="voiceNote" />
         </div>
       </div>
+      {/* The pen alone, for when the bar above has nothing to say. After the
+          voice in the DOM on purpose: the CSS that yields this slot to a
+          speaking sibling can only look backwards. */}
+      <button className="sky-write" data-sky="write" aria-label="Write a thought">
+        ✎ write
+      </button>
       {/* speaking is one tap: no page to open first, no button to find inside it */}
       <div className="sky-undo" data-sky="undo">
         <span className="lb" data-sky="undoLb" />
@@ -628,6 +635,8 @@ function mountSky(root: HTMLDivElement) {
   const tidyEl = $('tidy')
   const writeEl = $('write')
   const nextEl = $('next')
+  const nextGo = $('nextGo')
+  const nextPen = $('nextPen')
   const nextLb = $('nextLb')
   const nextWhy = $('nextWhy')
   nextEl.style.setProperty('--next-blob', wabiPill('sky-next', 15, 5))
@@ -2263,15 +2272,20 @@ function mountSky(root: HTMLDivElement) {
     clearAll()
     openPage('aside', undefined, W / 2, 120)
   })
-  // the chip does what holding empty sky does, with the same standing rule:
-  // writing while a group is open writes into it — and the page now says so
-  writeEl.addEventListener('click', () => {
+  // the pen does what holding empty sky does, with the same standing rule:
+  // writing while a group is open writes into it — and the page now says so.
+  // One handler, two homes: the bare pill for a quiet sky, and the pen on
+  // the end of the recommendation bar when there is one.
+  const startWriting = (e: Event) => {
+    e.stopPropagation()
     if (pageFor) return
     const into = openPool
     if (into) closeMoons()
     else clearAll()
     openPage('capture', undefined, innerWidth / 2, innerHeight * 0.42, into)
-  })
+  }
+  writeEl.addEventListener('click', startWriting)
+  nextPen.addEventListener('click', startWriting)
   // wake anything whose rest is over
   for (const t of S().thoughts) {
     if (t.status === 'snoozed' && t.snooze_until && t.snooze_until <= todayISO()) {
@@ -2568,7 +2582,7 @@ function mountSky(root: HTMLDivElement) {
     nextLb.textContent = trim(label(n.thought), 40)
     nextWhy.textContent = n.why
   }
-  nextEl.addEventListener('click', () => {
+  nextGo.addEventListener('click', () => {
     if (!nextFor) return
     const tl = view.byId.get(nextFor)
     // it may be inside a pool: go to the pool, and the thing is in the ring

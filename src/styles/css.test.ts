@@ -923,9 +923,21 @@ describe('writing is no longer a secret', () => {
     expect(rule.slice(0, 320)).toMatch(/pointer-events: none/)
   })
 
+  it('shares the one slot instead of crowding it', () => {
+    // two objects in the bottom band collided on a real phone into one
+    // cramped mass — the pen rides the recommendation bar when it is up,
+    // and the bare pill yields to either speaker
+    expect(page).toMatch(/data-sky="nextPen"/)
+    expect(sky).toMatch(/\.sky-next\.show ~ \.sky-write/)
+    expect(sky).toMatch(/\.sky-voice\.show ~ \.sky-write/)
+  })
+
   it('writes into the group you are standing in, like the hold', () => {
-    const wire = page.slice(page.indexOf("writeEl.addEventListener('click'"))
+    const wire = page.slice(page.indexOf('const startWriting'))
     expect(wire.slice(0, 400)).toMatch(/const into = openPool/)
+    // both homes of the pen share the one handler
+    expect(page).toMatch(/writeEl\.addEventListener\('click', startWriting\)/)
+    expect(page).toMatch(/nextPen\.addEventListener\('click', startWriting\)/)
   })
 
   it('says the destination before it lands, and lets one tap change it', () => {
