@@ -1188,8 +1188,9 @@ body.sky-dragging .sky-undo.show {
  */
 .sky-page .pans .row {
   --sw: 0;
-  /* mirrored in wireArrange as REVEAL; the pill's width plus its gutter */
-  --reveal: 88px;
+  /* mirrored in wireArrange as REVEAL; two pills now — take out, put away —
+     each its width plus its gutter */
+  --reveal: 176px;
   /* how far the tick's touch area reaches out past the row's own left edge, so
      that the ring you see lines up with the margin while the thing you press
      stays 44 wide. Read by the tick's margin and by the swipe's clip. */
@@ -1270,9 +1271,9 @@ body.sky-dragging .sky-undo.show {
   }
 }
 
-.sky-page .pans .row .out {
+.sky-page .pans .row .out,
+.sky-page .pans .row .away {
   position: absolute;
-  right: 0;
   /* on the first line of the row, whatever the row's height */
   top: 11px;
   min-width: 80px;
@@ -1288,18 +1289,29 @@ body.sky-dragging .sky-undo.show {
   transition: opacity 200ms ease, transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
   pointer-events: none;
 }
-.sky-page .pans .row.out-open .out {
+/* two verdicts, side by side: the reversible one first, the heavier one at
+   the edge — the same order the picked bar says them in */
+.sky-page .pans .row .out { right: 92px; }
+.sky-page .pans .row .away {
+  right: 0;
+  --ctl-ink: 180, 83, 75;
+  color: #b4534b;
+}
+.sky-page .pans .row.out-open .out,
+.sky-page .pans .row.out-open .away {
   pointer-events: auto;
 }
 /* …and a keyboard, which cannot swipe. `pointer-events: none` does not stop a
    button being focused, so this is only about being able to see and press what
    you have landed on. */
-.sky-page .pans .row .out:focus-visible {
+.sky-page .pans .row .out:focus-visible,
+.sky-page .pans .row .away:focus-visible {
   opacity: 1;
   transform: none;
   pointer-events: auto;
 }
-.sky-page .pans .row:has(.out:focus-visible) {
+.sky-page .pans .row:has(.out:focus-visible),
+.sky-page .pans .row:has(.away:focus-visible) {
   --sw: 1;
 }
 

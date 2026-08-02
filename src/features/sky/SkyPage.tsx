@@ -3053,6 +3053,12 @@ function mountSky(root: HTMLDivElement) {
                   // control you can only reach by swiping is one a keyboard
                   // cannot reach at all.
                   `<button class="ctl out" aria-label="Take it out of this group">take out</button>` +
+                  // The verdict a list of twenty-five steps needs most: no.
+                  // The row had take-out and the tick, and a step you simply
+                  // did not want could only be exiled to the sky or lied
+                  // about as done. Put away, not deleted — the aside page
+                  // and the search both bring it back.
+                  `<button class="ctl away" aria-label="Put it away">put away</button>` +
                   `</div>`,
               )
               .join('')
@@ -3245,6 +3251,12 @@ function mountSky(root: HTMLDivElement) {
           commit()
           landUndo(takeOut(m.id))
           // the page is showing a list that just changed
+          openPage('open', tl, ox, oy)
+        })
+        row.querySelector('.away')?.addEventListener('click', (e) => {
+          e.stopPropagation()
+          commit()
+          landUndo(bin(m.id))
           openPage('open', tl, ox, oy)
         })
       })
@@ -4119,7 +4131,7 @@ function mountSky(root: HTMLDivElement) {
      * How far the row travels to uncover what is under it. Mirrors `--reveal`
      * in the stylesheet, which is the only other place the number appears.
      */
-    const REVEAL = 88
+    const REVEAL = 176
     /** Enough sideways to mean it, and more than a thumb wanders during a hold. */
     const SWIPE_START = 14
     /** Past this on release it opens the rest of the way; short of it, it shuts. */

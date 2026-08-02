@@ -206,7 +206,8 @@ describe('somewhere to put a thumb', () => {
     // The take-out went absolute when it moved under the row, which is also a
     // containing block, so it needs nothing said about it. Select does.
     expect(sky).toMatch(/\.sky-page \.pans \.lab\.head \.sel \{\s*position: relative/)
-    expect(block('.sky-page .pans .row .out')).toMatch(/position: absolute/)
+    // the two swipe pills share one block now; the selector list ends at .away
+    expect(block('.sky-page .pans .row .away')).toMatch(/position: absolute/)
   })
 
   it('gives the header band the height its button needs', () => {
@@ -256,9 +257,9 @@ describe('swiping a row to uncover its take-out', () => {
   it('drives the slide and the fade off one number', () => {
     // `--sw` is 0 shut, 1 open, and whatever the thumb says in between —
     // which is what makes tracking a finger and settling afterwards the same
-    // code rather than two that have to agree.
+    // code rather than two that have to agree. Both pills fade off it.
     expect(sky).toMatch(/\.slide \{[^}]*transform: translateX\(calc\(var\(--sw\) \* var\(--reveal\) \* -1\)\)/s)
-    expect(sky).toMatch(/\.row \.out \{[^}]*opacity: var\(--sw\)/s)
+    expect(sky).toMatch(/\.row \.away \{[^}]*opacity: var\(--sw\)/s)
   })
 
   it('keeps the same reveal distance in the stylesheet and in the gesture', () => {
@@ -290,16 +291,16 @@ describe('swiping a row to uncover its take-out', () => {
     expect(rule).toMatch(/\.out-open/)
   })
 
-  it('leaves the pill untouchable until it is showing', () => {
-    expect(sky).toMatch(/\.row \.out \{[^}]*pointer-events: none/s)
-    expect(sky).toMatch(/\.row\.out-open \.out \{\s*pointer-events: auto/)
+  it('leaves both pills untouchable until they are showing', () => {
+    expect(sky).toMatch(/\.row \.away \{[^}]*pointer-events: none/s)
+    expect(sky).toMatch(/\.row\.out-open \.out,\n\.sky-page \.pans \.row\.out-open \.away \{\s*pointer-events: auto/)
   })
 
   it('still gives a keyboard a way in', () => {
     // A control you can only reach by swiping is one a keyboard cannot reach
     // at all. `pointer-events: none` does not stop a button being focused.
-    expect(sky).toMatch(/\.row \.out:focus-visible \{[^}]*opacity: 1/s)
-    expect(sky).toMatch(/\.row:has\(\.out:focus-visible\) \{\s*--sw: 1/)
+    expect(sky).toMatch(/\.row \.out:focus-visible,\n\.sky-page \.pans \.row \.away:focus-visible \{[^}]*opacity: 1/s)
+    expect(sky).toMatch(/\.row:has\(\.away:focus-visible\) \{\s*--sw: 1/)
     expect(page).not.toMatch(/class="ctl out"[^`]*tabindex="-1"/)
   })
 
@@ -966,5 +967,28 @@ describe('a photo lands where you were standing', () => {
 
   it('only into a group that is still open to hold it', () => {
     expect(body).toMatch(/x\.status === 'open'/)
+  })
+})
+
+// A list of twenty-five model-written steps needs "no" as much as it needs
+// "done" — a step you simply did not want could only be exiled to the sky
+// or lied about as a tick. The swipe now uncovers two verdicts: take out,
+// and put away — the reversible one first, the heavier one at the edge.
+describe('a row can be refused, not only finished or exiled', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+  const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
+
+  it('offers put-away beside take-out on the swipe', () => {
+    expect(page).toMatch(/class="ctl away" aria-label="Put it away"/)
+    expect(sky).toMatch(/\.row \.out \{ right: 92px; \}/)
+  })
+
+  it('puts it away through the same undo everything else uses', () => {
+    const wire = page.slice(page.indexOf("row.querySelector('.away')"))
+    expect(wire.slice(0, 260)).toMatch(/landUndo\(bin\(m\.id\)\)/)
+  })
+
+  it('wears the colour every other put-away wears', () => {
+    expect(sky).toMatch(/\.row \.away \{[^}]*color: #b4534b/s)
   })
 })
