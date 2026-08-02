@@ -59,10 +59,27 @@ export function Find() {
     return t.due_date ? `due ${humanDate(t.due_date, today)}` : ''
   }
 
-  // waking clears both marks of rest: the sky's snooze sets a status, the
+  // Waking clears both marks of rest: the sky's snooze sets a status, the
   // Current's sets only a date, and a wake that misses one leaves the thing
-  // still asleep somewhere
-  const wake = (t: Thought) => updateThought(t.id, { status: 'open', snooze_until: null })
+  // still asleep somewhere. And it wakes the household — a group goes to
+  // rest with everything under it, and waking the shell alone would bring
+  // back an empty group until tomorrow.
+  const wake = (t: Thought) => {
+    updateThought(t.id, { status: 'open', snooze_until: null })
+    const rels = useGraph.getState().relationships
+    const all = useGraph.getState().thoughts
+    const walk = (id: string) => {
+      for (const r of rels) {
+        if (r.type !== 'part_of' || r.to_id !== id) continue
+        const kid = all.find((x) => x.id === r.from_id)
+        if (kid && kid.status === 'snoozed') {
+          updateThought(kid.id, { status: 'open', snooze_until: null })
+          walk(kid.id)
+        }
+      }
+    }
+    walk(t.id)
+  }
   const back = (t: Thought) =>
     updateThought(t.id, { status: 'open', ...(t.status === 'done' ? { completed_at: null } : {}) })
 

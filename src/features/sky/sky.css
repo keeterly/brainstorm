@@ -1289,6 +1289,20 @@ body.sky-dragging .sky-undo.show {
   transition: opacity 200ms ease, transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
   pointer-events: none;
 }
+/* The aside page's recovery button: always visible, always tappable. It wore
+   the swipe pills' class for a while, which styles a button opacity-0 until
+   a swipe that page does not have — the one way back, invisible to a finger. */
+.sky-page .pans .row .back {
+  flex-shrink: 0;
+  margin-left: auto;
+  min-height: 32px;
+  padding: 0 11px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
 /* two verdicts, side by side: the reversible one first, the heavier one at
    the edge — the same order the picked bar says them in */
 .sky-page .pans .row .out { right: 92px; }

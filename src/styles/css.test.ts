@@ -1034,3 +1034,44 @@ describe('what the second playtest taught', () => {
     expect(page).toMatch(/'sky-resting', resting \+ aside > 0/)
   })
 })
+
+// Ana's round: the three holes in the safety net, each closed at its root.
+describe('reversal is bulletproof', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+  const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
+
+  it('reading never writes', () => {
+    // the close-commit fall-through used to catch "Done looking" and write
+    // the previous page's stale field into the thing being read
+    expect(page).toMatch(/pf\.tl && pf\.mode !== 'brief' && pf\.mode !== 'like' && pf\.mode !== 'aside'/)
+  })
+
+  it('the aside page can actually be tapped back from', () => {
+    // its button wore the swipe pills' class, whose styling is opacity-0
+    // until a swipe that page does not have
+    expect(page).toMatch(/class="ctl back" data-back/)
+    expect(sky).toMatch(/\.sky-page \.pans \.row \.back \{/)
+    expect(page).toMatch(/row\.querySelector\('\.back'\)/)
+  })
+
+  it('a page opens onto the thing as it is now', () => {
+    const fn = page.slice(page.indexOf('function openPage'))
+    expect(fn.slice(0, 900)).toMatch(/if \(tl\) tl = view\.byId\.get\(tl\.t\.id\) \?\? tl/)
+  })
+
+  it('a group rests with what it holds, and comes back the same way', () => {
+    const fn = page.slice(page.indexOf('function restDrop'))
+    const body = fn.slice(0, fn.indexOf('\n  }\n'))
+    expect(body).toMatch(/walk\(t\.id\)/)
+    expect(body).toMatch(/for \(const id of under\) S\(\)\.updateThought\(id, \{ status: 'snoozed'/)
+    expect(body).toMatch(/9000/)
+  })
+
+  it('enter commits a name instead of wounding it', () => {
+    expect(page).toMatch(/if \(nameFor && e\.key === 'Enter'\)/)
+  })
+
+  it('rest wears a moon, not the steps cloud', () => {
+    expect(page).toMatch(/aria-label="Let it rest until tomorrow"/)
+  })
+})

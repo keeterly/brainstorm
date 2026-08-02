@@ -168,8 +168,13 @@ export default function SkyPage() {
             <button className="tool" data-sky="pageSend" aria-label="Send this">
               <Ico d="M12 16.4V4.2M7.6 8.6 12 4.2l4.4 4.4M4.6 14.6v3.4a1.8 1.8 0 0 0 1.8 1.8h11.2a1.8 1.8 0 0 0 1.8-1.8v-3.4" />
             </button>
-            <button className="tool" data-sky="pageLater" aria-label="Let it rest">
-              <Ico d="M7.2 18.4a4.2 4.2 0 0 1-.5-8.37 5.6 5.6 0 0 1 10.75-1.2 3.8 3.8 0 0 1 .35 7.55 4 4 0 0 1-.6.04H7.2Z" />
+            {/* A crescent moon, not a cloud. This wore a cloud while "make
+                the steps" wears a storm cloud, and a playtester rested her
+                whole campaign believing she was asking for steps — a
+                destructive-adjacent verb must not share a glyph family with
+                a generative one. Sleep looks like sleep. */}
+            <button className="tool" data-sky="pageLater" aria-label="Let it rest until tomorrow">
+              <Ico d="M19.2 14.6A7.6 7.6 0 0 1 9.4 4.8a7.6 7.6 0 1 0 9.8 9.8Z" />
             </button>
             <span className="note" data-sky="pageN" />
           </div>
@@ -722,6 +727,15 @@ function mountSky(root: HTMLDivElement) {
     // it is an edit of something that exists. It goes to the graph on the same
     // terms as the rows below it rather than to localStorage.
     if (nameFor) keepEdit(nameFor, pageT.value)
+  })
+  // A name is one line. Enter in the title field committed a newline into the
+  // model — "SS27 — Linen & Letters\n" — where every other name field in the
+  // world commits the name.
+  pageT.addEventListener('keydown', (e) => {
+    if (nameFor && e.key === 'Enter') {
+      e.preventDefault()
+      pageT.blur()
+    }
   })
   // Anything still on a timer, written before the phone can take the app away.
   const stopWatching = watchForLeaving()
@@ -2235,12 +2249,42 @@ function mountSky(root: HTMLDivElement) {
   }
   function restDrop(t: Thought) {
     const until = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+    /*
+     * A group rests WITH what it holds. Snoozing only the goal left its
+     * members parentless in the sky — "SS27 is resting" while all six of
+     * its contents spilled loose across the glass, which reads as the group
+     * dissolving, not sleeping. Everything open underneath goes to rest on
+     * the same date and wakes together; the undo brings the whole household
+     * back. Nine seconds, not six — a whole group going away is exactly the
+     * act you finish reading about slowly. And the fresh name, not the one
+     * some captured object remembers.
+     */
+    const fresh = S().thoughts.find((x) => x.id === t.id) ?? t
+    const under: string[] = []
+    const walk = (id: string) => {
+      for (const r of S().relationships) {
+        if (r.type !== 'part_of' || r.to_id !== id) continue
+        const kid = S().thoughts.find((x) => x.id === r.from_id)
+        if (kid && kid.status === 'open') {
+          under.push(kid.id)
+          walk(kid.id)
+        }
+      }
+    }
+    walk(t.id)
     S().updateThought(t.id, { status: 'snoozed', snooze_until: until })
+    for (const id of under) S().updateThought(id, { status: 'snoozed', snooze_until: until })
     clearAll()
     say('rising into the high clouds — back tomorrow')
-    offerUndo(`“${trim(label(t), 26)}” is resting`, () => {
-      S().updateThought(t.id, { status: 'open', snooze_until: null })
-    })
+    offerAction(
+      `“${trim(label(fresh), 26)}”${under.length ? ` and the ${under.length} inside` : ''} — resting`,
+      'bring it back',
+      () => {
+        S().updateThought(t.id, { status: 'open', snooze_until: null })
+        for (const id of under) S().updateThought(id, { status: 'open', snooze_until: null })
+      },
+      9000,
+    )
   }
   let tidying = false
   tidyEl.addEventListener('click', async () => {
@@ -2788,6 +2832,15 @@ function mountSky(root: HTMLDivElement) {
   })
 
   function openPage(mode: PageMode, tl: TL | undefined, ox: number, oy: number, into?: string | null) {
+    /*
+     * The page is of the thing as it is NOW. Row handlers close over the TL
+     * they were wired with, and re-opening the page after a take-out handed
+     * that stale object back in — so the name field refilled with the title
+     * from before your rename, and the close committed the old name over
+     * the new one, announcing the revert as if you had asked for it. A
+     * playtester renamed her campaign twice before it stuck.
+     */
+    if (tl) tl = view.byId.get(tl.t.id) ?? tl
     // The group page re-renders itself in place whenever its list changes, and
     // a half-typed name in the box above that list must survive the row you
     // just took out. Anything the outgoing render still owed goes in first —
@@ -3402,7 +3455,13 @@ function mountSky(root: HTMLDivElement) {
           .map(
             (_t, i) =>
               `<div class="row"><span class="t"></span>` +
-              `<button class="ctl out" data-back="${i}" aria-label="Bring it back">bring back</button></div>`,
+              // its own class, NOT "out": that word belongs to the swipe
+              // pills, whose styling is opacity-0-until-swiped and
+              // untouchable — worn here it made the one recovery button on
+              // this page invisible to a finger. A playtester with a
+              // snoozed campaign tapped it, swiped it, tapped the row, and
+              // called it a fire-your-agency moment. Fair.
+              `<button class="ctl back" data-back="${i}" aria-label="Bring it back">bring back</button></div>`,
           )
           .join('')
       pageA.innerHTML =
@@ -3414,6 +3473,20 @@ function mountSky(root: HTMLDivElement) {
           : '')
       const wake = (t: Thought) => {
         S().updateThought(t.id, { status: 'open', snooze_until: null })
+        // …and its household. A group goes to rest with everything under it
+        // (see restDrop); waking the group and leaving its members asleep
+        // would bring back an empty shell until tomorrow.
+        const walk = (id: string) => {
+          for (const r of S().relationships) {
+            if (r.type !== 'part_of' || r.to_id !== id) continue
+            const kid = S().thoughts.find((x) => x.id === r.from_id)
+            if (kid && kid.status === 'snoozed') {
+              S().updateThought(kid.id, { status: 'open', snooze_until: null })
+              walk(kid.id)
+            }
+          }
+        }
+        walk(t.id)
       }
       for (const [sel, list] of [
         ['.grp.rest .row', rest],
@@ -3422,7 +3495,7 @@ function mountSky(root: HTMLDivElement) {
         ;[...pageA.querySelectorAll(sel)].forEach((row, i) => {
           // textContent: the user's own words, not markup
           ;(row.querySelector('.t') as HTMLElement).textContent = trim(label(list[i]), 46)
-          row.querySelector('.out')?.addEventListener('click', (e) => {
+          row.querySelector('.back')?.addEventListener('click', (e) => {
             e.stopPropagation()
             wake(list[i])
             say(`“${trim(label(list[i]), 30)}” is back`)
@@ -3930,7 +4003,15 @@ function mountSky(root: HTMLDivElement) {
       void runAnswer(pf.tl, q)
     } else if (pf.mode === 'open' && pf.tl) {
       landUndo(rename(pf.tl.t.id, v))
-    } else if (pf.tl) {
+    } else if (pf.tl && pf.mode !== 'brief' && pf.mode !== 'like' && pf.mode !== 'aside') {
+      /*
+       * Never for the reading pages. Their field is hidden but it is not
+       * empty — it still holds whatever the previous page left in it — and
+       * this branch used to catch "Done looking" on the wall and write that
+       * stale text straight into the thing being read. A playtester's photo
+       * came off the wall wearing her campaign's name; verified in her data,
+       * not her screenshots. Reading must never write.
+       */
       const txt = v.trim()
       if (txt) S().updateThought(pf.tl.t.id, { raw_content: txt, title: null })
     }
@@ -5288,6 +5369,10 @@ function mountSky(root: HTMLDivElement) {
     if (!dataUrl) {
       delete btn.dataset.busy
       btn.classList.remove('busy')
+      // on the button as well as in the note — the note sits a screen away
+      // from the finger, and a playtester read this failure as pure silence
+      btn.textContent = '✕'
+      setTimeout(() => (btn.textContent = '+'), 1600)
       pageN.textContent = 'that one would not come down'
       return
     }
