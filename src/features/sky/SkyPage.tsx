@@ -4664,6 +4664,23 @@ function mountSky(root: HTMLDivElement) {
       if (prev) prev.src = img
       const pf = pageFor
       const t = S().addThought({ raw_content: 'Photo', title: 'Photo', extra: { img, full } })
+      /*
+       * Where you were standing is where it goes — the words have obeyed
+       * this from the start and the photo never did: taken from a capture
+       * page opened inside a group, it was born loose in open sky, and the
+       * person who took it inside "VENIA Design" found it floating outside.
+       * Same rule as the text commit, same chip, same choice: the
+       * destination the page is showing is the destination, and tapping the
+       * chip to "loose in the sky" is honoured here too.
+       */
+      const home =
+        pf?.mode === 'capture' &&
+        pf.into &&
+        !pf.intoOff &&
+        S().thoughts.some((x) => x.id === pf.into && x.status === 'open')
+          ? pf.into
+          : null
+      if (home) S().addRelationship(t.id, home, 'part_of')
       const p = posOf(t.id)
       const a = Math.random() * Math.PI * 2
       p.x = p.rx = Math.max(60, Math.min(W - 60, (pf?.ox ?? W / 2) + Math.cos(a) * 110))

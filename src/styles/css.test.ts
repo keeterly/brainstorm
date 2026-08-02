@@ -947,3 +947,24 @@ describe('writing is no longer a secret', () => {
     expect(page).toMatch(/pf\.into && !pf\.intoOff/)
   })
 })
+
+// The words obeyed "where you were standing is where it goes" from the
+// start; the photo never did. Taken from a capture page opened inside a
+// group, it was born loose in open sky — found floating outside "VENIA
+// Design" by the person who took it inside. The photo follows the same
+// rule, the same chip, and the same one-tap way out of it.
+describe('a photo lands where you were standing', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+  const fn = page.slice(page.indexOf("pageFile.addEventListener('change'"))
+  const body = fn.slice(0, fn.indexOf('\n  })'))
+
+  it('files the photo into the open group, unless the chip was tapped', () => {
+    expect(body).toMatch(/pf\?\.mode === 'capture'/)
+    expect(body).toMatch(/!pf\.intoOff/)
+    expect(body).toMatch(/if \(home\) S\(\)\.addRelationship\(t\.id, home, 'part_of'\)/)
+  })
+
+  it('only into a group that is still open to hold it', () => {
+    expect(body).toMatch(/x\.status === 'open'/)
+  })
+})
