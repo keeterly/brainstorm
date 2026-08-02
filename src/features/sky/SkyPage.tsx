@@ -100,6 +100,13 @@ export default function SkyPage() {
       <button className="sky-tidy" data-sky="tidy" aria-label="Gather loose thoughts into pools">
         ✦ tidy
       </button>
+      {/* The one act the sky is for, no longer a secret. Holding empty sky
+          still works and is still taught — but the app's most important verb
+          deserved a place a first-timer can see. A playtester spent ten
+          minutes finding the hold; nobody should spend ten seconds. */}
+      <button className="sky-write" data-sky="write" aria-label="Write a thought">
+        ✎ write
+      </button>
       {/* Where the agent speaks. See say()/hold(). */}
       <div className="sky-voice" data-sky="voice" role="status">
         <span className="who" data-sky="voiceWho" />
@@ -125,6 +132,11 @@ export default function SkyPage() {
             ×
           </button>
         </div>
+        {/* Where this writing will land, said before it lands. Tappable: one
+            tap swaps "into the group you are standing in" for "loose in the
+            sky", which is the transparency two playtesters went hunting for
+            after the fact. */}
+        <button className="whither" data-sky="pageInto" hidden />
         <textarea data-sky="pageT" />
         <div className="pans" data-sky="pageA" style={{ display: 'none' }} />
         <div className="bot">
@@ -614,6 +626,7 @@ function mountSky(root: HTMLDivElement) {
   const seaWord = $('seaword')
   const restEl = $('rest')
   const tidyEl = $('tidy')
+  const writeEl = $('write')
   const nextEl = $('next')
   const nextLb = $('nextLb')
   const nextWhy = $('nextWhy')
@@ -623,6 +636,7 @@ function mountSky(root: HTMLDivElement) {
   const undoGo = $('undoGo')
   const page = $('page')
   const pageQ = $('pageQ')
+  const pageInto = $<HTMLButtonElement>('pageInto')
   const pageT = $<HTMLTextAreaElement>('pageT')
   const pageA = $('pageA')
   const pageN = $('pageN')
@@ -2249,6 +2263,15 @@ function mountSky(root: HTMLDivElement) {
     clearAll()
     openPage('aside', undefined, W / 2, 120)
   })
+  // the chip does what holding empty sky does, with the same standing rule:
+  // writing while a group is open writes into it — and the page now says so
+  writeEl.addEventListener('click', () => {
+    if (pageFor) return
+    const into = openPool
+    if (into) closeMoons()
+    else clearAll()
+    openPage('capture', undefined, innerWidth / 2, innerHeight * 0.42, into)
+  })
   // wake anything whose rest is over
   for (const t of S().thoughts) {
     if (t.status === 'snoozed' && t.snooze_until && t.snooze_until <= todayISO()) {
@@ -2601,7 +2624,15 @@ function mountSky(root: HTMLDivElement) {
     return head + body + tail + '\n'
   }
   /** `into` is the group a capture belongs to — see the long press. */
-  let pageFor: { mode: PageMode; tl?: TL; ox: number; oy: number; into?: string | null } | null = null
+  let pageFor: {
+    mode: PageMode
+    tl?: TL
+    ox: number
+    oy: number
+    into?: string | null
+    /** the person tapped the destination chip: land loose, not in the group */
+    intoOff?: boolean
+  } | null = null
   /**
    * Which group the writing box is currently naming.
    *
@@ -2668,6 +2699,33 @@ function mountSky(root: HTMLDivElement) {
   vv?.addEventListener('scroll', measureKeyboard)
   measureKeyboard()
 
+  /*
+   * Where this writing will land, said while you can still change it.
+   *
+   * "Where you were standing is where it goes" is the right rule and it was
+   * an invisible one: two playtesters wrote a week of thoughts while a seeded
+   * group happened to be open and only found out at the toast. The chip says
+   * the destination up front, and one tap swaps it for loose sky — the offer
+   * after the fact stays, but the honest moment is before.
+   */
+  function paintInto() {
+    const home =
+      pageFor?.mode === 'capture' && pageFor.into
+        ? S().thoughts.find((t) => t.id === pageFor!.into)
+        : null
+    pageInto.hidden = !home
+    if (!home) return
+    pageInto.textContent = pageFor!.intoOff
+      ? '→ loose in the sky'
+      : `→ into “${trim(label(home), 24)}”`
+  }
+  pageInto.addEventListener('click', (e) => {
+    e.stopPropagation()
+    if (!pageFor?.into) return
+    pageFor.intoOff = !pageFor.intoOff
+    paintInto()
+  })
+
   function openPage(mode: PageMode, tl: TL | undefined, ox: number, oy: number, into?: string | null) {
     // The group page re-renders itself in place whenever its list changes, and
     // a half-typed name in the box above that list must survive the row you
@@ -2684,6 +2742,7 @@ function mountSky(root: HTMLDivElement) {
     if (closeT) clearTimeout(closeT)
     closeT = null
     pageFor = { mode, tl, ox, oy, into: mode === 'capture' ? (into ?? openPool) : null }
+    paintInto()
     nameFor = null
     pageA.style.display = 'none'
     pageA.innerHTML = ''
@@ -3316,17 +3375,11 @@ function mountSky(root: HTMLDivElement) {
       const kept = heldDraft()
       pageT.value = kept
       asking('Let it storm.')
-      // Where it will land, said before you write rather than after. A group
-      // is open often enough that "this is going somewhere in particular" is
-      // worth a line.
-      {
-        const home = openPool ? S().thoughts.find((t) => t.id === openPool) : null
-        pageN.textContent = kept
-          ? 'still here from before'
-          : home
-            ? `into “${trim(label(home), 24)}”`
-            : '✦ organizes · or a line, a drop'
-      }
+      // The destination used to be said here too — truncated, in the footer,
+      // beside Done, which is exactly where two playtesters failed to see it.
+      // It is the tappable chip under the question now (see paintInto), and
+      // one voice saying it clearly beats two saying it small.
+      pageN.textContent = kept ? 'still here from before' : '✦ organizes · or a line, a drop'
     } else if (mode === 'say' && tl) {
       /*
        * Your words, into the thing. One page, one way out.
@@ -3614,7 +3667,10 @@ function mountSky(root: HTMLDivElement) {
       // Checked against the store rather than trusted: a group can be put away
       // while its page is up, and hanging a new thought off something that is
       // no longer there loses it.
-      const into = pf.into && S().thoughts.some((t) => t.id === pf.into && t.status === 'open') ? pf.into : null
+      const into =
+        pf.into && !pf.intoOff && S().thoughts.some((t) => t.id === pf.into && t.status === 'open')
+          ? pf.into
+          : null
       /*
        * The storm, made visible.
        *

@@ -902,3 +902,36 @@ describe('the hold is taught once, right after it is learnable', () => {
     expect(page).toMatch(/hold any empty sky when the next one comes/)
   })
 })
+
+// Capture was the app's most important act and its best-kept secret: a hold
+// nobody was told about, on empty sky that fills up. The chip stands where a
+// thumb can always find it, and the page it opens now says where the writing
+// will land — before it lands, tappable to change.
+describe('writing is no longer a secret', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+  const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
+
+  it('stands a write chip on the sky', () => {
+    expect(page).toMatch(/data-sky="write"/)
+    expect(sky).toMatch(/\.sky-write \{/)
+  })
+
+  it('steps aside for a drag, a page and the offer bar', () => {
+    const rule = sky.slice(sky.indexOf('body.sky-dragging .sky-write'))
+    expect(rule.slice(0, 220)).toMatch(/body\.on-paper \.sky-write/)
+    expect(rule.slice(0, 220)).toMatch(/body\.sky-offering \.sky-write/)
+    expect(rule.slice(0, 320)).toMatch(/pointer-events: none/)
+  })
+
+  it('writes into the group you are standing in, like the hold', () => {
+    const wire = page.slice(page.indexOf("writeEl.addEventListener('click'"))
+    expect(wire.slice(0, 400)).toMatch(/const into = openPool/)
+  })
+
+  it('says the destination before it lands, and lets one tap change it', () => {
+    expect(page).toMatch(/data-sky="pageInto"/)
+    expect(page).toMatch(/'→ loose in the sky'/)
+    // the commit honours the choice — the chip is not decoration
+    expect(page).toMatch(/pf\.into && !pf\.intoOff/)
+  })
+})

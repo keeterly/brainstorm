@@ -861,6 +861,20 @@ body.sky-dragging .sky-undo.show {
      name lands on Close and shuts the page you were about to title. */
   padding: calc(var(--sat) + 18px) 20px 10px;
 }
+/* Where this writing will land — shown only when it would land somewhere
+   other than open sky, tappable to change your mind before rather than
+   after. Quiet: a destination is context, not a warning. */
+.sky-page .whither {
+  align-self: flex-start;
+  margin: 0 20px 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  color: rgba(var(--accent-rgb), 0.9);
+  background: rgba(var(--accent-rgb), 0.09);
+  border: 0.5px solid rgba(var(--accent-rgb), 0.28);
+  cursor: pointer;
+}
 .sky-page .pq { flex: 1; font-size: 15px; font-weight: 400; line-height: 1.45; color: var(--paper-soft, #5b6b7e); text-wrap: balance; padding-top: 6px; }
 .sky-page .x {
   width: 44px;
@@ -1978,6 +1992,32 @@ body.sky-dragging .sky-undo.show {
 .sky-tidy.show { display: block; }
 /* when both are up, tidy steps left to make room for the count beside it */
 body.sky-resting .sky-tidy { right: calc(14px + var(--rest-w, 96px) + 8px); }
+
+/* The one act the sky is for, standing where a thumb can always find it.
+   Same glass as tidy, but never hidden behind a condition — a first-timer's
+   most important verb cannot be earned. It steps out of the way of a drag,
+   of an open page, and of the offer bar, all of which own the same air. */
+.sky-write {
+  position: fixed;
+  z-index: 6;
+  right: 14px;
+  bottom: calc(var(--tabbar-h) + var(--sab) + 16px);
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(15, 22, 32, 0.55);
+  border: 0.5px solid rgba(var(--accent-rgb), 0.3);
+  color: rgba(var(--accent-rgb), 0.85);
+  font-size: 11px;
+  cursor: pointer;
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+body.sky-dragging .sky-write,
+body.on-paper .sky-write,
+body.sky-offering .sky-write {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px);
+}
 
 
 /* ---------- coalescence: two drops becoming one ---------- */
