@@ -22,6 +22,7 @@ import { rainThought } from './rainFlow'
 import { curtainLifted, markSkyReady, whenCurtainLifts } from './ready'
 import { TINT_NAMES, tintOf, tintRGB, type TintName } from './tints'
 import { handOver, shareText, shareTitle } from './share'
+import { drawCard } from './shareCard'
 import { faceOf, isWall, lookAtWall } from './lookFlow'
 import { learnFromLettingGo } from './letGoFlow'
 import { closeGoal, evaporateGoal } from './finishFlow'
@@ -1649,8 +1650,35 @@ function mountSky(root: HTMLDivElement) {
    * there is none: an empty `--tint` would resolve to nothing halfway
    * through a gradient and paint the drop black.
    */
+  /**
+   * The colour a thing actually wears: its own, or the nearest one above it.
+   *
+   * Colouring a group had coloured the shell and nothing else, which is the
+   * one thing a group's colour cannot mean — you mark a project so you can
+   * find its work, and its work stayed grey. Inherited at paint time rather
+   * than written down through the tree: a thing added tomorrow is the right
+   * colour without being told, taking the colour off the group takes it off
+   * everything under it, and a member you coloured deliberately keeps its own
+   * — the nearest mark wins, which is the rule everybody already expects.
+   */
+  function effectiveTint(t: Thought): TintName | null {
+    const own = tintOf(ex(t))
+    if (own) return own
+    // up through the groups it belongs to, however deep, guarding the cycle
+    // `rebuild` is allowed to leave behind
+    const seen = new Set<string>([t.id])
+    let up = view.parentOf.get(t.id)
+    while (up && !seen.has(up)) {
+      seen.add(up)
+      const g = S().thoughts.find((x) => x.id === up)
+      const has = g && tintOf(ex(g))
+      if (has) return has
+      up = view.parentOf.get(up)
+    }
+    return null
+  }
   function paintTint(t: Thought, el: HTMLElement) {
-    const tint = tintOf(ex(t))
+    const tint = effectiveTint(t)
     if (tint) {
       el.dataset.tint = tint
       el.style.setProperty('--tint', tintRGB(tint))
@@ -1814,6 +1842,10 @@ function mountSky(root: HTMLDivElement) {
           me.classList.toggle('peek', peek === m.id)
           me.classList.toggle('behind', !!peek && peek !== m.id)
           const inner = view.kidsOf.get(m.id)?.length ?? 0
+          // A group inside a group is drawn here rather than by paintDropEl,
+          // and it was the one shape the colour never reached: a campaign
+          // turned iris with a grey "References" still sitting in its ring.
+          paintTint(m, me)
           if (inner) {
             me.classList.add('pool', 'member')
             me.classList.remove('small')
@@ -3361,11 +3393,34 @@ function mountSky(root: HTMLDivElement) {
           brief: art?.content_md ?? null,
           sources: art?.sources ?? [],
         })
-        void handOver(text, shareTitle(label(tl.t))).then((how) => {
-          if (how === 'shared') say('sent')
-          else if (how === 'copied') say('copied — paste it wherever you like')
-          else if (how === 'failed') say('could not hand that over just now')
+        /*
+         * …and the picture, which is the part that reads. A group is a shape
+         * — a thing with other things around it — and a bulleted list of its
+         * members says none of that. The card draws both of the ways this app
+         * shows you a group, so there is no chooser and no wrong answer.
+         */
+        void drawCard({
+          title: label(tl.t),
+          tint: effectiveTint(tl.t),
+          inside: inside.map((m) => ({
+            title: imgOf(m) && label(m) === 'Photo' ? 'a photograph' : label(m),
+            inside: view.kidsOf.get(m.id)?.length ?? 0,
+            tint: effectiveTint(m),
+            done: m.status === 'done',
+          })),
         })
+          .then((png) =>
+            handOver(
+              text,
+              shareTitle(label(tl.t)),
+              png ? new File([png], `${shareTitle(label(tl.t)) || 'thought'}.png`, { type: 'image/png' }) : null,
+            ),
+          )
+          .then((how) => {
+            if (how === 'shared') say('sent')
+            else if (how === 'copied') say('copied — paste it wherever you like')
+            else if (how === 'failed') say('could not hand that over just now')
+          })
       })
       const gatherBtn = pageA.querySelector('[data-act="gather"]')
       gatherBtn?.addEventListener('click', (e) => {

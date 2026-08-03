@@ -1359,3 +1359,73 @@ describe('a group goes with what it holds', () => {
     )
   })
 })
+
+// A colour on a group had coloured the shell and nothing else, which is the
+// one thing a group's colour cannot mean — you mark a project so you can find
+// its work, and its work stayed grey. And the first wash was measured on the
+// phone as "slightly different grey": at a hundred pixels across, on a sky
+// that is itself coloured all day, a tinted fill alone is a guess.
+describe('a colour you can actually see, on everything it belongs to', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+  const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
+
+  it('finds a colour by its edge, not only by its fill', () => {
+    const rule = sky.slice(sky.indexOf('.skyb[data-tint] {'), sky.indexOf('.skyb[data-tint]::before'))
+    expect(rule).toMatch(/inset 0 0 0 1\.5px rgba\(var\(--tint\), 0\.95\)/)
+    expect(rule).toMatch(/0 0 20px rgba\(var\(--tint\), 0\.3\)/)
+  })
+
+  it('does not leave a bright accent hairline arguing with the tint', () => {
+    expect(sky).toMatch(/\.skyb\[data-tint\]::before \{[^}]*rgba\(var\(--tint\), 0\.95\) 100%/s)
+  })
+
+  it('inherits from the nearest coloured thing above it', () => {
+    const fn = page.slice(page.indexOf('function effectiveTint'))
+    const body = fn.slice(0, fn.indexOf('\n  }'))
+    expect(body).toMatch(/const own = tintOf\(ex\(t\)\)\s*\n\s*if \(own\) return own/)
+    expect(body).toMatch(/view\.parentOf\.get/)
+    // …and cannot spin on a cycle rebuild is allowed to leave behind
+    expect(body).toMatch(/seen\.has\(up\)/)
+  })
+
+  it('reaches a group drawn inside another group', () => {
+    // nested groups are painted by their own branch rather than by
+    // paintDropEl — a campaign turned iris kept a grey "References" in its ring
+    const at = page.indexOf('const inner = view.kidsOf.get(m.id)?.length ?? 0')
+    expect(page.slice(at, at + 400)).toMatch(/paintTint\(m, me\)/)
+  })
+
+  it('is still set from the thing’s own mark, so the picker toggles its own', () => {
+    expect(page).toMatch(/const worn = tintOf\(ex\(tl\.t\)\)/)
+  })
+})
+
+// Plain text is where this app's thinking goes to die: a group is a shape,
+// and a bulleted list of its members says none of that. What went out also
+// carried the agent's markdown raw — somebody's Messages bubble filled up
+// with ## and - **.
+describe('sharing hands over the picture as well as the words', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+  const card = readFileSync(join('src/features/sky', 'shareCard.ts'), 'utf8')
+
+  it('draws both of the ways the app shows a group', () => {
+    // the constellation, because that is what you recognise; the list,
+    // because that is what you read
+    expect(card).toMatch(/---- the constellation ----/)
+    expect(card).toMatch(/---- and the same thing as a list ----/)
+  })
+
+  it('carries the colours into the card', () => {
+    const at = page.indexOf('void drawCard({')
+    const call = page.slice(at, at + 700)
+    expect(call).toMatch(/tint: effectiveTint\(tl\.t\)/)
+    expect(call).toMatch(/tint: effectiveTint\(m\)/)
+  })
+
+  it('falls back to words when the phone will not take a picture', () => {
+    const share = readFileSync(join('src/features/sky', 'share.ts'), 'utf8')
+    expect(share).toMatch(/picture && canSendPicture\(picture\)/)
+    // and drawing failing is not sharing failing
+    expect(page).toMatch(/png \? new File\(\[png\]/)
+  })
+})

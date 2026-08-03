@@ -2,7 +2,7 @@
 // message app and have never heard of this one, so it has to read as writing
 // rather than as a record with empty fields in it.
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { handOver, shareText, shareTitle } from './share'
+import { handOver, plainText, shareText, shareTitle } from './share'
 
 describe('a thought, as something you could paste into a message', () => {
   it('is one line when there is one line', () => {
@@ -68,6 +68,40 @@ describe('a thought, as something you could paste into a message', () => {
   })
 })
 
+// The agent writes markdown and a message bubble does not read it. What went
+// out was raw: "# The wall is about mass without edges", "- **a single dark
+// form**". That is not a thought you shared, it is a file you leaked.
+describe('the agent’s markdown, as something a person reads', () => {
+  it('takes the hashes off headings but keeps the words', () => {
+    expect(plainText('# The wall is about mass\n\n## What runs through it')).toBe(
+      'The wall is about mass\n\nWhat runs through it',
+    )
+  })
+
+  it('uses the one bullet this app uses everywhere', () => {
+    expect(plainText('- a single dark form\n* another\n+ a third')).toBe('· a single dark form\n· another\n· a third')
+  })
+
+  it('drops emphasis rather than printing its asterisks', () => {
+    expect(plainText('- **a single dark form**, seated or *standing*')).toBe('· a single dark form, seated or standing')
+    expect(plainText('__loud__ and `code`')).toBe('loud and code')
+  })
+
+  it('turns a link into words somebody can act on', () => {
+    expect(plainText('See [Royal Mail](https://example.com/x) for this')).toBe(
+      'See Royal Mail (https://example.com/x) for this',
+    )
+  })
+
+  it('keeps numbered steps numbered, because the order is the point', () => {
+    expect(plainText('1. Buy two rolls\n2. Shoot the test')).toBe('1. Buy two rolls\n2. Shoot the test')
+  })
+
+  it('leaves nothing where a rule or an image was', () => {
+    expect(plainText('one\n\n---\n\n![a picture](x.png)\n\ntwo')).toBe('one\n\ntwo')
+  })
+})
+
 describe('handing it over', () => {
   const real = globalThis.navigator
   afterEach(() => {
@@ -80,6 +114,25 @@ describe('handing it over', () => {
     const share = vi.fn().mockResolvedValue(undefined)
     asNavigator({ share })
     expect(await handOver('words', 'title')).toBe('shared')
+    expect(share).toHaveBeenCalledWith({ title: 'title', text: 'words' })
+  })
+
+  it('sends the picture when the phone will take one', async () => {
+    const share = vi.fn().mockResolvedValue(undefined)
+    const png = new File([new Uint8Array([1])], 'a.png', { type: 'image/png' })
+    asNavigator({ share, canShare: () => true })
+    expect(await handOver('words', 'title', png)).toBe('shared')
+    expect(share).toHaveBeenCalledWith({ title: 'title', text: 'words', files: [png] })
+  })
+
+  it('sends the words alone when it will not', async () => {
+    // canShare answers about the payload, not in general — desktop Chrome
+    // shares text and refuses files, and a sheet that then rejects the card
+    // is a spinner and an apology
+    const share = vi.fn().mockResolvedValue(undefined)
+    const png = new File([new Uint8Array([1])], 'a.png', { type: 'image/png' })
+    asNavigator({ share, canShare: () => false })
+    expect(await handOver('words', 'title', png)).toBe('shared')
     expect(share).toHaveBeenCalledWith({ title: 'title', text: 'words' })
   })
 
