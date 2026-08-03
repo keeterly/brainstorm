@@ -1084,7 +1084,7 @@ describe('reversal is bulletproof', () => {
   it('a group rests with what it holds, and comes back the same way', () => {
     const fn = page.slice(page.indexOf('function restDrop'))
     const body = fn.slice(0, fn.indexOf('\n  }\n'))
-    expect(body).toMatch(/walk\(t\.id\)/)
+    expect(body).toMatch(/const under = household\(t\.id\)/)
     expect(body).toMatch(/for \(const id of under\) S\(\)\.updateThought\(id, \{ status: 'snoozed'/)
     expect(body).toMatch(/9000/)
   })
@@ -1308,5 +1308,54 @@ describe('the sky finishes settling, and then stops', () => {
     // breath is an offset, never a position — settling must not freeze it
     const fn = page.slice(page.indexOf('let quiet = 0'), page.indexOf('function step()'))
     expect(fn).not.toMatch(/bx|by/)
+  })
+})
+
+// A group is a shell over its contents, and every gesture that moves the
+// shell means the contents too — the confirmation has always read "…and the
+// 5 inside". Sinking archived exactly one row, so you dropped a group into
+// the sea, watched it go, and its five members were still up there: orphaned,
+// loose, and looking like things you had written on purpose.
+describe('a group goes with what it holds', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+  const body = (fn: string) => {
+    const at = page.indexOf(`function ${fn}(`)
+    expect(at, `${fn} — no such function`).toBeGreaterThan(-1)
+    return page.slice(at, page.indexOf('\n  }\n', at))
+  }
+
+  it('walks the whole household, however deep, and cannot loop', () => {
+    const h = body('household')
+    expect(h).toMatch(/walk\(kid\.id\)/)
+    expect(h).toMatch(/out\.includes\(kid\.id\)/)
+  })
+
+  it('takes it under with everything inside it', () => {
+    const sink = body('sinkDrop')
+    expect(sink).toMatch(/const under = household\(t\.id\)/)
+    expect(sink).toMatch(/for \(const id of under\) S\(\)\.updateThought\(id, \{ status: 'archived' \}\)/)
+  })
+
+  it('finishes it with everything inside it', () => {
+    const rise = body('riseDrop')
+    expect(rise).toMatch(/const under = household\(t\.id\)/)
+    expect(rise).toMatch(/for \(const id of under\) S\(\)\.updateThought\(id, \{ status: 'done'/)
+  })
+
+  it('says how many went, and brings all of them back', () => {
+    for (const fn of ['sinkDrop', 'riseDrop']) {
+      const b = body(fn)
+      expect(b, fn).toMatch(/and the \$\{under\.length\} inside/)
+      expect(b, fn).toMatch(/for \(const id of under\) S\(\)\.updateThought\(id, \{ status: 'open'/)
+      // a whole household is a bigger thing to have meant than one drop
+      expect(b, fn).toMatch(/under\.length \? 9000 : 6000/)
+    }
+  })
+
+  it('wakes a household from the aside page whichever way it went away', () => {
+    const at = page.indexOf('const wake = (t: Thought) => {')
+    expect(page.slice(at, at + 420)).toMatch(
+      /household\(t\.id, 'snoozed'\), \.\.\.household\(t\.id, 'archived'\)/,
+    )
   })
 })

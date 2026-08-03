@@ -20,6 +20,8 @@ import { applyAnswer, answerThought } from './answerFlow'
 import { applyDraft, draftThought } from './draftFlow'
 import { rainThought } from './rainFlow'
 import { curtainLifted, markSkyReady, whenCurtainLifts } from './ready'
+import { TINT_NAMES, tintOf, tintRGB, type TintName } from './tints'
+import { handOver, shareText, shareTitle } from './share'
 import { faceOf, isWall, lookAtWall } from './lookFlow'
 import { learnFromLettingGo } from './letGoFlow'
 import { closeGoal, evaporateGoal } from './finishFlow'
@@ -1639,8 +1641,27 @@ function mountSky(root: HTMLDivElement) {
     const out = orbitR(g) + memberR(g.members.length) + 62
     return Math.hypot(gp.x - p.x, gp.y - p.y) > out
   }
+  /**
+   * The colour you gave it, if you gave it one.
+   *
+   * A data attribute rather than a class per colour, so the stylesheet has
+   * one rule and the value is the paint. Removed rather than blanked when
+   * there is none: an empty `--tint` would resolve to nothing halfway
+   * through a gradient and paint the drop black.
+   */
+  function paintTint(t: Thought, el: HTMLElement) {
+    const tint = tintOf(ex(t))
+    if (tint) {
+      el.dataset.tint = tint
+      el.style.setProperty('--tint', tintRGB(tint))
+    } else {
+      delete el.dataset.tint
+      el.style.removeProperty('--tint')
+    }
+  }
   function paintDropEl(t: Thought, el: HTMLDivElement, r: number, asMember: boolean) {
     el.style.width = el.style.height = r * 2 + 'px'
+    paintTint(t, el)
     el.classList.toggle('saturated', isRipe(t))
     el.classList.toggle('member', asMember)
     el.classList.toggle('small', r < 50)
@@ -1746,6 +1767,7 @@ function mountSky(root: HTMLDivElement) {
       if (tl.kind === 'pool') {
         const r = radiusOf(tl)
         el.style.width = el.style.height = r * 2 + 'px'
+        paintTint(tl.t, el)
         const open = openPool === tl.t.id
         const pb = briefOf(tl.t.id)
         // "has a path" and "the sky shifted" both described the template plan
@@ -2122,7 +2144,13 @@ function mountSky(root: HTMLDivElement) {
   function riseDrop(t: Thought) {
     const el = els.get(t.id)
     const p = posOf(t.id)
-    S().updateThought(t.id, { status: 'done', completed_at: new Date().toISOString() })
+    // …and everything under it. "Finish this and the 5 inside?" was the
+    // question; finishing the shell alone left five live actions belonging to
+    // a thing that no longer existed, which the Current went on recommending.
+    const under = household(t.id)
+    const at = new Date().toISOString()
+    S().updateThought(t.id, { status: 'done', completed_at: at })
+    for (const id of under) S().updateThought(id, { status: 'done', completed_at: at })
     if (el) {
       els.delete(t.id)
       const r = el.clientWidth / 2 || 40
@@ -2139,10 +2167,16 @@ function mountSky(root: HTMLDivElement) {
     }
     haptics.arrive()
     say('finished — it’s gone up')
-    offerUndo(`“${trim(label(t), 26)}” is finished`, () => {
-      S().updateThought(t.id, { status: 'open', completed_at: null })
-      say('back in the sky')
-    })
+    offerAction(
+      `“${trim(label(t), 26)}”${under.length ? ` and the ${under.length} inside` : ''} is finished`,
+      'bring it back',
+      () => {
+        S().updateThought(t.id, { status: 'open', completed_at: null })
+        for (const id of under) S().updateThought(id, { status: 'open', completed_at: null })
+        say('back in the sky')
+      },
+      under.length ? 9000 : 6000,
+    )
     finishedIt(t.id)
   }
 
@@ -2162,7 +2196,11 @@ function mountSky(root: HTMLDivElement) {
   function sinkDrop(t: Thought) {
     const el = els.get(t.id)
     const p = posOf(t.id)
+    // the shell and what it holds — the bar you answered said "and the N
+    // inside", and until now only the shell went under
+    const under = household(t.id)
     S().updateThought(t.id, { status: 'archived' })
+    for (const id of under) S().updateThought(id, { status: 'archived' })
     if (el) {
       els.delete(t.id)
       const r = el.clientWidth / 2 || 40
@@ -2180,10 +2218,18 @@ function mountSky(root: HTMLDivElement) {
     setTimeout(() => splash(p.rx * cam.k + cam.x), reduced ? 0 : 420)
     haptics.sink()
     say('let go — the deep keeps it')
-    offerUndo(`“${trim(label(t), 26)}” let go`, () => {
-      S().updateThought(t.id, { status: 'open' })
-      say('back in the sky')
-    })
+    offerAction(
+      `“${trim(label(t), 26)}”${under.length ? ` and the ${under.length} inside` : ''} let go`,
+      'bring it back',
+      () => {
+        S().updateThought(t.id, { status: 'open' })
+        for (const id of under) S().updateThought(id, { status: 'open' })
+        say('back in the sky')
+      },
+      // a whole household is a bigger thing to have meant, and worth reading
+      // the offer for — the same nine seconds resting gets
+      under.length ? 9000 : 6000,
+    )
     void learnFromLettingGo(t)
   }
 
@@ -2267,18 +2313,7 @@ function mountSky(root: HTMLDivElement) {
      * some captured object remembers.
      */
     const fresh = S().thoughts.find((x) => x.id === t.id) ?? t
-    const under: string[] = []
-    const walk = (id: string) => {
-      for (const r of S().relationships) {
-        if (r.type !== 'part_of' || r.to_id !== id) continue
-        const kid = S().thoughts.find((x) => x.id === r.from_id)
-        if (kid && kid.status === 'open') {
-          under.push(kid.id)
-          walk(kid.id)
-        }
-      }
-    }
-    walk(t.id)
+    const under = household(t.id)
     S().updateThought(t.id, { status: 'snoozed', snooze_until: until })
     for (const id of under) S().updateThought(id, { status: 'snoozed', snooze_until: until })
     clearAll()
@@ -2382,6 +2417,35 @@ function mountSky(root: HTMLDivElement) {
   // ---------- pools / threads ----------
   function partOfRel(childId: string) {
     return S().relationships.find((r) => r.type === 'part_of' && r.from_id === childId)
+  }
+  /**
+   * Everything living under a thing, however deep.
+   *
+   * A group is a shell over its contents, and every gesture that moves the
+   * shell means the contents too: the confirmation for the two edges has
+   * always read "…and the 5 inside", and the code archived exactly one row.
+   * So you dropped a group into the sea, watched it go, and its five members
+   * were still up there — orphaned, loose, and looking like things you had
+   * written on purpose.
+   *
+   * `open` is what the gesture is about; `snoozed` is included when waking,
+   * because a household that went to rest together comes back together.
+   */
+  function household(id: string, of: Thought['status'] = 'open'): string[] {
+    const out: string[] = []
+    const walk = (parent: string) => {
+      for (const r of S().relationships) {
+        if (r.type !== 'part_of' || r.to_id !== parent) continue
+        const kid = S().thoughts.find((x) => x.id === r.from_id)
+        // a cycle would be a sky that cannot be drawn; `rebuild` breaks them,
+        // and this must not hang if one ever slips through
+        if (!kid || kid.status !== of || out.includes(kid.id)) continue
+        out.push(kid.id)
+        walk(kid.id)
+      }
+    }
+    walk(id)
+    return out
   }
   // Two drops do not blink into a pool — they rush together, meet, and the
   // pool grows out of where they met.
@@ -3133,10 +3197,29 @@ function mountSky(root: HTMLDivElement) {
             `<b>${isDoing ? 'make it a note' : 'make it a to-do'}</b>` +
             `</button>`
           : ''
+      /*
+       * A colour, meaning whatever you decide it means.
+       *
+       * Everything else the sky tells you is the app's reading of your work.
+       * This is the one mark that is yours: it is never inferred, never used
+       * to decide anything, and never explained back to you. Tapping the one
+       * it already wears takes it off.
+       */
+      const worn = tintOf(ex(tl.t))
+      const tintRow =
+        `<div class="tints" role="group" aria-label="Colour">` +
+        TINT_NAMES.map(
+          (n) =>
+            `<button class="tint${worn === n ? ' on' : ''}" data-tint="${n}" ` +
+            `style="--tint:${tintRGB(n)}" aria-pressed="${worn === n}" ` +
+            `aria-label="${worn === n ? `Take the ${n} off` : `Make it ${n}`}"></button>`,
+        ).join('') +
+        `</div>`
       pageA.style.display = 'block'
       pageA.innerHTML =
         (shot ? `<button class="shot" aria-label="See the photo full screen"><img alt="" /></button>` : '') +
         kindLine +
+        tintRow +
         (inside.length
           ? `<div class="lab head"><span>what is inside</span>` +
             `<button class="ctl sel">Select</button></div>` +
@@ -3206,6 +3289,7 @@ function mountSky(root: HTMLDivElement) {
         `<div class="danger">` +
         (hasBrief ? `<button class="ctl d" data-act="brief">Read what it brought back</button>` : '') +
         (kin.length ? `<button class="ctl d" data-act="gather">Gather what is like this</button>` : '') +
+        `<button class="ctl d" data-act="share">Send it to someone</button>` +
         (inside.length ? `<button class="ctl d" data-act="ungroup">Ungroup — keep what is inside</button>` : '') +
         `<button class="ctl d bad" data-act="bin">${
           inside.length ? 'Put the whole group away' : 'Put this away'
@@ -3228,6 +3312,18 @@ function mountSky(root: HTMLDivElement) {
         closePage(true)
         setTimeout(() => openPage('brief', tl, ox, oy), reduced ? 0 : 120)
       })
+      for (const b of [...pageA.querySelectorAll('.tint')] as HTMLButtonElement[]) {
+        b.addEventListener('click', (e) => {
+          e.stopPropagation()
+          const want = b.dataset.tint as TintName
+          // the one it is already wearing takes it off, so the palette needs
+          // no seventh swatch for "none"
+          patchExtra(tl.t, { tint: worn === want ? null : want })
+          rebuild()
+          paintAll()
+          openPage('open', tl, ox, oy)
+        })
+      }
       pageA.querySelector('.kindline')?.addEventListener('click', (e) => {
         e.stopPropagation()
         // Yours, not the model's. The old type is kept so that turning a
@@ -3244,6 +3340,32 @@ function mountSky(root: HTMLDivElement) {
           say('something to do — it flows in the Current now')
         }
         openPage('open', tl, ox, oy)
+      })
+      pageA.querySelector('[data-act="share"]')?.addEventListener('click', (e) => {
+        e.stopPropagation()
+        /*
+         * The thinking, not the bubble. What leaves is a copy taken at this
+         * moment — the words, what is inside, what you have absorbed, what
+         * the agent found — and it stops being connected to you the instant
+         * it goes. Nobody is granted anything.
+         */
+        const art = briefOf(tl.t.id)
+        const text = shareText({
+          title: label(tl.t),
+          body: tl.t.raw_content,
+          // A picture cannot travel in plain text, and the word "Photo" —
+          // which is what one is called until you name it — tells the person
+          // reading nothing at all. Said as what it is instead.
+          inside: inside.map((m) => (imgOf(m) && label(m) === 'Photo' ? '(a photograph)' : label(m))),
+          answers: answersOf(tl.t),
+          brief: art?.content_md ?? null,
+          sources: art?.sources ?? [],
+        })
+        void handOver(text, shareTitle(label(tl.t))).then((how) => {
+          if (how === 'shared') say('sent')
+          else if (how === 'copied') say('copied — paste it wherever you like')
+          else if (how === 'failed') say('could not hand that over just now')
+        })
       })
       const gatherBtn = pageA.querySelector('[data-act="gather"]')
       gatherBtn?.addEventListener('click', (e) => {
@@ -3520,21 +3642,12 @@ function mountSky(root: HTMLDivElement) {
           ? `<div class="danger"><button class="ctl d" data-act="all">Bring all ${rest.length + away.length} back</button></div>`
           : '')
       const wake = (t: Thought) => {
+        // …and its household, in whichever way it went away. A group goes to
+        // rest, or under, with everything inside it; bringing back the shell
+        // alone would restore an empty group.
+        const under = [...household(t.id, 'snoozed'), ...household(t.id, 'archived')]
         S().updateThought(t.id, { status: 'open', snooze_until: null })
-        // …and its household. A group goes to rest with everything under it
-        // (see restDrop); waking the group and leaving its members asleep
-        // would bring back an empty shell until tomorrow.
-        const walk = (id: string) => {
-          for (const r of S().relationships) {
-            if (r.type !== 'part_of' || r.to_id !== id) continue
-            const kid = S().thoughts.find((x) => x.id === r.from_id)
-            if (kid && kid.status === 'snoozed') {
-              S().updateThought(kid.id, { status: 'open', snooze_until: null })
-              walk(kid.id)
-            }
-          }
-        }
-        walk(t.id)
+        for (const id of under) S().updateThought(id, { status: 'open', snooze_until: null })
       }
       for (const [sel, list] of [
         ['.grp.rest .row', rest],
@@ -6747,7 +6860,12 @@ function mountSky(root: HTMLDivElement) {
          */
         if (d.tl.kind === 'pool') {
           const t = d.tl.t
-          const n = d.tl.members.length
+          // Everything that is actually going, not just what the ring shows.
+          // The ring counts what a group directly holds; the gesture takes
+          // the whole household, so a group of five whose References hold
+          // four more asked about five and took nine. The question and the
+          // deed have to be the same number.
+          const n = household(t.id).length
           const held = n === 1 ? 'and the one inside' : `and the ${n} inside`
           const what = `“${trim(label(t), 18)}” ${held}`
           const p = posOf(d.id)
