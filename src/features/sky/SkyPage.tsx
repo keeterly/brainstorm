@@ -6481,9 +6481,10 @@ function mountSky(root: HTMLDivElement) {
       peek = null
       peekAt = null
       paintAll()
-      // back to the group you were reading out of, and to its actions
-      const g = openPool ? view.byId.get(openPool) : null
-      if (g) showMoons(g)
+      // …and nothing comes back up with it. This used to restore the group's
+      // actions, which made sense while a tap put them there; now that they
+      // only ever come from a hold, resurrecting them here would be the app
+      // opening a menu nobody asked for.
       return
     }
     if (wasOpen) {
@@ -6814,6 +6815,9 @@ function mountSky(root: HTMLDivElement) {
         drag.el.classList.remove('dragging')
         drag = null
         showMoons(held, true)
+        // the surface answering where you pressed it — the same rings a hold
+        // on empty sky makes, because it is the same gesture
+        wake(e.clientX, e.clientY)
         haptics.grab()
         sliding = true
         aimAt(e.clientX, e.clientY)
@@ -7247,14 +7251,41 @@ function mountSky(root: HTMLDivElement) {
     tapPt = null
     return id
   }
+  /*
+   * Said once, the first time a tap lands on something and gets nothing back.
+   *
+   * Tapping used to put three buttons under everything you touched, which is
+   * how anybody ever found out those buttons existed. Now that they belong to
+   * the hold, the tap is the moment somebody is asking "what can I do with
+   * this?" and the moment to answer it — once per device, then never again.
+   */
+  function teachMenu() {
+    try {
+      if (localStorage.getItem('bs-taught-menu')) return
+      localStorage.setItem('bs-taught-menu', '1')
+      setTimeout(() => say('press and hold anything for what you can do with it'), 900)
+    } catch {
+      /* private mode — the hold is still there to be found */
+    }
+  }
+
   function onTap(id: string, isMember: boolean, at: { x: number; y: number }) {
     /*
-     * One tap is the actions. A quick two is the thing itself.
+     * One tap opens what is inside. A press and hold is what you can do to it.
+     *
+     * A tap used to be the actions, and so three glass discs appeared under
+     * everything you touched — on a screen whose whole argument is that
+     * thinking needs room, the commonest gesture in the app spent that room on
+     * a menu nobody had asked for. They have moved to the hold, where your
+     * finger is already down and can slide straight onto one.
+     *
+     * What is left to a tap is what a tap is actually for: going in. Open a
+     * group, open one of the things in it, put the thing you were reading
+     * away. A lone tap on a plain drop now does nothing but clear whatever was
+     * up, and that is the point.
      *
      * Whether this was the second of a pair is decided before we get here, by
-     * doubleHit(), on the point rather than the element — see it for why. What
-     * is left here is the first tap of any pair: remember where it landed and
-     * what was under it, and show the actions.
+     * doubleHit(), on the point rather than the element — see it for why.
      */
     tapId = id
     tapAt = performance.now()
@@ -7287,19 +7318,14 @@ function mountSky(root: HTMLDivElement) {
         } else peekAt = null
         peek = id
         peekSettle = 96
+        // anything that was up belonged to whatever you were looking at before
+        closeMoons()
         paintAll()
         haptics.grab()
-        // And its actions, which it has never had. A thing inside a group
-        // could be read and it could be edited and that was the whole of it:
-        // no answering it, no working it, no gathering from it, no raining it,
-        // unless you first dragged it out of the group it belongs in. The
-        // moons follow whatever you last touched, so the group's step aside
-        // while you are looking at one of the things in it.
-        if (tl) showMoons(tl)
         return
       }
-      // already open, and this was a lone tap: its actions, again
-      if (tl) showMoons(tl)
+      // open already, and this tap asked for something a tap no longer gives
+      teachMenu()
       return
     }
     if (!tl) return
@@ -7309,29 +7335,26 @@ function mountSky(root: HTMLDivElement) {
       if (openPool === tl.t.id && peek) {
         peek = null
         peekAt = null
+        closeMoons()
         paintAll()
-        showMoons(tl)
         return
       }
-      if (openPool === tl.t.id) {
-        // The same two-tap rule a drop has always had: once for what you can
-        // do to it, again for the thing itself. Until now the second tap on a
-        // group did nothing, which is why a group could not be renamed,
-        // emptied or thrown away from the only screen it appears on.
-        showMoons(tl)
-      } else {
+      if (openPool !== tl.t.id) {
         clearAll()
         openPool = tl.t.id
         // the camera goes to the pool rather than the pool being shoved into
         // whatever part of the sky happens to be on screen
         frameOpen(tl)
         paintAll()
-        showMoons(tl)
-      }
+      } else teachMenu()
       return
     }
     clearAll()
-    showMoons(tl)
+    // Nothing visible happened, and that is the one moment worth explaining.
+    // Said here rather than on every tap: a tap that opened a group answered
+    // itself, and a line telling you about a different gesture on top of that
+    // is the app talking over its own reply.
+    teachMenu()
   }
 
   // ---------- frame loop ----------

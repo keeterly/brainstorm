@@ -1522,7 +1522,7 @@ describe('holding a bubble opens its actions under your thumb', () => {
     // lone thought is "nothing like-minded near it" — a gesture whose usual
     // outcome is being told it did nothing
     expect(held).toBeGreaterThan(-1)
-    const body = page.slice(held, held + 300)
+    const body = page.slice(held, held + 520)
     expect(body).not.toMatch(/startPull\(/)
     expect(body).toMatch(/showMoons\(held, true\)/)
     expect(body).toMatch(/sliding = true/)
@@ -1625,5 +1625,60 @@ describe('holding a bubble opens its actions under your thumb', () => {
     const body = page.slice(at, at + 300)
     expect(body).toMatch(/sliding = false/)
     expect(body).toMatch(/aimed = null/)
+  })
+})
+
+describe('a tap goes in; the actions belong to the hold', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+
+  // Three glass discs used to appear under everything you touched. On a screen
+  // whose whole argument is that thinking needs room, the commonest gesture in
+  // the app spent that room on a menu nobody had asked for.
+  const at = page.indexOf('function onTap(')
+  const body = page.slice(at, page.indexOf('// ---------- frame loop', at))
+
+  it('puts no actions under a tap, anywhere', () => {
+    expect(at).toBeGreaterThan(-1)
+    expect(body).not.toMatch(/showMoons\(/)
+  })
+
+  it('still opens a group, reads one of its members, and puts it away', () => {
+    // what a tap is actually for — going in — is untouched
+    expect(body).toMatch(/openPool = tl\.t\.id/)
+    expect(body).toMatch(/peek = id/)
+    expect(body).toMatch(/peek = null/)
+  })
+
+  it('clears whatever was up rather than leaving it behind', () => {
+    // the menu belonged to the last thing you touched; touching another thing
+    // must not leave its actions floating over this one
+    expect(body).toMatch(/closeMoons\(\)/)
+  })
+
+  it('does not resurrect a menu when you back out of what you were reading', () => {
+    // backing out of a peeked member used to restore the group's actions,
+    // which made sense only while a tap was what put them there
+    expect(page).not.toMatch(/if \(g\) showMoons\(g\)/)
+    expect(page).toMatch(/…and nothing comes back up with it/)
+  })
+
+  it('teaches the hold once, and only when the tap gave nothing back', () => {
+    expect(page).toMatch(/bs-taught-menu/)
+    expect(page).toMatch(/press and hold anything for what you can do with it/)
+    // a tap that opened a group answered itself; a line about a different
+    // gesture on top of that is the app talking over its own reply
+    const t = page.indexOf('function teachMenu()')
+    expect(t).toBeGreaterThan(-1)
+    expect(page.slice(t, t + 500)).toMatch(/localStorage\.getItem\('bs-taught-menu'\)/)
+    expect(page.slice(t, t + 500)).toMatch(/catch/)
+    expect(body).not.toMatch(/tapPt = at\n\s*teachMenu\(\)/)
+  })
+
+  it('answers the hold with the same rings a hold on empty sky makes', () => {
+    const h = page.indexOf('showMoons(held, true)')
+    expect(h).toBeGreaterThan(-1)
+    expect(page.slice(h, h + 320)).toMatch(/wake\(e\.clientX, e\.clientY\)/)
+    // …which is the one ripple this world has, not a second kind of circle
+    expect(page).toMatch(/rippleAt\(x, y, WAKE\)/)
   })
 })
