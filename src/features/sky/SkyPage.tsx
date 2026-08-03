@@ -7474,15 +7474,40 @@ function mountSky(root: HTMLDivElement) {
       return
     }
     push(holding?.id, 0.4)
-    push(moonsFor, 0.3)
-    // whatever has gone ripe keeps a quiet pulse of its own — kept to a few, or
-    // a full sky of ripe drops turns the echo into scratches
-    let ripe = 0
-    for (const tl of view.tls) {
-      if (ripe >= 3) break
-      if (tl.kind === 'drop' && isRipe(tl.t) && !seen.has(tl.t.id)) {
-        push(tl.t.id, 0.1)
-        ripe++
+    /*
+     * The thing with its actions open used to pulse here too, at 0.3.
+     *
+     * That ring is ambient: it is capped at 76 world units and grows to more
+     * than twice that, so on a group it is most of the glass — you never see
+     * the ring, only two arcs entering and leaving the screen, and nothing in
+     * their curvature says where they came from. Harmless as weather behind a
+     * sky that was doing nothing else.
+     *
+     * It stopped being harmless when the hold started answering with a ripple
+     * off the thing's own rim. Two answers to one event, one of them tight and
+     * legible and the other a pair of screen-crossing arcs from the same
+     * place — and the arcs are what you read, because they are bigger. So the
+     * ripple is the answer now, and this is not a second one.
+     */
+    /*
+     * …and nothing else, while you have hold of one.
+     *
+     * Whatever has gone ripe keeps a quiet pulse of its own — kept to a few,
+     * or a full sky of ripe drops turns the echo into scratches. Ambient, and
+     * fine as ambience. But the moment a finger is held on something, that
+     * thing sends a ripple out of its own rim, and unrelated drops ringing
+     * elsewhere at the same instant are rings arriving from somewhere other
+     * than the one you pressed. The sky goes quiet while you are holding
+     * something, and comes back the moment you let go.
+     */
+    if (!moonsFor && !holding) {
+      let ripe = 0
+      for (const tl of view.tls) {
+        if (ripe >= 3) break
+        if (tl.kind === 'drop' && isRipe(tl.t) && !seen.has(tl.t.id)) {
+          push(tl.t.id, 0.1)
+          ripe++
+        }
       }
     }
     for (let i = echoUsed; i < echoPool.length; i++) echoPool[i].style.opacity = '0'

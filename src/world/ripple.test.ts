@@ -185,6 +185,11 @@ describe('a thing roused by a finger held on it', () => {
     expect(roused(4).rings[0][0]).toBeGreaterThan(40)
   })
 
+  it('is brighter than the ambient pulse it has to be told apart from', () => {
+    // an answer to something you just did, not weather
+    expect(roused(80).lit).toBeGreaterThan(WAKE.lit as number)
+  })
+
   it('ripples the same way twice when it is given a seed', () => {
     rippleAt(10, 10, roused(90, 3.3))
     const a = rings()[0].getAttribute('d')

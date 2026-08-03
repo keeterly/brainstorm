@@ -112,7 +112,9 @@ export function roused(d: number, seed?: number): RippleSpec {
     rings: ROUSED_REACH.map((reach, i) => [w + reach * 2, [0, 95, 205, 330][i]] as const),
     start: w,
     life: 1150,
-    lit: 0.68,
+    // brighter than the ambient pulse it has to be told apart from: this one
+    // is an answer to something you just did, not weather
+    lit: 0.86,
     wobble: 0.062,
     ease: 'cubic-bezier(0.22, 0.61, 0.36, 1)',
     seed,

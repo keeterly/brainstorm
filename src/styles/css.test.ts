@@ -1688,6 +1688,28 @@ describe('a tap goes in; the actions belong to the hold', () => {
     expect(body).not.toMatch(/tapPt = at\n\s*teachMenu\(\)/)
   })
 
+  it('is the only thing ringing while a finger is held on something', () => {
+    const at = page.indexOf('function drawEchoes()')
+    expect(at).toBeGreaterThan(-1)
+    const body = page.slice(at, page.indexOf('function coast(', at))
+    /*
+     * Two other things used to ring at the same moment, and between them they
+     * are what "the rings are coming from somewhere else" actually was.
+     *
+     * The thing with its actions open pulsed here as well — a ring capped at
+     * 76 world units and grown to more than twice that, so on a group you
+     * never saw a ring, only two arcs entering and leaving the screen with
+     * nothing in their curvature to say where they came from. And up to three
+     * unrelated ripe drops pulsed wherever they happened to be.
+     */
+    expect(body).not.toMatch(/push\(moonsFor/)
+    // the ambient pulse survives, behind a guard: ambience is fine until a
+    // finger is choosing, and then it is somebody else's rings
+    expect(body).toMatch(/if \(!moonsFor && !holding\) \{/)
+    const ripe = body.indexOf('isRipe(')
+    expect(ripe).toBeGreaterThan(body.indexOf('if (!moonsFor && !holding) {'))
+  })
+
   it('answers the hold out of the thing being held, not the fingertip', () => {
     const h = page.indexOf('showMoons(held, true)')
     expect(h).toBeGreaterThan(-1)
