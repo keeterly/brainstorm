@@ -1628,6 +1628,20 @@ describe('holding a bubble opens its actions under your thumb', () => {
   })
 })
 
+describe('a ripple can leave a rim instead of a point', () => {
+  const g = readFileSync(join('src/styles', 'global.css'), 'utf8')
+
+  it('takes its starting size from the thing that sent it', () => {
+    const at = g.indexOf('@keyframes echo-out')
+    expect(at).toBeGreaterThan(-1)
+    const rule = g.slice(at, g.indexOf('to {', at))
+    expect(rule).toMatch(/transform: scale\(var\(--from, 0\.18\)\)/)
+    // the default is the old behaviour, so a fingertip on a surface is
+    // untouched by this
+    expect(rule).not.toMatch(/scale\(0\.18\)/)
+  })
+})
+
 describe('a tap goes in; the actions belong to the hold', () => {
   const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
 
@@ -1674,11 +1688,23 @@ describe('a tap goes in; the actions belong to the hold', () => {
     expect(body).not.toMatch(/tapPt = at\n\s*teachMenu\(\)/)
   })
 
-  it('answers the hold with the same rings a hold on empty sky makes', () => {
+  it('answers the hold out of the thing being held, not the fingertip', () => {
     const h = page.indexOf('showMoons(held, true)')
     expect(h).toBeGreaterThan(-1)
-    expect(page.slice(h, h + 320)).toMatch(/wake\(e\.clientX, e\.clientY\)/)
-    // …which is the one ripple this world has, not a second kind of circle
+    // the rings used to be centred wherever the thumb landed, at the fixed
+    // size a hold on empty sky uses
+    expect(page.slice(h, h + 320)).toMatch(/rouse\(heldEl, held\.t\.id\)/)
+    expect(page.slice(h, h + 320)).not.toMatch(/wake\(e\.clientX/)
+    const r = page.indexOf('function rouse(')
+    expect(r).toBeGreaterThan(-1)
+    const body = page.slice(r, r + 400)
+    // measured, because the thing held is a disc, or a card as tall as a
+    // photograph, or a group with a ring of its contents around it
+    expect(body).toMatch(/getBoundingClientRect\(\)/)
+    expect(body).toMatch(/r\.x \+ r\.width \/ 2, r\.y \+ r\.height \/ 2/)
+    expect(body).toMatch(/roused\(Math\.max\(r\.width, r\.height\), hashN\(id\)\)/)
+    // …and it is still the one ripple this world has, not a second kind of
+    // circle: a hold on empty sky is unchanged
     expect(page).toMatch(/rippleAt\(x, y, WAKE\)/)
   })
 })

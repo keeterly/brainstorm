@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { rippleAt, SPLASH, TOUCH, WAKE } from './ripple'
+import { rippleAt, roused, SPLASH, TOUCH, WAKE } from './ripple'
 
 function calm(reduce = false) {
   vi.stubGlobal(
@@ -129,5 +129,58 @@ describe('a splash', () => {
     rippleAt(50, 60, SPLASH)
     const svg = box() as SVGSVGElement
     expect(parseFloat(svg.style.top) + parseFloat(svg.style.height) / 2).toBeCloseTo(60, 1)
+  })
+})
+
+describe('a thing roused by a finger held on it', () => {
+  it('leaves the rim rather than the middle', () => {
+    // every ring grows from a fifth of its size by default — near enough to a
+    // point, which is right for a fingertip and wrong for something that came
+    // out of an object: the first rings are then born *inside* the thing and
+    // only appear once they have grown out through it
+    rippleAt(100, 100, roused(120))
+    const from = rings().map((p) => Number(p.style.getPropertyValue('--from')))
+    expect(from).toHaveLength(4)
+    for (const [i, f] of from.entries()) {
+      expect(f).toBeGreaterThan(0)
+      // each ring's start is the same rim, so the further one reaches the
+      // smaller a fraction of itself it begins at
+      if (i) expect(f).toBeLessThan(from[i - 1])
+    }
+    // …and the widest ring is nowhere near where it started
+    expect(from[3]).toBeLessThan(0.4)
+  })
+
+  it('starts at the thing it came out of, whatever size that is', () => {
+    for (const d of [60, 120, 300]) {
+      document.body.innerHTML = ''
+      rippleAt(0, 0, roused(d))
+      const first = roused(d).rings[0][0]
+      expect(Number(rings()[0].style.getPropertyValue('--from'))).toBeCloseTo(d / first, 3)
+    }
+  })
+
+  it('never starts where it ends, however small the thing is', () => {
+    // a ring that leaves at its own final size never travels at all
+    rippleAt(0, 0, { rings: [[40, 0]], start: 400 })
+    expect(Number(rings()[0].style.getPropertyValue('--from'))).toBeLessThanOrEqual(0.92)
+  })
+
+  it('is at least a thumb across, so a tiny thing still answers visibly', () => {
+    expect(roused(4).rings[0][0]).toBeGreaterThan(40)
+  })
+
+  it('ripples the same way twice when it is given a seed', () => {
+    rippleAt(10, 10, roused(90, 3.3))
+    const a = rings()[0].getAttribute('d')
+    document.body.innerHTML = ''
+    // a different point entirely: the shape belongs to the thing, not the place
+    rippleAt(300, 700, roused(90, 3.3))
+    expect(rings()[0].getAttribute('d')).toBe(a)
+  })
+
+  it('leaves a fingertip on empty sky starting from a point, as it was', () => {
+    rippleAt(0, 0, WAKE)
+    for (const p of rings()) expect(p.style.getPropertyValue('--from')).toBe('')
   })
 })

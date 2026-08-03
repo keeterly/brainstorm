@@ -54,7 +54,7 @@ import { sendWork, sentWord } from '@/lib/send'
 import { holdReload } from '@/lib/sw'
 import { noteTrail } from '@/lib/trail'
 import { echoRing, wabiBlob, wabiPill, wabiSeed } from '@/world/echo'
-import { rippleAt, WAKE } from '@/world/ripple'
+import { rippleAt, roused, WAKE } from '@/world/ripple'
 import { type Body, card, contact, disc, oilPath, pull } from '@/world/shape'
 import type { Thought, ThoughtType } from '@/domain/types'
 import './sky.css'
@@ -3976,6 +3976,26 @@ function mountSky(root: HTMLDivElement) {
     rippleAt(x, y, WAKE)
   }
 
+  /**
+   * …and the same answer from a thing, rather than from a fingertip.
+   *
+   * A hold on a bubble used to ripple at the touch point, at the fixed size a
+   * hold on empty sky uses. Two things wrong with that, and together they made
+   * it read as weather rather than as a reply: the rings were centred wherever
+   * your thumb happened to land rather than on the thing, and they began at a
+   * fifth of their size — so the first of them were born *inside* the bubble
+   * and only appeared once they had grown out through it.
+   *
+   * Measured off the element, because the thing you are holding is a disc, or
+   * an opened card as tall as a photograph, or a group with a ring of its
+   * contents around it. Seeded by its id, so a given thought ripples the same
+   * way every time, which is the rule the rest of this world's geometry keeps.
+   */
+  function rouse(el: HTMLElement, id: string) {
+    const r = el.getBoundingClientRect()
+    rippleAt(r.x + r.width / 2, r.y + r.height / 2, roused(Math.max(r.width, r.height), hashN(id)))
+  }
+
 
   /*
    * What kind of thing this is — settled quietly, without rewording it.
@@ -6812,12 +6832,12 @@ function mountSky(root: HTMLDivElement) {
          * unless you released without choosing.
          */
         const held = drag.tl
+        const heldEl = drag.el
         drag.el.classList.remove('dragging')
         drag = null
         showMoons(held, true)
-        // the surface answering where you pressed it — the same rings a hold
-        // on empty sky makes, because it is the same gesture
-        wake(e.clientX, e.clientY)
+        // the thing itself answering, out of its own rim — see rouse()
+        rouse(heldEl, held.t.id)
         haptics.grab()
         sliding = true
         aimAt(e.clientX, e.clientY)

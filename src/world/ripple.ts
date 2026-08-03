@@ -35,6 +35,16 @@ export interface RippleSpec {
   /** How it travels — out fast, then easing off, like a wave losing its push. */
   ease?: string
   /**
+   * The diameter each ring is already at when it leaves.
+   *
+   * Left out, a ring grows from a fifth of its size — near enough to a point,
+   * which is right for a fingertip on a surface. It is wrong for something
+   * that came out of an object: the first rings are then born *inside* the
+   * thing and the ripple reads as happening under it rather than off it. Set
+   * this to the thing's own diameter and every ring leaves its rim.
+   */
+  start?: number
+  /**
    * Fixes the shape. The same point ripples the same way every time, which is
    * the rule the rest of this world's geometry follows; left out, it is taken
    * from the coordinates so a double-tap in one place agrees with itself.
@@ -73,6 +83,36 @@ export const WAKE: RippleSpec = {
   ease: 'cubic-bezier(0.22, 0.61, 0.36, 1)',
 }
 
+/**
+ * Something in the sky, roused by a finger held on it.
+ *
+ * Sized to the thing rather than fixed, and leaving its rim rather than its
+ * middle — a ripple whose first ring is smaller than the bubble it came out of
+ * looks like weather behind the bubble, not the bubble answering. Four rings,
+ * each reaching further and each a little less bright, over the beat in which
+ * its actions arrive.
+ *
+ * @param d the thing's diameter, measured, because a drop, an opened card and
+ *   a group are three very different sizes.
+ */
+export function roused(d: number, seed?: number): RippleSpec {
+  const w = Math.max(44, d)
+  return {
+    rings: [
+      [w * 1.28, 0],
+      [w * 1.85, 95],
+      [w * 2.6, 205],
+      [w * 3.5, 330],
+    ],
+    start: w,
+    life: 1150,
+    lit: 0.68,
+    wobble: 0.062,
+    ease: 'cubic-bezier(0.22, 0.61, 0.36, 1)',
+    seed,
+  }
+}
+
 /** Something landing on the surface, seen from just above it. */
 export const SPLASH: RippleSpec = {
   rings: [
@@ -99,7 +139,7 @@ export function rippleAt(x: number, y: number, spec: RippleSpec): SVGSVGElement 
   if (typeof document === 'undefined' || !spec.rings.length) return null
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return null
 
-  const { rings, life = 900, wobble = 0.055, flatten = 1, lit = 0.9, ease = 'ease-out' } = spec
+  const { rings, life = 900, wobble = 0.055, flatten = 1, lit = 0.9, ease = 'ease-out', start = 0 } = spec
   const seed = spec.seed ?? seedAt(x, y)
 
   // one box, big enough for the widest ring at full wobble, centred on the
@@ -121,6 +161,9 @@ export function rippleAt(x: number, y: number, spec: RippleSpec): SVGSVGElement 
     // and wobbles a little more the further out it is going — the way a wave
     // loses its edge with distance
     p.setAttribute('d', echoRing(0, 0, diameter / 2, seed + i * 2.7, wobble + i * 0.014))
+    // …from the rim of whatever sent it, when there is one. Capped below the
+    // ring itself: a ring that starts where it ends never travels.
+    if (start > 0) p.style.setProperty('--from', String(Math.min(0.92, start / diameter)))
     p.style.setProperty('--life', `${life}ms`)
     p.style.setProperty('--wait', `${delay}ms`)
     p.style.setProperty('--lit', String(lit * (1 - i * 0.12)))
