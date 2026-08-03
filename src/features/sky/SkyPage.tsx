@@ -139,6 +139,20 @@ export default function SkyPage() {
       <div className="sky-page" data-sky="page" role="dialog" aria-label="Write">
         <div className="top">
           <div className="pq" data-sky="pageQ" />
+          {/* The two things you do *to* a thing rather than inside it, up
+              where they can be reached. They used to live at the foot of the
+              list — which on a list of seven is a scroll away, and the colour
+              row scrolled off the top the moment you looked at anything. */}
+          <div className="tone-wrap" data-sky="toneWrap" hidden>
+            <button className="tone" data-sky="pageTone" aria-label="Colour" aria-expanded="false">
+              <i />
+            </button>
+            {/* the rest of the palette, unrolled downward on a tap */}
+            <div className="tones" data-sky="pageTones" role="group" aria-label="Colours" />
+          </div>
+          <button className="hand" data-sky="pageShare" aria-label="Send it to someone" hidden>
+            <Ico d="M12 15.4V4.2M8.1 8.1 12 4.2l3.9 3.9M5.4 13.2v5a1.8 1.8 0 0 0 1.8 1.8h9.6a1.8 1.8 0 0 0 1.8-1.8v-5" />
+          </button>
           <button className="x" data-sky="pageX" aria-label="Close">
             ×
           </button>
@@ -655,6 +669,10 @@ function mountSky(root: HTMLDivElement) {
   const page = $('page')
   const pageQ = $('pageQ')
   const pageInto = $<HTMLButtonElement>('pageInto')
+  const toneWrap = $('toneWrap')
+  const pageTone = $<HTMLButtonElement>('pageTone')
+  const pageTones = $('pageTones')
+  const pageShare = $<HTMLButtonElement>('pageShare')
   const pageT = $<HTMLTextAreaElement>('pageT')
   const pageA = $('pageA')
   const pageN = $('pageN')
@@ -2925,6 +2943,118 @@ function mountSky(root: HTMLDivElement) {
    * the default on pointerdown keeps focus where the writing is; the click
    * still arrives and still flips the destination.
    */
+  /*
+   * The colour, as one circle that unrolls.
+   *
+   * Six swatches in a permanent row cost a line of the page for a decision
+   * you make about a thing once, and on a list of seven that line had already
+   * scrolled off the top by the time you were looking at anything. So it is
+   * the mark itself — the colour the thing is wearing — and the rest of the
+   * palette drops out of it downward when you ask.
+   *
+   * Built once here rather than per open: the swatches never change, and the
+   * page above the list is not re-rendered, so rebuilding them on every open
+   * would only mean re-wiring six handlers for no reason.
+   */
+  let toneFor: TL | null = null
+  pageTones.innerHTML = TINT_NAMES.map(
+    (n, i) =>
+      `<button class="tint" data-tint="${n}" style="--tint:${tintRGB(n)};--i:${i}" aria-label="Make it ${n}"></button>`,
+  ).join('')
+  function paintTone() {
+    const t = toneFor?.t
+    const worn = t ? tintOf(ex(t)) : null
+    // the dot wears what the thing wears — including a colour it is only
+    // inheriting, because that is what you see out in the sky
+    const shown = t ? effectiveTint(t) : null
+    pageTone.style.setProperty('--tint', shown ? tintRGB(shown) : '156, 166, 180')
+    pageTone.classList.toggle('none', !shown)
+    for (const b of [...pageTones.querySelectorAll('.tint')] as HTMLButtonElement[]) {
+      b.classList.toggle('on', b.dataset.tint === worn)
+      b.setAttribute('aria-label', b.dataset.tint === worn ? `Take the ${b.dataset.tint} off` : `Make it ${b.dataset.tint}`)
+    }
+  }
+  function shutTones() {
+    toneWrap.classList.remove('open')
+    pageTone.setAttribute('aria-expanded', 'false')
+  }
+  pageTone.addEventListener('click', (e) => {
+    e.stopPropagation()
+    const open = !toneWrap.classList.contains('open')
+    toneWrap.classList.toggle('open', open)
+    pageTone.setAttribute('aria-expanded', String(open))
+  })
+  for (const b of [...pageTones.querySelectorAll('.tint')] as HTMLButtonElement[]) {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const tl = toneFor
+      if (!tl) return
+      const want = b.dataset.tint as TintName
+      // the one it is already wearing takes it off, so the palette needs no
+      // seventh swatch for "none"
+      patchExtra(tl.t, { tint: tintOf(ex(tl.t)) === want ? null : want })
+      rebuild()
+      paintAll()
+      paintTone()
+      shutTones()
+      redrawGroupPage()
+    })
+  }
+  /**
+   * Hand this thing to somebody.
+   *
+   * Works out what is inside for itself rather than being handed it, because
+   * it is wired once at the top of the page and the list below is rebuilt on
+   * every open.
+   */
+  function shareThing(tl: TL) {
+    const live = view.byId.get(tl.t.id) ?? tl
+    const inside = branchesOf(live.t.id, true).map((b) => b.t)
+    const art = briefOf(live.t.id)
+    const text = shareText({
+      title: label(live.t),
+      body: live.t.raw_content,
+      // A picture cannot travel in plain text, and the word "Photo" — which
+      // is what one is called until you name it — tells the person reading
+      // nothing at all. Said as what it is instead.
+      inside: inside.map((m) => (imgOf(m) && label(m) === 'Photo' ? '(a photograph)' : label(m))),
+      answers: answersOf(live.t),
+      brief: art?.content_md ?? null,
+      sources: art?.sources ?? [],
+    })
+    /*
+     * …and the picture, which is the part that reads. A group is a shape — a
+     * thing with other things around it — and a bulleted list of its members
+     * says none of that. The card draws both of the ways this app shows you a
+     * group, so there is no chooser and no wrong answer.
+     */
+    void drawCard({
+      title: label(live.t),
+      tint: effectiveTint(live.t),
+      inside: inside.map((m) => ({
+        title: imgOf(m) && label(m) === 'Photo' ? 'a photograph' : label(m),
+        inside: view.kidsOf.get(m.id)?.length ?? 0,
+        tint: effectiveTint(m),
+        done: m.status === 'done',
+      })),
+    })
+      .then((png) =>
+        handOver(
+          text,
+          shareTitle(label(live.t)),
+          png ? new File([png], `${shareTitle(label(live.t)) || 'thought'}.png`, { type: 'image/png' }) : null,
+        ),
+      )
+      .then((how) => {
+        if (how === 'shared') say('sent')
+        else if (how === 'copied') say('copied — paste it wherever you like')
+        else if (how === 'failed') say('could not hand that over just now')
+      })
+  }
+  pageShare.addEventListener('click', (e) => {
+    e.stopPropagation()
+    if (toneFor) shareThing(toneFor)
+  })
   pageInto.addEventListener('pointerdown', (e) => e.preventDefault())
   pageInto.addEventListener('click', (e) => {
     e.stopPropagation()
@@ -3229,29 +3359,10 @@ function mountSky(root: HTMLDivElement) {
             `<b>${isDoing ? 'make it a note' : 'make it a to-do'}</b>` +
             `</button>`
           : ''
-      /*
-       * A colour, meaning whatever you decide it means.
-       *
-       * Everything else the sky tells you is the app's reading of your work.
-       * This is the one mark that is yours: it is never inferred, never used
-       * to decide anything, and never explained back to you. Tapping the one
-       * it already wears takes it off.
-       */
-      const worn = tintOf(ex(tl.t))
-      const tintRow =
-        `<div class="tints" role="group" aria-label="Colour">` +
-        TINT_NAMES.map(
-          (n) =>
-            `<button class="tint${worn === n ? ' on' : ''}" data-tint="${n}" ` +
-            `style="--tint:${tintRGB(n)}" aria-pressed="${worn === n}" ` +
-            `aria-label="${worn === n ? `Take the ${n} off` : `Make it ${n}`}"></button>`,
-        ).join('') +
-        `</div>`
       pageA.style.display = 'block'
       pageA.innerHTML =
         (shot ? `<button class="shot" aria-label="See the photo full screen"><img alt="" /></button>` : '') +
         kindLine +
-        tintRow +
         (inside.length
           ? `<div class="lab head"><span>what is inside</span>` +
             `<button class="ctl sel">Select</button></div>` +
@@ -3321,7 +3432,6 @@ function mountSky(root: HTMLDivElement) {
         `<div class="danger">` +
         (hasBrief ? `<button class="ctl d" data-act="brief">Read what it brought back</button>` : '') +
         (kin.length ? `<button class="ctl d" data-act="gather">Gather what is like this</button>` : '') +
-        `<button class="ctl d" data-act="share">Send it to someone</button>` +
         (inside.length ? `<button class="ctl d" data-act="ungroup">Ungroup — keep what is inside</button>` : '') +
         `<button class="ctl d bad" data-act="bin">${
           inside.length ? 'Put the whole group away' : 'Put this away'
@@ -3344,18 +3454,6 @@ function mountSky(root: HTMLDivElement) {
         closePage(true)
         setTimeout(() => openPage('brief', tl, ox, oy), reduced ? 0 : 120)
       })
-      for (const b of [...pageA.querySelectorAll('.tint')] as HTMLButtonElement[]) {
-        b.addEventListener('click', (e) => {
-          e.stopPropagation()
-          const want = b.dataset.tint as TintName
-          // the one it is already wearing takes it off, so the palette needs
-          // no seventh swatch for "none"
-          patchExtra(tl.t, { tint: worn === want ? null : want })
-          rebuild()
-          paintAll()
-          openPage('open', tl, ox, oy)
-        })
-      }
       pageA.querySelector('.kindline')?.addEventListener('click', (e) => {
         e.stopPropagation()
         // Yours, not the model's. The old type is kept so that turning a
@@ -3372,55 +3470,6 @@ function mountSky(root: HTMLDivElement) {
           say('something to do — it flows in the Current now')
         }
         openPage('open', tl, ox, oy)
-      })
-      pageA.querySelector('[data-act="share"]')?.addEventListener('click', (e) => {
-        e.stopPropagation()
-        /*
-         * The thinking, not the bubble. What leaves is a copy taken at this
-         * moment — the words, what is inside, what you have absorbed, what
-         * the agent found — and it stops being connected to you the instant
-         * it goes. Nobody is granted anything.
-         */
-        const art = briefOf(tl.t.id)
-        const text = shareText({
-          title: label(tl.t),
-          body: tl.t.raw_content,
-          // A picture cannot travel in plain text, and the word "Photo" —
-          // which is what one is called until you name it — tells the person
-          // reading nothing at all. Said as what it is instead.
-          inside: inside.map((m) => (imgOf(m) && label(m) === 'Photo' ? '(a photograph)' : label(m))),
-          answers: answersOf(tl.t),
-          brief: art?.content_md ?? null,
-          sources: art?.sources ?? [],
-        })
-        /*
-         * …and the picture, which is the part that reads. A group is a shape
-         * — a thing with other things around it — and a bulleted list of its
-         * members says none of that. The card draws both of the ways this app
-         * shows you a group, so there is no chooser and no wrong answer.
-         */
-        void drawCard({
-          title: label(tl.t),
-          tint: effectiveTint(tl.t),
-          inside: inside.map((m) => ({
-            title: imgOf(m) && label(m) === 'Photo' ? 'a photograph' : label(m),
-            inside: view.kidsOf.get(m.id)?.length ?? 0,
-            tint: effectiveTint(m),
-            done: m.status === 'done',
-          })),
-        })
-          .then((png) =>
-            handOver(
-              text,
-              shareTitle(label(tl.t)),
-              png ? new File([png], `${shareTitle(label(tl.t)) || 'thought'}.png`, { type: 'image/png' }) : null,
-            ),
-          )
-          .then((how) => {
-            if (how === 'shared') say('sent')
-            else if (how === 'copied') say('copied — paste it wherever you like')
-            else if (how === 'failed') say('could not hand that over just now')
-          })
       })
       const gatherBtn = pageA.querySelector('[data-act="gather"]')
       gatherBtn?.addEventListener('click', (e) => {
@@ -3857,6 +3906,13 @@ function mountSky(root: HTMLDivElement) {
       wireDanger(pageA, tl)
     }
     // asking out loud is the most natural way to ask
+    // the two things you do *to* a thing live in the top bar, and only a
+    // thing's own page has a thing for them to be done to
+    toneWrap.hidden = mode !== 'open' || !tl
+    pageShare.hidden = mode !== 'open' || !tl
+    toneFor = mode === 'open' && tl ? tl : null
+    shutTones()
+    paintTone()
     pageMic.classList.toggle('show', speechOK && (mode === 'capture' || mode === 'say' || mode === 'ask'))
     pageMic.classList.remove('live')
     pagePic.classList.toggle('show', mode === 'capture' || mode === 'say')

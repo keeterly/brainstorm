@@ -1395,8 +1395,13 @@ describe('a colour you can actually see, on everything it belongs to', () => {
     expect(page.slice(at, at + 400)).toMatch(/paintTint\(m, me\)/)
   })
 
-  it('is still set from the thing’s own mark, so the picker toggles its own', () => {
-    expect(page).toMatch(/const worn = tintOf\(ex\(tl\.t\)\)/)
+  it('sets the thing’s own mark, while the dot shows what it wears', () => {
+    // tapping a swatch toggles the thing's *own* colour; the dot in the top
+    // bar shows the effective one, including a colour it only inherits —
+    // because that is what you see out in the sky
+    expect(page).toMatch(/patchExtra\(tl\.t, \{ tint: tintOf\(ex\(tl\.t\)\) === want \? null : want \}\)/)
+    const fn = page.slice(page.indexOf('function paintTone'))
+    expect(fn.slice(0, 600)).toMatch(/const shown = t \? effectiveTint\(t\) : null/)
   })
 })
 
@@ -1418,8 +1423,15 @@ describe('sharing hands over the picture as well as the words', () => {
   it('carries the colours into the card', () => {
     const at = page.indexOf('void drawCard({')
     const call = page.slice(at, at + 700)
-    expect(call).toMatch(/tint: effectiveTint\(tl\.t\)/)
+    expect(call).toMatch(/tint: effectiveTint\(live\.t\)/)
     expect(call).toMatch(/tint: effectiveTint\(m\)/)
+  })
+
+  it('reads the thing as it is now, being wired once above the list', () => {
+    // the top bar outlives every rebuild of the list below it, so the share
+    // must re-resolve rather than close over the TL it was handed
+    const fn = page.slice(page.indexOf('function shareThing'))
+    expect(fn.slice(0, 300)).toMatch(/const live = view\.byId\.get\(tl\.t\.id\) \?\? tl/)
   })
 
   it('falls back to words when the phone will not take a picture', () => {
@@ -1427,5 +1439,41 @@ describe('sharing hands over the picture as well as the words', () => {
     expect(share).toMatch(/picture && canSendPicture\(picture\)/)
     // and drawing failing is not sharing failing
     expect(page).toMatch(/png \? new File\(\[png\]/)
+  })
+})
+
+// Both are things you do *to* a thing rather than inside it, and both used to
+// sit at the foot of the list — which on a list of seven is a scroll away,
+// and the swatch row had scrolled off the top by the time you were looking at
+// anything in it.
+describe('the colour and the handing-over live in the top bar', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+  const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
+
+  it('is one circle that unrolls, not six taking a line', () => {
+    expect(page).toMatch(/data-sky="pageTone"/)
+    expect(page).toMatch(/data-sky="pageTones"/)
+    expect(sky).toMatch(/\.sky-page \.top \.tones \{[^}]*flex-direction: column/s)
+    // shut means unreachable, not merely invisible
+    expect(sky).toMatch(/\.sky-page \.top \.tones \{[^}]*pointer-events: none/s)
+    expect(sky).toMatch(/\.tone-wrap\.open \.tones \{[^}]*pointer-events: auto/s)
+  })
+
+  it('shows no colour as a ring rather than as a grey one', () => {
+    expect(sky).toMatch(/\.sky-page \.top \.tone\.none i \{[^}]*background: transparent/s)
+  })
+
+  it('is offered only on a thing’s own page, and shuts when one opens', () => {
+    const at = page.indexOf("toneWrap.hidden = mode !== 'open'")
+    expect(at).toBeGreaterThan(-1)
+    const near = page.slice(at, at + 400)
+    expect(near).toMatch(/pageShare\.hidden = mode !== 'open'/)
+    expect(near).toMatch(/shutTones\(\)/)
+    expect(near).toMatch(/paintTone\(\)/)
+  })
+
+  it('no longer spends a line of the list on either', () => {
+    expect(page).not.toMatch(/class="tints"/)
+    expect(page).not.toMatch(/data-act="share"/)
   })
 })
