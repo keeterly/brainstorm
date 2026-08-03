@@ -1473,7 +1473,15 @@ describe('the colour and the handing-over live in the top bar', () => {
   })
 
   it('steps the label and the hand-it-over aside for the moment', () => {
-    expect(sky).toMatch(/\.sky-page \.top\.picking \.pq,\n\.sky-page \.top\.picking \.hand \{[^}]*opacity: 0/s)
+    const at = sky.indexOf('.sky-page .top.picking .pq,')
+    expect(at).toBeGreaterThan(-1)
+    const rule = sky.slice(at, sky.indexOf('}', at))
+    expect(rule).toMatch(/\.sky-page \.top\.picking \.hand[,\s]/)
+    // …including the chip the row is standing on top of, which otherwise
+    // showed through the open palette as a seventh, odd-sized disc
+    expect(rule).toMatch(/\.sky-page \.top\.picking \.tone\s*\{/)
+    expect(rule).toMatch(/opacity: 0/)
+    expect(rule).toMatch(/pointer-events: none/)
   })
 
   it('puts itself away when you look at anything else', () => {
@@ -1498,5 +1506,124 @@ describe('the colour and the handing-over live in the top bar', () => {
   it('no longer spends a line of the list on either', () => {
     expect(page).not.toMatch(/class="tints"/)
     expect(page).not.toMatch(/data-act="share"/)
+  })
+})
+
+describe('holding a bubble opens its actions under your thumb', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+  const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
+
+  // the sky has two hold timers — the empty-sky one that opens capture, and
+  // this one, on a bubble you have your finger on
+  const held = page.indexOf('const held = drag.tl')
+
+  it('no longer spends the gesture on gathering', () => {
+    // holding used to run `startPull`, whose commonest honest answer on a
+    // lone thought is "nothing like-minded near it" — a gesture whose usual
+    // outcome is being told it did nothing
+    expect(held).toBeGreaterThan(-1)
+    const body = page.slice(held, held + 300)
+    expect(body).not.toMatch(/startPull\(/)
+    expect(body).toMatch(/showMoons\(held, true\)/)
+    expect(body).toMatch(/sliding = true/)
+    // and it aims immediately, so the moon nearest where the thumb already is
+    // lights up without waiting for a first move
+    expect(body).toMatch(/aimAt\(e\.clientX, e\.clientY\)/)
+  })
+
+  it('is offered inside an open group too', () => {
+    // the timer used to be wrapped in `if (!memberPool)`, so a thing sitting
+    // in a pool — the place you are most likely to want to act on it — was
+    // the one place the hold did nothing at all
+    expect(page.slice(Math.max(0, held - 900), held)).not.toMatch(/if \(!memberPool\) \{/)
+  })
+
+  it('tracks the finger while it is down', () => {
+    const at = page.indexOf('if (sliding) {')
+    expect(at).toBeGreaterThan(-1)
+    expect(page).toMatch(/if \(sliding\) \{\n\s*aimAt\(e\.clientX, e\.clientY\)\n\s*return/)
+  })
+
+  it('forgives a thumb that lands short', () => {
+    // a fingertip is wider than an icon; the reach is deliberately past the
+    // disc rather than exactly it
+    expect(page).toMatch(/const AIM_SLOP = \d+/)
+    expect(page).toMatch(/d < r\.width \/ 2 \+ AIM_SLOP/)
+    // …and nearest wins, so overlapping reaches do not pick by DOM order
+    expect(page).toMatch(/d < bestD/)
+  })
+
+  it('runs the one under the finger on release, and keeps the rest up on a miss', () => {
+    const at = page.indexOf('if (sliding) {\n      sliding = false')
+    expect(at).toBeGreaterThan(-1)
+    const body = page.slice(at, at + 220)
+    expect(body).toMatch(/if \(fireAimed\(\)\) return/)
+    // releasing on nothing must not also close them: that punishes the miss
+    expect(body).not.toMatch(/closeMoons\(\)/)
+  })
+
+  it('fires through the moon’s own handler rather than a second copy of it', () => {
+    // the dim case, the action and the closing all live on the click handler
+    // already; a parallel path here is a second place to forget one of them
+    const at = page.indexOf('function fireAimed()')
+    expect(at).toBeGreaterThan(-1)
+    expect(page.slice(at, at + 420)).toMatch(/m\.click\(\)/)
+  })
+
+  it('grows the aimed moon from the frame loop, not the stylesheet', () => {
+    // `layoutMoons` writes an inline transform every frame, so a transform in
+    // the stylesheet is overwritten before it is ever seen
+    const at = page.indexOf('const grow = ')
+    expect(at).toBeGreaterThan(-1)
+    expect(page.slice(at, at + 260)).toMatch(/classList\.contains\('aimed'\)/)
+    expect(page.slice(at, at + 260)).toMatch(/scale\(\$\{\(\(grow \/ cam\.k\)\)/)
+    expect(sky).not.toMatch(/\.sky-moon\.aimed[^{]*\{[^}]*transform:/s)
+  })
+
+  it('lights the aimed one brightly enough to read out of the corner of an eye', () => {
+    expect(sky).toMatch(/\.sky-moon\.aimed \{[^}]*z-index/s)
+    expect(sky).toMatch(/\.sky-moon\.aimed \.ic \{[^}]*box-shadow/s)
+    // the label comes up with it: at a glance the glow alone says "one of
+    // them", not "this one"
+    expect(sky).toMatch(/\.sky-moon\.aimed \.lb \{[^}]*opacity: 1/s)
+  })
+
+  it('holds the row still while a thumb is choosing from it', () => {
+    // measured with a finger down on a member of an open group: the row
+    // walked 170 points down the glass in under a second, because the thing
+    // it hangs off was still going round its orbit
+    expect(page).toMatch(/if \(sliding && !slideRow\) slideRow = \{ x: p\.x, y: p\.y \+ below \}/)
+    expect(page).toMatch(/const rowX = slideRow \? slideRow\.x : p\.x/)
+    expect(page).toMatch(/const rowY = slideRow \? slideRow\.y : p\.y \+ below/)
+    // and the row is actually placed from those, not from the live position
+    expect(page).toMatch(/Math\.min\(hi, rowX\)/)
+    expect(page).toMatch(/const y = Math\.min\(rowY, floor\)/)
+    // the anchor lets go with the menu, or the next one opens in the old spot
+    for (const at of ['function closeMoons()', 'function fireAimed()']) {
+      const i = page.indexOf(at)
+      expect(i).toBeGreaterThan(-1)
+      expect(page.slice(i, i + 400)).toMatch(/slideRow = null/)
+    }
+  })
+
+  it('arrives already in place when it opens under a finger', () => {
+    // the row pops in over ~380ms, staggered, each disc scaling about its own
+    // centre — a third of a second of moving targets, right when the thumb is
+    // travelling toward one
+    expect(page).toMatch(/function showMoons\(tl: TL, atOnce = false\)/)
+    expect(page).toMatch(/showMoons\(held, true\)/)
+    expect(page).toMatch(/\(atOnce \? ' now' : ''\)/)
+    expect(page).toMatch(/if \(!reduced && !atOnce\) m\.style\.animationDelay/)
+    expect(sky).toMatch(/\.sky-moon\.now \{ animation: none; \}/)
+    // a tap still gets the entrance: nothing is moving toward it yet
+    expect(page).toMatch(/showMoons\(tl\)\n/)
+  })
+
+  it('lets go of the aim when the moons go', () => {
+    const at = page.indexOf('function closeMoons()')
+    expect(at).toBeGreaterThan(-1)
+    const body = page.slice(at, at + 300)
+    expect(body).toMatch(/sliding = false/)
+    expect(body).toMatch(/aimed = null/)
   })
 })

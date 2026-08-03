@@ -391,6 +391,22 @@ body.sky-held {
 /* Outside the disc, so it can be a readable size and a real word. Nowrap and
    a width it is allowed to exceed: the labels are short, the spacing is set so
    they clear each other, and an ellipsised verb helps nobody. */
+/* The one your thumb is over while you are sliding across them. Bigger and
+   brighter rather than merely tinted: you are looking at the thing you are
+   aiming *from*, not at the menu, so it has to be readable out of the corner
+   of an eye. */
+/* Opened under a finger that is already choosing: no entrance. See the
+   `atOnce` argument to showMoons — an animating disc is a moving target. */
+.sky-moon.now { animation: none; }
+
+.sky-moon.aimed { z-index: 8; }
+.sky-moon.aimed .ic {
+  background: rgba(var(--accent-rgb), 0.28);
+  border-color: rgba(var(--accent-rgb), 0.7);
+  box-shadow: 0 0 18px rgba(var(--accent-rgb), 0.35);
+}
+.sky-moon.aimed .lb { opacity: 1; }
+
 .sky-moon .lb {
   font-size: 11.5px;
   font-weight: 500;
@@ -1445,8 +1461,6 @@ body.sky-dragging .sky-undo.show {
   background: transparent;
   box-shadow: inset 0 0 0 1.5px rgba(27, 36, 48, 0.3);
 }
-.sky-page .top.picking .tone i { transform: scale(0.8); }
-
 /*
  * The palette opens along the bar, not down out of it.
  *
@@ -1484,7 +1498,12 @@ body.sky-dragging .sky-undo.show {
   transition: opacity 160ms ease;
 }
 .sky-page .top.picking .pq,
-.sky-page .top.picking .hand {
+.sky-page .top.picking .hand,
+/* …and the chip itself, which the row is standing on top of. Left visible it
+   showed through between two swatches as a seventh, differently-sized disc —
+   the collision in the middle of the open palette. Faded rather than removed,
+   so the bar does not shuffle sideways as it opens. */
+.sky-page .top.picking .tone {
   opacity: 0;
   pointer-events: none;
 }

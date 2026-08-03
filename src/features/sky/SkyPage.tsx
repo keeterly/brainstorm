@@ -5317,14 +5317,89 @@ function mountSky(root: HTMLDivElement) {
     }
   }
 
+  /*
+   * Aiming with the finger that opened them.
+   *
+   * `sliding` is true from the moment a hold turns into a menu until the
+   * finger comes up. While it is, whatever moon is under the finger — or
+   * nearest it, within a forgiving reach, because a thumb is wider than an
+   * icon and lands short at least as often as on — is the one that will run.
+   */
+  let sliding = false
+  let aimed: HTMLDivElement | null = null
+  /** How far past a moon still counts as meaning it. */
+  const AIM_SLOP = 26
+  /**
+   * Where the row stood when the slide began.
+   *
+   * The moons hang off whatever they belong to, and in this sky that thing is
+   * never still: a drop breathes, a member of an open group is going round,
+   * and the constellation re-centres itself for a second after anything
+   * changes. Measured with a finger down on a member, the row walked 170
+   * points down the glass in under a second — out from under the thumb that
+   * had just opened it.
+   *
+   * So the row stops where it was when you started choosing. Followed until
+   * then, still afterwards, which is exactly as long as it matters.
+   */
+  let slideRow: { x: number; y: number } | null = null
+  function aimAt(x: number, y: number) {
+    let best: HTMLDivElement | null = null
+    let bestD = Infinity
+    for (const m of moonEls) {
+      const r = m.getBoundingClientRect()
+      const cx = r.x + r.width / 2
+      const cy = r.y + r.height / 2
+      const d = Math.hypot(x - cx, y - cy)
+      if (d < r.width / 2 + AIM_SLOP && d < bestD) {
+        bestD = d
+        best = m as HTMLDivElement
+      }
+    }
+    if (best === aimed) return
+    aimed?.classList.remove('aimed')
+    aimed = best
+    if (aimed) {
+      aimed.classList.add('aimed')
+      // one tick per moon crossed, so they can be found without looking
+      haptics.grab()
+    }
+  }
+  /** Let go: the one under the finger runs. */
+  function fireAimed(): boolean {
+    if (!aimed) return false
+    const m = aimed
+    aimed = null
+    m.classList.remove('aimed')
+    sliding = false
+    slideRow = null
+    // its own click handler already holds the action, the dim case and the
+    // closing — this is the same press, arrived at differently
+    m.click()
+    return true
+  }
   function closeMoons() {
+    // whatever was being aimed at is gone with them
+    sliding = false
+    aimed = null
+    slideRow = null
     moonEls.forEach((m) => m.remove())
     moonEls.length = 0
     moonsFor = null
     // the recommendation comes back out when the actions go away
     paintNext()
   }
-  function showMoons(tl: TL) {
+  /**
+   * @param atOnce they arrive already in place, with no entrance.
+   *
+   * The row pops in over about 380ms, staggered a moon at a time, and each
+   * disc scales about its own centre — so for that third of a second the
+   * things you would aim at are still moving. Fine when you tapped and are
+   * about to look; wrong when your finger is already down and travelling,
+   * which is the whole of the hold gesture. Under a finger they are simply
+   * there.
+   */
+  function showMoons(tl: TL, atOnce = false) {
     closeMoons()
     moonsFor = tl.t.id
     // The recommendation steps out of the way of the actions. It knew to — it
@@ -5429,9 +5504,9 @@ function mountSky(root: HTMLDivElement) {
     }
     acts.forEach((a, i) => {
       const m = document.createElement('div')
-      m.className = 'sky-moon' + (a.dim ? ' dim' : '')
+      m.className = 'sky-moon' + (a.dim ? ' dim' : '') + (atOnce ? ' now' : '')
       m.innerHTML = `<div class="ic">${moonSvg(a.icon)}</div><div class="lb">${a.lb}</div>`
-      if (!reduced) m.style.animationDelay = i * 45 + 'ms'
+      if (!reduced && !atOnce) m.style.animationDelay = i * 45 + 'ms'
       // the disc's own centre, so a moon shrinks and grows around the thing you
       // are aiming at rather than around the top-left of its label block
       m.style.transformOrigin = `${MOON_R}px ${MOON_R}px`
@@ -5478,6 +5553,18 @@ function mountSky(root: HTMLDivElement) {
       ? Math.max(orbitR(tl), ringR) + memberR(tl.members.length) + 46
       : (peek === tl.t.id && grown ? grown.hh : radiusOf(tl)) + 52
 
+    /*
+     * …unless a finger is choosing from it, in which case it stands still.
+     *
+     * Taken on the first frame of the slide rather than when the hold fired:
+     * a freshly made moon has no transform yet and is briefly at the world
+     * origin, so anchoring any earlier would nail the row to the top of the
+     * sky. See `slideRow`.
+     */
+    if (sliding && !slideRow) slideRow = { x: p.x, y: p.y + below }
+    const rowX = slideRow ? slideRow.x : p.x
+    const rowY = slideRow ? slideRow.y : p.y + below
+
     // As wide as they can be and still all fit — worked out in screen pixels,
     // because the glass is measured in screen pixels and a moon undoes the
     // camera's scale to keep its real size. The old sum did the spacing in
@@ -5499,15 +5586,19 @@ function mountSky(root: HTMLDivElement) {
       const half = ((n - 1) / 2) * step + MOON_R + MOON_EDGE
       const lo = toWorldX(half)
       const hi = toWorldX(W - half)
-      const cx = lo > hi ? (toWorldX(0) + toWorldX(W)) / 2 : Math.max(lo, Math.min(hi, p.x))
+      const cx = lo > hi ? (toWorldX(0) + toWorldX(W)) / 2 : Math.max(lo, Math.min(hi, rowX))
       const x = cx + (slot - (n - 1) / 2) * gap - MOON_R
       // and never under the tab bar, however low the thing itself is — the
       // label hangs below the disc now, so this clears more than the disc
       const floor = toWorldY(waterlineY() - 132) - MOON_R
-      const y = Math.min(p.y + below, floor)
+      const y = Math.min(rowY, floor)
       // the moons live in the world but are things you tap: they keep their
       // real size however far out the camera has pulled
-      m.style.transform = `translate(${x}px, ${y}px) scale(${(1 / cam.k).toFixed(3)})`
+      // …and the one being aimed at stands up out of the row. Folded into the
+      // inline transform because this line runs every frame and would
+      // otherwise overwrite anything the stylesheet had to say about it.
+      const grow = m.classList.contains('aimed') ? 1.18 : 1
+      m.style.transform = `translate(${x}px, ${y}px) scale(${((grow / cam.k)).toFixed(3)})`
     })
   }
 
@@ -6703,16 +6794,31 @@ function mountSky(root: HTMLDivElement) {
     }
     stage.setPointerCapture(e.pointerId)
     if (holdTimer) clearTimeout(holdTimer)
-    if (!memberPool) {
-      holdTimer = setTimeout(() => {
-        if (drag && !drag.moved) {
-          const held = drag.tl
-          drag.el.classList.remove('dragging')
-          drag = null
-          startPull(held, false)
-        }
-      }, 430)
-    }
+    holdTimer = setTimeout(() => {
+      if (drag && !drag.moved) {
+        /*
+         * Hold, slide, release.
+         *
+         * Holding a bubble used to try to gather what was like it, which on
+         * most things answers "nothing like-minded near it yet" — a gesture
+         * whose commonest outcome is being told it did nothing. Gather
+         * belongs with the other organising verbs on the group page anyway,
+         * which is where the moons' own note says it went.
+         *
+         * So the hold opens the thing's actions and *keeps your finger*: the
+         * one under it lights up, and letting go there does it. No second
+         * tap, no aiming twice, and nothing left on the screen afterwards
+         * unless you released without choosing.
+         */
+        const held = drag.tl
+        drag.el.classList.remove('dragging')
+        drag = null
+        showMoons(held, true)
+        haptics.grab()
+        sliding = true
+        aimAt(e.clientX, e.clientY)
+      }
+    }, 430)
   })
   stage.addEventListener('pointermove', (e) => {
     if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
@@ -6721,6 +6827,11 @@ function mountSky(root: HTMLDivElement) {
       const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1
       camTarget = null
       zoomAt(pinch.mx, pinch.my, pinch.k * (dist / pinch.dist))
+      return
+    }
+    // the finger that opened the menu is still choosing from it
+    if (sliding) {
+      aimAt(e.clientX, e.clientY)
       return
     }
     if (!drag && panFrom) {
@@ -6918,6 +7029,18 @@ function mountSky(root: HTMLDivElement) {
     }
     panFrom = null
     if (holdTimer) clearTimeout(holdTimer)
+    /*
+     * Released out of a hold. Landing on one of them does it; landing on
+     * nothing leaves them up, because a hold that opens a menu and then takes
+     * it away when your thumb was a few points short is a gesture that
+     * punishes you for using it. From there it is the row it has always been.
+     */
+    if (sliding) {
+      sliding = false
+      if (fireAimed()) return
+      aimed = null
+      return
+    }
     if (holding && !holding.auto) {
       endHold(true)
       return
