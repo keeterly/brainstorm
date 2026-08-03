@@ -1450,13 +1450,36 @@ describe('the colour and the handing-over live in the top bar', () => {
   const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
   const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
 
-  it('is one circle that unrolls, not six taking a line', () => {
+  it('opens along the bar rather than hanging down out of it', () => {
+    // it was a column: 280 points of swatches down the middle of the screen,
+    // over the list it was about, over Select, over the rows — a curtain
     expect(page).toMatch(/data-sky="pageTone"/)
     expect(page).toMatch(/data-sky="pageTones"/)
-    expect(sky).toMatch(/\.sky-page \.top \.tones \{[^}]*flex-direction: column/s)
+    const rule = sky.slice(sky.indexOf('.sky-page .top .tones {'), sky.indexOf('.sky-page .top.picking .tones'))
+    expect(rule).not.toMatch(/flex-direction: column/)
+    expect(rule).toMatch(/top: calc\(var\(--sat\) \+ 18px\)/)
+    expect(rule).toMatch(/height: 44px/)
     // shut means unreachable, not merely invisible
-    expect(sky).toMatch(/\.sky-page \.top \.tones \{[^}]*pointer-events: none/s)
-    expect(sky).toMatch(/\.tone-wrap\.open \.tones \{[^}]*pointer-events: auto/s)
+    expect(rule).toMatch(/pointer-events: none/)
+    expect(sky).toMatch(/\.sky-page \.top\.picking \.tones \{[^}]*pointer-events: auto/s)
+  })
+
+  it('never swallows the way out', () => {
+    // an expanding control that covers the close is worse than one that is
+    // hard to reach: the row stops short of it
+    const rule = sky.slice(sky.indexOf('.sky-page .top .tones {'), sky.indexOf('.sky-page .top.picking .tones'))
+    expect(rule).toMatch(/right: 70px/)
+    expect(sky).not.toMatch(/\.top\.picking \.x/)
+  })
+
+  it('steps the label and the hand-it-over aside for the moment', () => {
+    expect(sky).toMatch(/\.sky-page \.top\.picking \.pq,\n\.sky-page \.top\.picking \.hand \{[^}]*opacity: 0/s)
+  })
+
+  it('puts itself away when you look at anything else', () => {
+    const at = page.indexOf("page.addEventListener('pointerdown'")
+    expect(at).toBeGreaterThan(-1)
+    expect(page.slice(at, at + 420)).toMatch(/closest\('\.tones'\)[\s\S]*shutTones\(\)/)
   })
 
   it('shows no colour as a ring rather than as a grey one', () => {
@@ -1464,7 +1487,7 @@ describe('the colour and the handing-over live in the top bar', () => {
   })
 
   it('is offered only on a thing’s own page, and shuts when one opens', () => {
-    const at = page.indexOf("toneWrap.hidden = mode !== 'open'")
+    const at = page.indexOf("pageTone.hidden = mode !== 'open'")
     expect(at).toBeGreaterThan(-1)
     const near = page.slice(at, at + 400)
     expect(near).toMatch(/pageShare\.hidden = mode !== 'open'/)

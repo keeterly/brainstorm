@@ -143,19 +143,21 @@ export default function SkyPage() {
               where they can be reached. They used to live at the foot of the
               list — which on a list of seven is a scroll away, and the colour
               row scrolled off the top the moment you looked at anything. */}
-          <div className="tone-wrap" data-sky="toneWrap" hidden>
-            <button className="tone" data-sky="pageTone" aria-label="Colour" aria-expanded="false">
-              <i />
-            </button>
-            {/* the rest of the palette, unrolled downward on a tap */}
-            <div className="tones" data-sky="pageTones" role="group" aria-label="Colours" />
-          </div>
+          <button className="tone" data-sky="pageTone" aria-label="Colour" aria-expanded="false" hidden>
+            <i />
+          </button>
           <button className="hand" data-sky="pageShare" aria-label="Send it to someone" hidden>
             <Ico d="M12 15.4V4.2M8.1 8.1 12 4.2l3.9 3.9M5.4 13.2v5a1.8 1.8 0 0 0 1.8 1.8h9.6a1.8 1.8 0 0 0 1.8-1.8v-5" />
           </button>
           <button className="x" data-sky="pageX" aria-label="Close">
             ×
           </button>
+          {/* The palette opens *along* the bar rather than down out of it. A
+              column hung two hundred and eighty points down the middle of the
+              screen, over the list it was about — a curtain, not a control.
+              This takes the bar it is already in: the label and the
+              hand-it-over step aside for the moment it is open. */}
+          <div className="tones" data-sky="pageTones" role="group" aria-label="Colours" />
         </div>
         {/* Where this writing will land, said before it lands. Tappable: one
             tap swaps "into the group you are standing in" for "loose in the
@@ -669,7 +671,6 @@ function mountSky(root: HTMLDivElement) {
   const page = $('page')
   const pageQ = $('pageQ')
   const pageInto = $<HTMLButtonElement>('pageInto')
-  const toneWrap = $('toneWrap')
   const pageTone = $<HTMLButtonElement>('pageTone')
   const pageTones = $('pageTones')
   const pageShare = $<HTMLButtonElement>('pageShare')
@@ -2959,7 +2960,9 @@ function mountSky(root: HTMLDivElement) {
   let toneFor: TL | null = null
   pageTones.innerHTML = TINT_NAMES.map(
     (n, i) =>
-      `<button class="tint" data-tint="${n}" style="--tint:${tintRGB(n)};--i:${i}" aria-label="Make it ${n}"></button>`,
+      // counted from the right, because that is the end it grows out of
+      `<button class="tint" data-tint="${n}" style="--tint:${tintRGB(n)};--i:${TINT_NAMES.length - 1 - i}" ` +
+      `aria-label="Make it ${n}"></button>`,
   ).join('')
   function paintTone() {
     const t = toneFor?.t
@@ -2974,15 +2977,24 @@ function mountSky(root: HTMLDivElement) {
       b.setAttribute('aria-label', b.dataset.tint === worn ? `Take the ${b.dataset.tint} off` : `Make it ${b.dataset.tint}`)
     }
   }
+  const topBar = page.querySelector('.top') as HTMLDivElement
   function shutTones() {
-    toneWrap.classList.remove('open')
+    topBar.classList.remove('picking')
     pageTone.setAttribute('aria-expanded', 'false')
   }
   pageTone.addEventListener('click', (e) => {
     e.stopPropagation()
-    const open = !toneWrap.classList.contains('open')
-    toneWrap.classList.toggle('open', open)
+    const open = !topBar.classList.contains('picking')
+    topBar.classList.toggle('picking', open)
     pageTone.setAttribute('aria-expanded', String(open))
+  })
+  // …and anywhere else on the page puts it away, the way every open thing in
+  // this app closes: by you looking at something else.
+  page.addEventListener('pointerdown', (e) => {
+    if (!topBar.classList.contains('picking')) return
+    const on = e.target as HTMLElement
+    if (on.closest('.tones') || on.closest('.tone')) return
+    shutTones()
   })
   for (const b of [...pageTones.querySelectorAll('.tint')] as HTMLButtonElement[]) {
     b.addEventListener('click', (e) => {
@@ -3908,7 +3920,7 @@ function mountSky(root: HTMLDivElement) {
     // asking out loud is the most natural way to ask
     // the two things you do *to* a thing live in the top bar, and only a
     // thing's own page has a thing for them to be done to
-    toneWrap.hidden = mode !== 'open' || !tl
+    pageTone.hidden = mode !== 'open' || !tl
     pageShare.hidden = mode !== 'open' || !tl
     toneFor = mode === 'open' && tl ? tl : null
     shutTones()
