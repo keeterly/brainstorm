@@ -83,14 +83,25 @@ export const WAKE: RippleSpec = {
   ease: 'cubic-bezier(0.22, 0.61, 0.36, 1)',
 }
 
+/** How far past the rim each ring gets, in order. */
+const ROUSED_REACH = [17, 41, 72, 110] as const
+
 /**
  * Something in the sky, roused by a finger held on it.
  *
- * Sized to the thing rather than fixed, and leaving its rim rather than its
- * middle — a ripple whose first ring is smaller than the bubble it came out of
- * looks like weather behind the bubble, not the bubble answering. Four rings,
- * each reaching further and each a little less bright, over the beat in which
- * its actions arrive.
+ * Leaving its rim rather than its middle — a ripple whose first ring is
+ * smaller than the bubble it came out of looks like weather behind the bubble,
+ * not the bubble answering. Four rings, each reaching further and each a
+ * little less bright, over the beat in which its actions arrive.
+ *
+ * The reach is **added** to the rim, not multiplied by it. Multiplying was the
+ * obvious thing and it was wrong: at three and a half times its diameter, an
+ * open group threw a ring wider than the phone, so what you saw was a curve
+ * crossing the whole screen with its centre nowhere in sight and no visible
+ * relationship to the thing that sent it. Adding gives a halo of the same
+ * thickness whatever it came off, which is what makes it legible as *this
+ * thing's* answer — a big group and a small drop both get a ring hugging their
+ * own edge.
  *
  * @param d the thing's diameter, measured, because a drop, an opened card and
  *   a group are three very different sizes.
@@ -98,12 +109,7 @@ export const WAKE: RippleSpec = {
 export function roused(d: number, seed?: number): RippleSpec {
   const w = Math.max(44, d)
   return {
-    rings: [
-      [w * 1.28, 0],
-      [w * 1.85, 95],
-      [w * 2.6, 205],
-      [w * 3.5, 330],
-    ],
+    rings: ROUSED_REACH.map((reach, i) => [w + reach * 2, [0, 95, 205, 330][i]] as const),
     start: w,
     life: 1150,
     lit: 0.68,

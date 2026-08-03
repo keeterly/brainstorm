@@ -166,6 +166,21 @@ describe('a thing roused by a finger held on it', () => {
     expect(Number(rings()[0].style.getPropertyValue('--from'))).toBeLessThanOrEqual(0.92)
   })
 
+  it('reaches the same distance past the rim whatever it came off', () => {
+    /*
+     * The reach used to be a multiple of the thing's own size. At three and a
+     * half times its diameter an open group threw a ring wider than the phone,
+     * so what you saw was a curve crossing the whole screen with its centre
+     * nowhere in sight — rings that plainly came from somewhere else.
+     */
+    const past = (d: number) => roused(d).rings.map(([w]) => (w - d) / 2)
+    expect(past(300)).toEqual(past(60))
+    // and the widest ring stays a halo rather than becoming the picture: well
+    // inside a phone's width even off something as big as an open group
+    const widest = roused(300).rings[3][0]
+    expect(widest - 300).toBeLessThan(260)
+  })
+
   it('is at least a thumb across, so a tiny thing still answers visibly', () => {
     expect(roused(4).rings[0][0]).toBeGreaterThan(40)
   })
