@@ -13,6 +13,8 @@
  * clipboard is the fallback, and on a desktop it is usually the better answer
  * anyway.
  */
+import { plainText } from './plain-text'
+
 export type SentHow = 'shared' | 'copied' | 'cancelled' | 'failed'
 
 /** True if this device can put things in front of other apps. */
@@ -23,12 +25,20 @@ export function canShare(): boolean {
 /**
  * Put a piece of finished work somewhere a person can use it.
  *
- * Markdown, deliberately. It is the format the model wrote it in, it pastes
- * into Notes and Mail as readable text, and it survives arriving somewhere
- * that understands it as headings and lists.
+ * Levelled to plain text on the way out. This used to hand over the raw
+ * markdown, deliberately, on the argument that it "survives arriving somewhere
+ * that understands it as headings and lists" — which is true of the places
+ * that do, and the share sheet does not tell you which one you picked. The
+ * commonest destination is Messages, and what landed there was
+ * `# Beyond identifying the 3 target lenders…` followed by
+ * `- [SBA 7(a) Paperwork Explained](https://…)`. A brief nobody can read is a
+ * brief that did not leave the app.
+ *
+ * Done here rather than at each call site so there is one boundary and no way
+ * for the next thing that sends work to forget.
  */
 export async function sendWork(title: string, markdown: string): Promise<SentHow> {
-  const text = markdown.trim()
+  const text = plainText(markdown)
   if (!text) return 'failed'
   if (canShare()) {
     try {
@@ -49,7 +59,7 @@ export async function sendWork(title: string, markdown: string): Promise<SentHow
 
 /** The other way out, and the one a desktop usually wants. */
 export async function copyWork(markdown: string): Promise<SentHow> {
-  const text = markdown.trim()
+  const text = plainText(markdown)
   if (!text) return 'failed'
   try {
     await navigator.clipboard.writeText(text)

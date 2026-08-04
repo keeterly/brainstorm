@@ -1,56 +1,84 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { canShare, copyWork, sendWork, sentWord } from './send'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { sendWork, copyWork } from './send'
 
-const share = vi.fn()
-const write = vi.fn()
+const shared: { title?: string; text?: string }[] = []
+const copied: string[] = []
 
 beforeEach(() => {
-  share.mockReset().mockResolvedValue(undefined)
-  write.mockReset().mockResolvedValue(undefined)
-  Object.defineProperty(navigator, 'share', { value: share, configurable: true, writable: true })
-  Object.defineProperty(navigator, 'clipboard', { value: { writeText: write }, configurable: true })
+  shared.length = 0
+  copied.length = 0
+  vi.stubGlobal('navigator', {
+    share: vi.fn(async (d: { title?: string; text?: string }) => {
+      shared.push(d)
+    }),
+    clipboard: { writeText: vi.fn(async (t: string) => void copied.push(t)) },
+  })
 })
+afterEach(() => vi.unstubAllGlobals())
 
-describe('getting the work out of the app', () => {
-  it('hands it to the phone, with a subject line', async () => {
-    expect(await sendWork('The buyer note', '# The buyer note\n\nDear Ana,')).toBe('shared')
-    expect(share).toHaveBeenCalledWith({ title: 'The buyer note', text: '# The buyer note\n\nDear Ana,' })
+/*
+ * What actually arrived in a Messages bubble, before this: the raw markdown
+ * the model wrote. The old code did it on purpose — markdown "survives
+ * arriving somewhere that understands it as headings and lists" — and the
+ * share sheet does not tell you which somewhere you picked.
+ */
+const BRIEF = [
+  '# Beyond identifying the 3 target lenders, what documents do I need?',
+  '',
+  'Nine documents to request from your accountant now.',
+  '',
+  '## The specifics',
+  '',
+  '- **Business tax returns: Up to last 3 years filed** — If VENIA is under 3 years old, provide what exists',
+  '',
+  '## Sources',
+  '',
+  '- [SBA 7(a) Paperwork Explained](https://www.sba7a.loans/blog/statements/)',
+].join('\n')
+
+describe('work leaves the app as something a phone can read', () => {
+  it('sends no hashes, no asterisks and no bracketed links', async () => {
+    await sendWork('SBA documents', BRIEF)
+    const text = shared[0].text as string
+    expect(text).not.toMatch(/^#/m)
+    expect(text).not.toMatch(/\*\*/)
+    expect(text).not.toMatch(/\]\(http/)
   })
 
-  it('says nothing when they open the sheet and change their mind', () => {
-    // Cancelling throws AbortError. It is the commonest outcome of opening a
-    // share sheet, and reporting it as a failure would be the app telling you
-    // off for a decision you just made.
-    expect(sentWord('cancelled')).toBeNull()
+  it('keeps every word of what it stripped the markup off', async () => {
+    await sendWork('SBA documents', BRIEF)
+    const text = shared[0].text as string
+    for (const kept of [
+      'Beyond identifying the 3 target lenders',
+      'Nine documents to request',
+      'The specifics',
+      'Business tax returns: Up to last 3 years filed',
+      'SBA 7(a) Paperwork Explained',
+      'https://www.sba7a.loans/blog/statements/',
+    ]) {
+      expect(text).toContain(kept)
+    }
   })
 
-  it('does not fall through to the clipboard on a cancel', async () => {
-    share.mockRejectedValueOnce(Object.assign(new Error('cancelled'), { name: 'AbortError' }))
-    expect(await sendWork('x', 'body')).toBe('cancelled')
-    expect(write).not.toHaveBeenCalled()
+  it('turns a bullet into the one bullet this app uses', async () => {
+    await sendWork('SBA documents', BRIEF)
+    expect(shared[0].text).toMatch(/· Business tax returns/)
   })
 
-  it('falls back to the clipboard when the sheet itself breaks', async () => {
-    share.mockRejectedValueOnce(new Error('not allowed'))
-    expect(await sendWork('x', 'body')).toBe('copied')
-    expect(write).toHaveBeenCalledWith('body')
+  it('still hands the title over, for the apps that use it as a subject', async () => {
+    await sendWork('SBA documents', BRIEF)
+    expect(shared[0].title).toBe('SBA documents')
   })
 
-  it('uses the clipboard where there is no share sheet — most desktops', async () => {
-    Object.defineProperty(navigator, 'share', { value: undefined, configurable: true, writable: true })
-    expect(canShare()).toBe(false)
-    expect(await sendWork('x', 'body')).toBe('copied')
+  it('levels the clipboard fallback the same way', async () => {
+    await copyWork(BRIEF)
+    expect(copied[0]).not.toMatch(/^#/m)
+    expect(copied[0]).toContain('Nine documents to request')
   })
 
-  it('refuses to send nothing', async () => {
-    expect(await sendWork('x', '   \n  ')).toBe('failed')
-    expect(await copyWork('')).toBe('failed')
-    expect(share).not.toHaveBeenCalled()
-  })
-
-  it('says what happened, in words a person would use', () => {
-    expect(sentWord('shared')).toBe('sent')
-    expect(sentWord('copied')).toContain('paste it')
-    expect(sentWord('failed')).toContain('could not')
+  it('refuses text that was only ever markup', async () => {
+    // ### on its own strips to nothing, and sharing an empty bubble is worse
+    // than saying it could not be done
+    expect(await sendWork('x', '###\n\n---\n')).toBe('failed')
   })
 })

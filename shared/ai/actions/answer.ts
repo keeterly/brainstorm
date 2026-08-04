@@ -74,8 +74,16 @@ const Output = z.object({
       }),
     )
     .max(8),
-  /** how fresh this is, and how fast it goes off */
-  asOf: z.string().max(160),
+  /**
+   * How fresh this is, and how fast it goes off.
+   *
+   * 220 rather than 160: at the old cap the model was writing to the edge and
+   * stopping mid-clause — "document lists are stable but exact freshness
+   * windows (60 vs 90 days) vary slightly by" — which reads as a bug in the
+   * app rather than a caveat about the world. The prompt asks for one finished
+   * sentence; this is the room to finish it.
+   */
+  asOf: z.string().max(220),
   /** what could not be pinned down, and the one thing that would pin it */
   unknown: z
     .array(
@@ -194,14 +202,19 @@ export const answer: ActionDef<AnswerInput, AnswerOutput> = {
         `${s.due ? `\ndue ${s.due}` : ''}${under}${around}${asked}${picture}\n\n` +
         `asked: the question as it actually reads, in one plain line. If the wording is shorthand, say the full ` +
         `question it stands for.\n` +
-        `answer: the answer itself, two to five sentences. Open with the specific thing — the figure, the name, ` +
-        `the date, the yes or no. Then only what is needed to use it. No preamble, no restating the question, ` +
-        `no encouragement.\n` +
+        `answer: the answer itself, two to five sentences of prose. Open with the specific thing — the figure, ` +
+        `the name, the date, the yes or no. Then only what is needed to use it. No preamble, no restating the ` +
+        `question, no encouragement. Never a list in disguise: if the answer is nine things, they belong in ` +
+        `facts and this says what they add up to. "Nine documents, and the freshness rule is the part that ` +
+        `trips people: everything financial has to be dated within 90 days of submitting." Not "(1) business ` +
+        `federal tax returns; (2) year-to-date P&L; (3) current balance sheet…" — that is the facts rows ` +
+        `again, run together, and it is read twice or not at all.\n` +
         `facts: the concrete part, one row each, so it can be read at a glance. At most 8. Label short, value ` +
         `specific ("$1,180–$1,420 round trip", "Air France AF65, 777-300ER"). Note is one line of what makes that row ` +
         `matter. Skip the row entirely rather than pad it.\n` +
-        `asOf: when this is true as of, and how quickly it moves. Say it in their terms — "fares checked today; ` +
-        `these move daily" beats an ISO date.\n` +
+        `asOf: when this is true as of, and how quickly it moves. One finished sentence — say it in their ` +
+        `terms, "fares checked today; these move daily" beats an ISO date. Stop while you have room: a ` +
+        `caveat that runs out mid-clause ("…windows vary slightly by") is worse than no caveat.\n` +
         `unknown: only what you genuinely could not settle. For each, the one specific thing that would settle ` +
         `it — the query to run, the person to ask, the page to log into. Empty is a good answer.\n` +
         `next: leave this empty unless the answer itself created real work that is not already on their map. At ` +

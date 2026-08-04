@@ -1731,3 +1731,58 @@ describe('a tap goes in; the actions belong to the hold', () => {
     expect(page).toMatch(/rippleAt\(x, y, WAKE\)/)
   })
 })
+
+
+describe('a brief that leaves the app reads like a message', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+  const send = readFileSync(join('src/lib', 'send.ts'), 'utf8')
+
+  it('is levelled to plain text at the one boundary work leaves through', () => {
+    // `# Beyond identifying the 3 target lenders…` arrived in a Messages
+    // bubble exactly like that. The old code did it deliberately, on the
+    // argument that markdown survives where it is understood — and the share
+    // sheet never says which somewhere you picked.
+    expect(send).toMatch(/import \{ plainText \} from '\.\/plain-text'/)
+    expect(send).toMatch(/const text = plainText\(markdown\)/)
+    // both ways out, or the desktop path keeps the old behaviour
+    expect(send.match(/plainText\(markdown\)/g)?.length).toBe(2)
+  })
+
+  it('stops dressing the title and the sources in markup of its own', () => {
+    const at = page.indexOf('function sendable(')
+    expect(at).toBeGreaterThan(-1)
+    const body = page.slice(at, at + 1200)
+    expect(body).not.toMatch(/`# \$\{art\.title\}/)
+    expect(body).not.toMatch(/## Sources/)
+    expect(body).not.toMatch(/- \[\$\{/)
+    // the one bullet this app uses, and the address after the words rather
+    // than hidden behind them
+    expect(body).toMatch(/· \$\{name\} — \$\{x\.url\}/)
+  })
+
+  it('does not print the title twice when the brief already opens with it', () => {
+    const at = page.indexOf('function sendable(')
+    expect(page.slice(at, at + 1200)).toMatch(/replace\(\/\^#\{1,6\}\\s\+\/, ''\)\.startsWith\(title\)/)
+  })
+})
+
+describe('an answer is not its own list, said twice', () => {
+  const answer = readFileSync(join('shared/ai/actions', 'answer.ts'), 'utf8')
+
+  it('sends the enumeration to facts and keeps the prose to what it adds up to', () => {
+    // the export led with 700 characters of "(1) business federal tax
+    // returns; (2) year-to-date P&L; (3) current balance sheet…" and then
+    // printed the same nine as rows underneath
+    expect(answer).toMatch(/Never a list in disguise/)
+    // split across the template concatenation in source, so matched apart
+    expect(answer).toMatch(/facts and this says what they add up to/)
+  })
+
+  it('gives the freshness caveat room to finish its sentence', () => {
+    // "…exact freshness windows (60 vs 90 days) vary slightly by" — stopped
+    // mid-clause at the old cap, which reads as a bug in the app rather than
+    // a caveat about the world
+    expect(answer).toMatch(/asOf: z\.string\(\)\.max\(220\)/)
+    expect(answer).toMatch(/Stop while you have room/)
+  })
+})

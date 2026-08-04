@@ -25,43 +25,13 @@ export interface Shareable {
   sources?: { title: string; url: string }[]
 }
 
-const clean = (s: string) => s.replace(/\s+/g, ' ').trim()
+import { plainText } from '@/lib/plain-text'
 
-/**
- * The agent writes markdown. A message bubble does not read it.
- *
- * What went out was raw: `# The wall is about mass without edges`, `##  What
- * runs through it`, `- **a single dark form**`. Seen in somebody's Messages
- * thread, that is not a thought you shared, it is a file you leaked. Headings
- * become plain lines, emphasis is dropped, bullets become the one bullet this
- * app uses everywhere, and a link becomes its words with the address after
- * them — because a bare `[text](url)` is unreadable and a bare url is
- * untrustworthy.
- */
-export function plainText(md: string): string {
-  return md
-    .replace(/```[\s\S]*?```/g, '')
-    .split('\n')
-    .map((raw) => {
-      let l = raw.trimEnd()
-      l = l.replace(/^\s{0,3}#{1,6}\s+/, '')
-      l = l.replace(/^\s*[-*+]\s+/, '· ')
-      l = l.replace(/^\s*(\d+)\.\s+/, '$1. ')
-      l = l.replace(/^\s*>\s?/, '')
-      // [words](url) → words (url); an image is not text at all
-      l = l.replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-      l = l.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)')
-      l = l.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '$1')
-      l = l.replace(/__([^_]+)__/g, '$1')
-      l = l.replace(/`([^`]+)`/g, '$1')
-      l = l.replace(/^\s*([-*_])\1{2,}\s*$/, '')
-      return l.trimEnd()
-    })
-    .join('\n')
-    // three or more blank lines is what stripping a heading leaves behind
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
+// Re-exported: this is where it was born and where its tests still point, but
+// it belongs to anything handing text to a share sheet — see lib/plain-text.
+export { plainText }
+
+const clean = (s: string) => s.replace(/\s+/g, ' ').trim()
 
 /**
  * One thought, as something you could paste into a message.

@@ -2818,22 +2818,35 @@ function mountSky(root: HTMLDivElement) {
   /** The brief ⚡ brought back for this thought, if it went out for one. */
   const briefOf = (id: string) => S().artifacts.find((a) => a.thought_id === id) ?? null
   /**
-   * A brief as something you could paste into a mail.
+   * A brief as something you could paste into a message.
    *
    * The stored markdown plus its sources, which live in a column of their own
    * because the page renders them as real links — so the copy that leaves the
    * app has to put them back or it arrives as an argument with no evidence.
+   *
+   * Written plainly rather than as markdown. It used to add `# ` to the title
+   * and `- [name](url)` to every source, on the reasoning that the recipient
+   * might be somewhere that renders it. Some are. The share sheet does not say
+   * which, and the one it usually is renders none of it — so what arrived was
+   * a hash, a title, and five bracketed URLs. `sendWork` levels the body the
+   * same way; this stops adding markup of its own for it to strip back off.
    */
   function sendable(art: { title: string; content_md: string; sources: { title: string; url: string }[] }): string {
     const body = art.content_md.trim()
-    const head = body.startsWith('# ') ? '' : `# ${art.title}\n\n`
-    const cited = /^##\s*sources/im.test(body)
+    const title = art.title.trim()
+    // the title, unless the body already opens with it under any dressing
+    const opens = body.replace(/^#{1,6}\s+/, '').startsWith(title)
+    const head = !title || opens ? '' : `${title}\n\n`
+    const cited = /^#{0,6}\s*sources:?\s*$/im.test(body)
     const tail =
       !cited && art.sources.length
-        ? '\n\n## Sources\n\n' +
+        ? '\n\nSources:\n' +
           art.sources
             .filter((x) => isWebUrl(x.url))
-            .map((x) => `- [${x.title.trim() || x.url}](${x.url})`)
+            .map((x) => {
+              const name = x.title.trim()
+              return name && name !== x.url ? `· ${name} — ${x.url}` : `· ${x.url}`
+            })
             .join('\n')
         : ''
     return head + body + tail + '\n'
