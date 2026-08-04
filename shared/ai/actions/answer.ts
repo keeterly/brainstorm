@@ -98,7 +98,9 @@ const Output = z.object({
     .max(3),
   sources: sourceList(10),
   /** durable facts about this person, worth remembering next time */
-  learned: z.array(z.string().max(200)).max(3),
+  // Short, because these go straight into memory and a 200-character
+  // observation there is a paragraph nobody reads twice — see remember.ts.
+  learned: z.array(z.string().max(140)).max(3),
   /** whether asking this is now finished — the answer is in hand and there is
    *  nothing left of it to do */
   settled: z.boolean(),

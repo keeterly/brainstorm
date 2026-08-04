@@ -65,7 +65,9 @@ const Output = z.object({
     )
     .max(3),
   // durable things about them worth keeping
-  learned: z.array(z.string().max(200)).max(3),
+  // Short, because these go straight into memory and a 200-character
+  // observation there is a paragraph nobody reads twice — see remember.ts.
+  learned: z.array(z.string().max(140)).max(3),
 })
 
 export type NoticeInput = z.infer<typeof Input>

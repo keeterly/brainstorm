@@ -121,6 +121,14 @@ export const DEMO_SEED = {
     mem('me4', 'Will not travel during production weeks', 'constraint', 2, 21),
     // never once carried — the one the page has something to say about
     mem('me5', 'The trim supplier in Como closes for all of August', 'fact', 1),
+    // long on purpose: the row clamps it, and the demo should show that
+    mem(
+      'me6',
+      'Prefers to see the actual drawn thing before agreeing to a direction, not another description of it',
+      'preference',
+      4,
+      3,
+    ),
   ],
   // What ⚡ brings back. The demo used to show every part of the app except the
   // one that does the most work.

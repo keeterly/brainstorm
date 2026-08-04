@@ -48,8 +48,17 @@ const Op = z.object({
   op: z.enum(['add', 'update', 'archive', 'noop']),
   /** which existing memory this is about — required for update, archive, noop */
   id: z.string().max(64).optional(),
-  /** the memory as it should now read — required for add and update */
-  content: z.string().max(200).optional(),
+  /**
+   * The memory as it should now read — required for add and update.
+   *
+   * 160, down from 200. At 200 the model wrote paragraphs: "Tends to open many
+   * parallel threads (business + app design + philosophy notes) and spec
+   * multiple angles of one mechanism as separate deliverables before testing on
+   * real material, rather than…" — which ran out of room mid-clause and went
+   * into memory like that. Seventeen of those is not a memory, it is a report,
+   * and nobody reads it twice. The cap is the backstop; the prompt is the rule.
+   */
+  content: z.string().max(160).optional(),
   kind: z.enum(KINDS).optional(),
   /** one short line, in their language, for why this changed */
   why: z.string().max(160).optional(),
@@ -102,12 +111,18 @@ export const remember: ActionDef<RememberInput, RememberOutput> = {
         `existing memory but better, more precisely, or has narrowed it — give that memory's id and the ` +
         `full replacement text. "archive" when this material directly contradicts an existing memory — give ` +
         `its id. "noop" when an existing memory already covers it — give its id, and nothing else.\n` +
-        `content: the memory itself, for add and update. One short sentence, in the third person, standing ` +
-        `on its own: someone reading it a year from now with no other context must understand it. Not "the ` +
-        `usual mill" — name the mill.\n` +
+        `content: the memory itself, for add and update. One short sentence in the third person, under a ` +
+        `hundred characters, standing on its own: someone reading it a year from now with no other context ` +
+        `must understand it. Not "the usual mill" — name the mill. Write the claim, never the evidence for ` +
+        `it or where you noticed it. If it needs a "rather than…" or a "when they…" clause to be true, it ` +
+        `is two memories, or it is a note about one conversation and not a memory at all. "Works best in ` +
+        `the morning" is a memory. "Tends to open many parallel threads and spec multiple angles of one ` +
+        `mechanism before testing on real material" is a paragraph from a report.\n` +
         `kind: preference (what they always want) · constraint (what they cannot or will not do) · pattern ` +
         `(how they work) · fact (something durably true about their situation) · person · tool · goal.\n` +
-        `why: one short line for the trail, in their language, only when something changed. Skip it on noop.`,
+        `why: one short line for the trail, in their language, only when something changed — the reason it ` +
+        `is now believed, not where you happened to notice it. "They said so twice this week", not ` +
+        `"direct observation from the mobile screen work". Skip it on noop.`,
     }
   },
 }

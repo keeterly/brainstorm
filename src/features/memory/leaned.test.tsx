@@ -59,14 +59,67 @@ describe('the page shows its own claim being kept', () => {
     expect(screen.queryByText(/things kept/)).toBeNull()
   })
 
-  it('says when each one was last actually needed', () => {
+  it('says when it was last actually needed, once you ask', () => {
+    seed([mem({ content: 'writes to buyers plainly', last_used_at: new Date().toISOString() })])
+    show()
+    // not before: this page is a list you scan, and four lines per memory is
+    // a wall you scroll past rather than a thing you can check
+    expect(screen.queryByText(/last used today/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /writes to buyers plainly/ }))
+    expect(screen.getByText(/last used today/)).toBeTruthy()
+  })
+
+  it('says "all of them in use" rather than the same number twice', () => {
+    // "3 things kept · 3 leaned on this week" is a true sentence that says
+    // nothing — the ranker carries twelve a run, so on a small memory
+    // everything gets carried and the count is the total wearing a hat
     seed([
-      mem({ content: 'writes to buyers plainly', last_used_at: new Date().toISOString() }),
-      mem({ content: 'the supplier in Como', last_used_at: null }),
+      mem({ content: 'a', last_used_at: new Date().toISOString() }),
+      mem({ content: 'b', last_used_at: new Date().toISOString() }),
     ])
     show()
-    expect(screen.getByText(/last used today/)).toBeTruthy()
-    expect(screen.getAllByText(/never needed yet/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/2 things kept, all of them in use/)).toBeTruthy()
+    expect(screen.queryByText(/2 leaned on this week/)).toBeNull()
+  })
+})
+
+describe('a memory you can scan', () => {
+  const long =
+    'Tends to open many parallel threads and spec multiple angles of one mechanism as separate deliverables'
+
+  it('reads first and edits second, the way a thing in the sky does', () => {
+    seed([mem({ content: long, last_used_at: new Date().toISOString() })])
+    show()
+    // the first tap used to drop straight into a text field, so the only way
+    // to read the whole of a long memory was to start editing it
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(long.slice(0, 30)) }))
+    expect(screen.queryByRole('textbox', { name: /What it remembers/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(screen.getByRole('textbox', { name: /What it remembers/ })).toBeTruthy()
+  })
+
+  it('keeps a long one to one line until it is opened', () => {
+    // used, so it does not also appear in the never-needed fold and match twice
+    seed([mem({ content: long, last_used_at: new Date().toISOString() })])
+    show()
+    const row = screen.getByRole('button', { name: new RegExp(long.slice(0, 30)) })
+    expect(row.style.textOverflow).toBe('ellipsis')
+    /*
+     * …and every box between it and the card has to be allowed to shrink.
+     * A grid item and a flex item both default to `min-width: auto` — "at
+     * least as wide as my content" — so without these the row does not
+     * ellipsise, it widens its track, the card, and the page. The first build
+     * of this shipped a page-wide horizontal scroll with the title hanging
+     * off the left edge.
+     */
+    expect(row.style.minWidth).toBe('0')
+    const flex = row.parentElement as HTMLElement
+    expect(flex.style.minWidth).toBe('0')
+    expect((flex.parentElement as HTMLElement).style.minWidth).toBe('0')
+    const track = flex.parentElement?.parentElement as HTMLElement
+    expect(track.style.gridTemplateColumns).toBe('minmax(0, 1fr)')
+    fireEvent.click(row)
+    expect(row.style.textOverflow).toBe('')
   })
 })
 

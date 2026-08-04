@@ -115,9 +115,14 @@ export default function MemoryPage() {
             rather than a promise. */}
         {live.length > 0 && (
           <p className="faint" style={{ fontSize: 'var(--fs-caption)', marginBottom: 10 }}>
-            {working === 0
-              ? `${live.length} things kept. None of them has been needed this week.`
-              : `${live.length} things kept · ${working} leaned on this week.`}
+            {/* The leaning is worth a line only when it is telling you
+                something you could act on. "17 things kept · 17 leaned on this
+                week" is a true sentence that says nothing: the ranker carries
+                twelve a run, so on a small memory everything gets carried and
+                the number is just the total again, wearing a hat. */}
+            {working === 0 && `${live.length} things kept. None of them has been needed this week.`}
+            {working > 0 && working < live.length && `${live.length} things kept · ${working} leaned on this week.`}
+            {working > 0 && working === live.length && `${live.length} things kept, all of them in use.`}
           </p>
         )}
         {/* Grouped, because the kinds are not equal. A constraint you gave it is
@@ -129,7 +134,7 @@ export default function MemoryPage() {
               <div className="eyebrow" style={{ marginBottom: 6 }}>
                 {KIND_WORDS[kind] ?? kind}
               </div>
-              <div style={{ display: 'grid', gap: 6 }}>
+              <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'minmax(0, 1fr)' }}>
                 {items.map((m) => (
                   <MemoryRow
                     key={m.id}
@@ -334,6 +339,20 @@ function tookIn(l: Learned): string {
   return bits.join(' · ') + (l.knew ? ` · ${l.knew} it already knew` : '')
 }
 
+/**
+ * One thing it believes: a line you can scan, and everything else on request.
+ *
+ * This used to render whole. Every memory at body weight, full width, with its
+ * reason and its recency underneath — which on real data is four lines each,
+ * seventeen times, and what you get is not a list of what an app knows about
+ * you but a wall of text you scroll past. The one thing this page exists to do
+ * is let you check what it believes, and you cannot check what you will not
+ * read.
+ *
+ * So: the claim, clamped to one line. Tap to see the whole of it with where it
+ * came from and when it was last needed; tap again for the field. Read first,
+ * edit second — the same rule a thing in the sky follows when you tap it.
+ */
 function MemoryRow({
   memory,
   onSave,
@@ -343,6 +362,7 @@ function MemoryRow({
   onSave: (v: string) => void
   onDelete: () => void
 }) {
+  const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [v, setV] = useState(memory.content)
   if (editing) {
@@ -377,27 +397,64 @@ function MemoryRow({
   // and something that was true in March.
   const used = leanedWords(memory, todayISO())
   return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-      <button
-        onClick={() => setEditing(true)}
-        style={{ flex: 1, textAlign: 'left', fontSize: 'var(--fs-label)', minHeight: 44, lineHeight: 1.4 }}
-      >
-        {memory.content}
-        <span className="faint" style={{ display: 'block', fontSize: 'var(--fs-caption)', marginTop: 2 }}>
-          {why ? `${why} · ${used}` : used}
+    /*
+     * `minWidth: 0` twice, and neither is optional.
+     *
+     * A grid item and a flex item both default to `min-width: auto`, which
+     * means "at least as wide as my content" — so a row holding one unwrapped
+     * line does not ellipsise, it widens its track, and the card, and the page.
+     * The first build of this shipped a sky-wide horizontal scroll and a title
+     * hanging off the left edge.
+     */
+    <div style={{ minWidth: 0 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
+        <button
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            textAlign: 'left',
+            fontSize: 'var(--fs-label)',
+            minHeight: 40,
+            lineHeight: 1.4,
+            // one line until asked. `minWidth: 0` above is what lets it
+            // actually shrink — a flex child will not ellipsise without it,
+            // it just pushes the dots and the × off the edge instead.
+            ...(open ? {} : { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }),
+          }}
+        >
+          {memory.content}
+        </button>
+        <span
+          className="faint"
+          aria-label={`leaned on ${memory.strength ?? 1} times`}
+          title={`Leaned on ${memory.strength ?? 1} time${(memory.strength ?? 1) === 1 ? '' : 's'}`}
+          style={{ fontSize: 'var(--fs-caption)', flex: '0 0 auto', letterSpacing: '0.1em' }}
+        >
+          {'•'.repeat(strength)}
         </span>
-      </button>
-      <span
-        className="faint"
-        aria-label={`leaned on ${memory.strength ?? 1} times`}
-        title={`Leaned on ${memory.strength ?? 1} time${(memory.strength ?? 1) === 1 ? '' : 's'}`}
-        style={{ fontSize: 'var(--fs-caption)', flex: '0 0 auto', letterSpacing: '0.1em' }}
-      >
-        {'•'.repeat(strength)}
-      </span>
-      <button aria-label="Delete memory" className="faint hit" onClick={onDelete} style={{ flex: '0 0 auto' }}>
-        ×
-      </button>
+        <button aria-label="Delete memory" className="faint hit" onClick={onDelete} style={{ flex: '0 0 auto' }}>
+          ×
+        </button>
+      </div>
+      {open && (
+        <div style={{ paddingBottom: 8 }}>
+          <div className="faint" style={{ fontSize: 'var(--fs-caption)', lineHeight: 1.45 }}>
+            {why ? `${why} · ${used}` : used}
+          </div>
+          <button
+            className="btn btn--sm btn--ghost"
+            style={{ marginTop: 6 }}
+            onClick={() => {
+              setV(memory.content)
+              setEditing(true)
+            }}
+          >
+            Edit
+          </button>
+        </div>
+      )}
     </div>
   )
 }
