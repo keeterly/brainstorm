@@ -54,7 +54,7 @@ import { sendWork, sentWord } from '@/lib/send'
 import { holdReload } from '@/lib/sw'
 import { noteTrail } from '@/lib/trail'
 import { echoRing, wabiBlob, wabiPill, wabiSeed } from '@/world/echo'
-import { rippleAt, roused, WAKE } from '@/world/ripple'
+import { rippleAt, WAKE } from '@/world/ripple'
 import { type Body, card, contact, disc, oilPath, pull } from '@/world/shape'
 import type { Thought, ThoughtType } from '@/domain/types'
 import './sky.css'
@@ -3976,25 +3976,6 @@ function mountSky(root: HTMLDivElement) {
     rippleAt(x, y, WAKE)
   }
 
-  /**
-   * …and the same answer from a thing, rather than from a fingertip.
-   *
-   * A hold on a bubble used to ripple at the touch point, at the fixed size a
-   * hold on empty sky uses. Two things wrong with that, and together they made
-   * it read as weather rather than as a reply: the rings were centred wherever
-   * your thumb happened to land rather than on the thing, and they began at a
-   * fifth of their size — so the first of them were born *inside* the bubble
-   * and only appeared once they had grown out through it.
-   *
-   * Measured off the element, because the thing you are holding is a disc, or
-   * an opened card as tall as a photograph, or a group with a ring of its
-   * contents around it. Seeded by its id, so a given thought ripples the same
-   * way every time, which is the rule the rest of this world's geometry keeps.
-   */
-  function rouse(el: HTMLElement, id: string) {
-    const r = el.getBoundingClientRect()
-    rippleAt(r.x + r.width / 2, r.y + r.height / 2, roused(Math.max(r.width, r.height), hashN(id)))
-  }
 
 
   /*
@@ -6832,12 +6813,12 @@ function mountSky(root: HTMLDivElement) {
          * unless you released without choosing.
          */
         const held = drag.tl
-        const heldEl = drag.el
         drag.el.classList.remove('dragging')
         drag = null
         showMoons(held, true)
-        // the thing itself answering, out of its own rim — see rouse()
-        rouse(heldEl, held.t.id)
+        // the thing itself answering, out of its own rim, and staying with it
+        // however it moves for the second that takes — see rouse()
+        rouse(held.t.id)
         haptics.grab()
         sliding = true
         aimAt(e.clientX, e.clientY)
@@ -7423,7 +7404,72 @@ function mountSky(root: HTMLDivElement) {
   const leaning = new Set<string>()
   const echoPool: SVGPathElement[] = []
   let echoUsed = 0
+  function echoPath(): SVGPathElement {
+    let el = echoPool[echoUsed]
+    if (!el) {
+      el = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+      echoG.appendChild(el)
+      echoPool.push(el)
+    }
+    return el
+  }
   const ECHO_LAYERS = 4
+
+  /*
+   * One burst, thrown out by the thing you have just taken hold of.
+   *
+   * This used to be an overlay: an SVG hung on the body at the point the
+   * gesture happened, in viewport coordinates, sized once. Measured in a still
+   * sky it landed on the bubble to the pixel — and on a real one it did not,
+   * because a bubble is never where you left it. It breathes, the constellation
+   * re-centres for a second after anything changes, a member of an open group
+   * is going round, and the camera flies. Over the second the rings take to
+   * travel the thing that sent them walks out from under them, and what you see
+   * is rings sitting in open sky next to the bubble you pressed.
+   *
+   * So it belongs where everything else that belongs to a bubble belongs: in
+   * the world, redrawn every frame from the thing's live position. It cannot
+   * come from anywhere else now, because there is nowhere else for it to be.
+   */
+  let burst: { id: string; at: number } | null = null
+  /** how far past the rim each ring gets */
+  const BURST_REACH = [17, 41, 72, 110]
+  /** …and how long after the press it sets off, in seconds */
+  const BURST_WAIT = [0, 0.1, 0.21, 0.33]
+  const BURST_LIFE = 1.15
+  function rouse(id: string) {
+    if (reduced) return
+    burst = { id, at: t }
+  }
+  function drawBurst() {
+    if (!burst) return
+    const tl = view.byId.get(burst.id)
+    const age = t - burst.at
+    if (!tl || age > BURST_LIFE + BURST_WAIT[BURST_WAIT.length - 1]) {
+      burst = null
+      return
+    }
+    const p = posOf(burst.id)
+    // off the rim of what you are actually looking at: an opened group is its
+    // whole orbit, and rings leaving the little disc in the middle of one
+    // cross its members on the way out and read as unrelated
+    const open = openPool === burst.id
+    const r0 = open
+      ? Math.max(orbitR(tl), ringR) + memberR(tl.members.length)
+      : radiusOf(tl) * p.s
+    const h = hashN(burst.id)
+    for (let i = 0; i < BURST_REACH.length; i++) {
+      const u = (age - BURST_WAIT[i]) / BURST_LIFE
+      if (u <= 0 || u >= 1) continue
+      // out fast, then easing off, the way a wave loses its push
+      const travel = 1 - Math.pow(1 - u, 2.4)
+      const el = echoPath()
+      el.setAttribute('d', echoRing(p.rx, p.ry, r0 + BURST_REACH[i] * travel, h + i * 2.7, 0.05 + i * 0.014))
+      el.style.opacity = (0.62 * (1 - u) * (1 - i * 0.12)).toFixed(3)
+      el.style.strokeWidth = (1.3 - i * 0.12).toFixed(2)
+      echoUsed++
+    }
+  }
   function echoFrom(id: string, cx: number, cy: number, r: number, strength: number) {
     const h = hashN(id)
     for (let i = 0; i < ECHO_LAYERS; i++) {
@@ -7435,12 +7481,7 @@ function mountSky(root: HTMLDivElement) {
       const fade = Math.pow(Math.sin(phase * Math.PI), 1.35)
       const o = strength * fade * (1 - i * 0.19)
       if (o < 0.015) continue
-      let el = echoPool[echoUsed]
-      if (!el) {
-        el = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-        echoG.appendChild(el)
-        echoPool.push(el)
-      }
+      const el = echoPath()
       // the ring keeps its shape as it travels, and wobbles more the further
       // out it gets, the way a wave loses its edge
       el.setAttribute('d', echoRing(cx, cy, r * (1.02 + phase * 0.95) + 5, h + i * 2.7, 0.028 + phase * 0.05 + i * 0.012))
@@ -7456,6 +7497,12 @@ function mountSky(root: HTMLDivElement) {
       for (const el of echoPool) el.style.opacity = '0'
       return
     }
+    const rest = () => {
+      for (let i = echoUsed; i < echoPool.length; i++) echoPool[i].style.opacity = '0'
+    }
+    // first, because it is the one ring in this sky that is answering
+    // something you just did
+    drawBurst()
     const seen = new Set<string>()
     const push = (id: string | null | undefined, strength: number) => {
       if (!id || seen.has(id) || echoUsed >= 40) return
@@ -7470,7 +7517,7 @@ function mountSky(root: HTMLDivElement) {
     // and a spoke to each one; rings on top of that is just noise
     if (openPool) {
       if (holding && holding.id !== openPool) push(holding.id, 0.4)
-      for (let i = echoUsed; i < echoPool.length; i++) echoPool[i].style.opacity = '0'
+      rest()
       return
     }
     push(holding?.id, 0.4)
@@ -7510,7 +7557,7 @@ function mountSky(root: HTMLDivElement) {
         }
       }
     }
-    for (let i = echoUsed; i < echoPool.length; i++) echoPool[i].style.opacity = '0'
+    rest()
   }
   function coast(p: Pos) {
     if (!p.vx && !p.vy) return

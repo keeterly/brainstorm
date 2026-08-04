@@ -775,10 +775,7 @@ a {
 @keyframes echo-out {
   from {
     opacity: var(--lit, 0.9);
-    /* a fifth of its size is near enough to a point, which is what a fingertip
-       on a surface wants. A ring leaving the rim of something sets --from to
-       that rim instead — see RippleSpec.start. */
-    transform: scale(var(--from, 0.18));
+    transform: scale(0.18);
   }
   to {
     opacity: 0;

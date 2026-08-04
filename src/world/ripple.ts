@@ -35,16 +35,6 @@ export interface RippleSpec {
   /** How it travels — out fast, then easing off, like a wave losing its push. */
   ease?: string
   /**
-   * The diameter each ring is already at when it leaves.
-   *
-   * Left out, a ring grows from a fifth of its size — near enough to a point,
-   * which is right for a fingertip on a surface. It is wrong for something
-   * that came out of an object: the first rings are then born *inside* the
-   * thing and the ripple reads as happening under it rather than off it. Set
-   * this to the thing's own diameter and every ring leaves its rim.
-   */
-  start?: number
-  /**
    * Fixes the shape. The same point ripples the same way every time, which is
    * the rule the rest of this world's geometry follows; left out, it is taken
    * from the coordinates so a double-tap in one place agrees with itself.
@@ -83,44 +73,6 @@ export const WAKE: RippleSpec = {
   ease: 'cubic-bezier(0.22, 0.61, 0.36, 1)',
 }
 
-/** How far past the rim each ring gets, in order. */
-const ROUSED_REACH = [17, 41, 72, 110] as const
-
-/**
- * Something in the sky, roused by a finger held on it.
- *
- * Leaving its rim rather than its middle — a ripple whose first ring is
- * smaller than the bubble it came out of looks like weather behind the bubble,
- * not the bubble answering. Four rings, each reaching further and each a
- * little less bright, over the beat in which its actions arrive.
- *
- * The reach is **added** to the rim, not multiplied by it. Multiplying was the
- * obvious thing and it was wrong: at three and a half times its diameter, an
- * open group threw a ring wider than the phone, so what you saw was a curve
- * crossing the whole screen with its centre nowhere in sight and no visible
- * relationship to the thing that sent it. Adding gives a halo of the same
- * thickness whatever it came off, which is what makes it legible as *this
- * thing's* answer — a big group and a small drop both get a ring hugging their
- * own edge.
- *
- * @param d the thing's diameter, measured, because a drop, an opened card and
- *   a group are three very different sizes.
- */
-export function roused(d: number, seed?: number): RippleSpec {
-  const w = Math.max(44, d)
-  return {
-    rings: ROUSED_REACH.map((reach, i) => [w + reach * 2, [0, 95, 205, 330][i]] as const),
-    start: w,
-    life: 1150,
-    // brighter than the ambient pulse it has to be told apart from: this one
-    // is an answer to something you just did, not weather
-    lit: 0.86,
-    wobble: 0.062,
-    ease: 'cubic-bezier(0.22, 0.61, 0.36, 1)',
-    seed,
-  }
-}
-
 /** Something landing on the surface, seen from just above it. */
 export const SPLASH: RippleSpec = {
   rings: [
@@ -147,7 +99,7 @@ export function rippleAt(x: number, y: number, spec: RippleSpec): SVGSVGElement 
   if (typeof document === 'undefined' || !spec.rings.length) return null
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return null
 
-  const { rings, life = 900, wobble = 0.055, flatten = 1, lit = 0.9, ease = 'ease-out', start = 0 } = spec
+  const { rings, life = 900, wobble = 0.055, flatten = 1, lit = 0.9, ease = 'ease-out' } = spec
   const seed = spec.seed ?? seedAt(x, y)
 
   // one box, big enough for the widest ring at full wobble, centred on the
@@ -169,9 +121,6 @@ export function rippleAt(x: number, y: number, spec: RippleSpec): SVGSVGElement 
     // and wobbles a little more the further out it is going — the way a wave
     // loses its edge with distance
     p.setAttribute('d', echoRing(0, 0, diameter / 2, seed + i * 2.7, wobble + i * 0.014))
-    // …from the rim of whatever sent it, when there is one. Capped below the
-    // ring itself: a ring that starts where it ends never travels.
-    if (start > 0) p.style.setProperty('--from', String(Math.min(0.92, start / diameter)))
     p.style.setProperty('--life', `${life}ms`)
     p.style.setProperty('--wait', `${delay}ms`)
     p.style.setProperty('--lit', String(lit * (1 - i * 0.12)))
