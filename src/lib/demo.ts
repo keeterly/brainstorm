@@ -43,16 +43,19 @@ function rel(from: string, to: string, type: Relationship['type']): Relationship
     created_at: days(2),
   }
 }
-function mem(id: string, content: string, kind: string, strength = 1): Memory {
+function mem(id: string, content: string, kind: string, strength = 1, usedDaysAgo?: number): Memory {
   return {
     id,
     user_id: 'demo',
     content,
     source: 'manual',
-    created_at: days(10),
+    created_at: days(40),
     kind,
     strength,
-    last_used_at: null,
+    // When it was last actually carried into a prompt. Left out on purpose for
+    // one of them, so the demo shows the state worth seeing: a fact that has
+    // ridden along unread since the day it was written.
+    last_used_at: usedDaysAgo === undefined ? null : days(usedDaysAgo),
     archived_at: null,
   }
 }
@@ -112,10 +115,12 @@ export const DEMO_SEED = {
   // ride along on everything, and a fact about the storefront only comes when
   // the storefront comes up.
   memories: [
-    mem('me1', 'Two-person label based in Los Angeles', 'fact', 5),
-    mem('me2', 'Works best in the morning', 'pattern', 9),
-    mem('me3', 'Writes to buyers in plain sentences, never bullet lists', 'preference', 3),
-    mem('me4', 'Will not travel during production weeks', 'constraint', 2),
+    mem('me1', 'Two-person label based in Los Angeles', 'fact', 5, 2),
+    mem('me2', 'Works best in the morning', 'pattern', 9, 0),
+    mem('me3', 'Writes to buyers in plain sentences, never bullet lists', 'preference', 3, 1),
+    mem('me4', 'Will not travel during production weeks', 'constraint', 2, 21),
+    // never once carried — the one the page has something to say about
+    mem('me5', 'The trim supplier in Como closes for all of August', 'fact', 1),
   ],
   // What ⚡ brings back. The demo used to show every part of the app except the
   // one that does the most work.

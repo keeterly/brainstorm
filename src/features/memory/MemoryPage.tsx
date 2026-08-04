@@ -13,6 +13,7 @@ import { TypeBadge } from '@/components/TypeBadge'
 import { humanDate } from '@/domain/human-date'
 import { todayISO } from '@/domain/prioritize-prepass'
 import { learn, type Learned } from '@/ai/memoryFlow'
+import { leanedWords, neverNeeded, workingSet } from '@/domain/leaned'
 import { Find } from './Find'
 import type { Memory, MemoryEvent } from '@/domain/types'
 
@@ -38,6 +39,14 @@ export default function MemoryPage() {
   // is not something you would let near what it knows about you.
   const live = memories.filter((m) => !m.archived_at)
   const shelved = memories.filter((m) => m.archived_at)
+
+  // What is actually doing any work. The line above this list has always
+  // claimed the app picks from it for whatever you are working on; that claim
+  // was unverifiable from the only screen it appears on, and an unverifiable
+  // claim about what a thing knows about you is worth less than no claim.
+  const nowMs = Date.now()
+  const working = workingSet(live, nowMs)
+  const unread = neverNeeded(live, nowMs)
 
   const finished = thoughts
     .filter((t) => t.status === 'done')
@@ -97,10 +106,20 @@ export default function MemoryPage() {
 
       <section className="card" style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>Known about you</h2>
-        <p className="muted" style={{ fontSize: 'var(--fs-label)', marginBottom: 10 }}>
+        <p className="muted" style={{ fontSize: 'var(--fs-label)', marginBottom: 6 }}>
           Fully yours — edit or delete anything. It picks from this for whatever you
           are working on, rather than sending all of it every time.
         </p>
+        {/* …and here is that sentence being kept. Twelve get carried on every
+            run and whatever gets carried is marked, so this is a measurement
+            rather than a promise. */}
+        {live.length > 0 && (
+          <p className="faint" style={{ fontSize: 'var(--fs-caption)', marginBottom: 10 }}>
+            {working === 0
+              ? `${live.length} things kept. None of them has been needed this week.`
+              : `${live.length} things kept · ${working} leaned on this week.`}
+          </p>
+        )}
         {/* Grouped, because the kinds are not equal. A constraint you gave it is
             worth reading before a fact it happened to notice, and a flat list in
             the order things were written buries the important half. */}
@@ -189,6 +208,8 @@ export default function MemoryPage() {
       </section>
 
       <ChangedItsMind shelved={shelved} events={memoryEvents} />
+
+      <NeverNeeded memories={unread} onDelete={deleteMemory} />
 
       <section className="card" style={{ marginBottom: 16 }}>
         <details>
@@ -351,6 +372,10 @@ function MemoryRow({
   // here is whether this is load-bearing or something it noticed once.
   const strength = Math.min(3, Math.ceil((memory.strength ?? 1) / 4))
   const why = (memory.origin as { why?: string } | null)?.why
+  // The dots say whether this is load-bearing. This says whether it still is —
+  // which is the whole difference between something true about how you work
+  // and something that was true in March.
+  const used = leanedWords(memory, todayISO())
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
       <button
@@ -358,11 +383,9 @@ function MemoryRow({
         style={{ flex: 1, textAlign: 'left', fontSize: 'var(--fs-label)', minHeight: 44, lineHeight: 1.4 }}
       >
         {memory.content}
-        {why && (
-          <span className="faint" style={{ display: 'block', fontSize: 'var(--fs-caption)', marginTop: 2 }}>
-            {why}
-          </span>
-        )}
+        <span className="faint" style={{ display: 'block', fontSize: 'var(--fs-caption)', marginTop: 2 }}>
+          {why ? `${why} · ${used}` : used}
+        </span>
       </button>
       <span
         className="faint"
@@ -376,6 +399,64 @@ function MemoryRow({
         ×
       </button>
     </div>
+  )
+}
+
+/**
+ * What has ridden along unread since the day it was written.
+ *
+ * This app's argument is that thinking should cycle rather than accumulate,
+ * and what it knows about you was the one place that argument had not reached:
+ * memory only ever went in. Everything here has been offered to the ranker on
+ * every run since it was written and never once been worth carrying — which is
+ * the closest thing to evidence that it is not true of you any more, or never
+ * was.
+ *
+ * Listed, never swept. One tap deletes one of them, and the app deletes none:
+ * a thing that quietly bins what it knows about you on a heuristic is a thing
+ * you cannot leave running. Folded, and absent until there is something in it.
+ */
+function NeverNeeded({ memories, onDelete }: { memories: Memory[]; onDelete: (id: string) => void }) {
+  if (!memories.length) return null
+  return (
+    <section className="card" style={{ marginBottom: 16 }}>
+      <details>
+        <summary style={{ cursor: 'pointer', listStyle: 'none' }}>
+          <h2 style={{ fontSize: 'var(--fs-md)', display: 'inline' }}>What it has never needed</h2>
+          <span className="faint" style={{ fontSize: 'var(--fs-label)', marginLeft: 8 }}>
+            {memories.length}
+          </span>
+        </summary>
+        <p className="muted" style={{ fontSize: 'var(--fs-label)', margin: '10px 0' }}>
+          Offered on every run since you wrote it, and never once carried. Worth a read —
+          some of it will be wrong now, and some of it is worded in a way nothing ever matches.
+        </p>
+        <div style={{ display: 'grid', gap: 2 }}>
+          {memories.map((m, i) => (
+            <div
+              key={m.id}
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+                padding: '9px 0',
+                borderTop: i ? '0.5px solid var(--line)' : 'none',
+              }}
+            >
+              <span style={{ flex: 1, fontSize: 'var(--fs-label)', lineHeight: 1.4 }}>{m.content}</span>
+              <button
+                aria-label={`Forget: ${m.content}`}
+                className="faint hit"
+                onClick={() => onDelete(m.id)}
+                style={{ flex: '0 0 auto' }}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      </details>
+    </section>
   )
 }
 
