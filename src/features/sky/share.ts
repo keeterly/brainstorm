@@ -16,8 +16,16 @@ export interface Shareable {
   title: string
   /** the thought's own words, when they say more than the title does */
   body?: string | null
-  /** what it holds, already in the order the group page shows */
-  inside?: string[]
+  /**
+   * What it holds, already in the order the group page shows.
+   *
+   * With its state, because losing it is what made a shared list dangerous:
+   * "Follow up with Alicia regarding custom pieces" and "Get car tinted" were
+   * finished, the picture drew them struck through, and the words listed all
+   * nine identically — so the person reading it had no way to tell which two
+   * not to chase. Plain strings still work and mean "not finished".
+   */
+  inside?: (string | { title: string; done?: boolean })[]
   /** what you have told it — see the "say" moon */
   answers?: string[]
   /** what the agent came back with, as markdown */
@@ -50,8 +58,22 @@ export function shareText(s: Shareable): string {
   // title are usually the same sentence, and saying it twice reads as a bug
   if (body && body !== title) out.push('', body)
 
-  const inside = (s.inside ?? []).map(clean).filter(Boolean)
-  if (inside.length) out.push('', ...inside.map((l) => `· ${l}`))
+  /*
+   * What is left, and then — separately, and said so — what is not.
+   *
+   * Finished work is not dropped. A share that silently omits two of nine
+   * items is one you cannot trust to be the whole list, and "did you get to
+   * the car?" is a worse conversation than two extra lines. But it does not
+   * sit in the same run of bullets either, because in a message bubble a
+   * bullet is a thing to do.
+   */
+  const items = (s.inside ?? [])
+    .map((m) => (typeof m === 'string' ? { title: clean(m), done: false } : { title: clean(m.title), done: !!m.done }))
+    .filter((m) => m.title)
+  const open = items.filter((m) => !m.done)
+  const done = items.filter((m) => m.done)
+  if (open.length) out.push('', ...open.map((m) => `· ${m.title}`))
+  if (done.length) out.push('', 'Already done:', ...done.map((m) => `· ${m.title}`))
 
   const answers = (s.answers ?? []).map(clean).filter(Boolean)
   if (answers.length) out.push('', 'What I know:', ...answers.map((l) => `· ${l}`))

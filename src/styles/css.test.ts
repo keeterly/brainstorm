@@ -1786,3 +1786,23 @@ describe('an answer is not its own list, said twice', () => {
     expect(answer).toMatch(/Stop while you have room/)
   })
 })
+
+
+describe('the picture and the words agree about what is finished', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+
+  it('sends what is left before what is done, to both of them', () => {
+    const at = page.indexOf('function shareThing(')
+    expect(at).toBeGreaterThan(-1)
+    const body = page.slice(at, at + 1800)
+    // the card already drew a finished row struck through with its dot
+    // filled, and at the size a message thumbnail gives it that strike is two
+    // pixels. Order carries it where styling cannot — and the same array
+    // feeds the words and the picture, so they cannot disagree.
+    expect(body).toMatch(/sort\(\(a, b\) => Number\(a\.status === 'done'\) - Number\(b\.status === 'done'\)\)/)
+    expect(body).toMatch(/done: m\.status === 'done'/)
+    // …including in the words, which used to be handed bare labels
+    const words = body.slice(0, body.indexOf('drawCard'))
+    expect(words).toMatch(/done: m\.status === 'done'/)
+  })
+})

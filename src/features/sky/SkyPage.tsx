@@ -3034,7 +3034,16 @@ function mountSky(root: HTMLDivElement) {
    */
   function shareThing(tl: TL) {
     const live = view.byId.get(tl.t.id) ?? tl
-    const inside = branchesOf(live.t.id, true).map((b) => b.t)
+    /*
+     * What is left first, and what is finished after it — in the words and in
+     * the picture alike, so the two cannot disagree. The card had this right
+     * on its own (it draws a finished row struck through and its dot filled)
+     * and at the size a message thumbnail gives it, a strike is two pixels.
+     * Order carries it where styling cannot.
+     */
+    const inside = branchesOf(live.t.id, true)
+      .map((b) => b.t)
+      .sort((a, b) => Number(a.status === 'done') - Number(b.status === 'done'))
     const art = briefOf(live.t.id)
     const text = shareText({
       title: label(live.t),
@@ -3042,7 +3051,10 @@ function mountSky(root: HTMLDivElement) {
       // A picture cannot travel in plain text, and the word "Photo" — which
       // is what one is called until you name it — tells the person reading
       // nothing at all. Said as what it is instead.
-      inside: inside.map((m) => (imgOf(m) && label(m) === 'Photo' ? '(a photograph)' : label(m))),
+      inside: inside.map((m) => ({
+        title: imgOf(m) && label(m) === 'Photo' ? '(a photograph)' : label(m),
+        done: m.status === 'done',
+      })),
       answers: answersOf(live.t),
       brief: art?.content_md ?? null,
       sources: art?.sources ?? [],

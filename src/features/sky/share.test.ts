@@ -165,3 +165,53 @@ describe('handing it over', () => {
     expect(await handOver('words', 'title')).toBe('failed')
   })
 })
+
+describe('a list you hand over says which of it is still to do', () => {
+  /*
+   * Shared as-is, "To do list for today" arrived as nine identical bullets —
+   * two of which were finished. The picture drew those two struck through; the
+   * words did not, and the words are what gets read. Somebody chases the car
+   * that was already tinted.
+   */
+  const list = {
+    title: 'To do list for today',
+    inside: [
+      'Reply to Labbye',
+      'Send Jonathan press folder',
+      { title: 'Follow up with Alicia regarding custom pieces', done: true },
+      { title: 'Get car tinted', done: true },
+    ],
+  }
+
+  it('keeps what is finished out of the run of things to do', () => {
+    const out = shareText(list)
+    const upto = out.slice(0, out.indexOf('Already done:'))
+    expect(upto).toContain('· Reply to Labbye')
+    expect(upto).not.toContain('Get car tinted')
+  })
+
+  it('does not silently drop it either', () => {
+    // a share that quietly omits two of nine is one you cannot trust to be the
+    // whole list, and "did you get to the car?" is the worse conversation
+    const out = shareText(list)
+    expect(out).toContain('Already done:')
+    expect(out).toContain('· Get car tinted')
+    expect(out).toContain('· Follow up with Alicia regarding custom pieces')
+  })
+
+  it('says nothing about finishing when nothing is finished', () => {
+    expect(shareText({ title: 'x', inside: ['a', 'b'] })).not.toContain('Already done')
+  })
+
+  it('still treats a plain string as something to do', () => {
+    // every existing caller passes strings, and a share that quietly moved
+    // them all under "already done" would be worse than the bug
+    expect(shareText({ title: 'x', inside: ['a'] })).toContain('· a')
+  })
+
+  it('is only the finished list when all of it is finished', () => {
+    const out = shareText({ title: 'x', inside: [{ title: 'a', done: true }] })
+    expect(out).toContain('Already done:')
+    expect(out.match(/· a/g)?.length).toBe(1)
+  })
+})
