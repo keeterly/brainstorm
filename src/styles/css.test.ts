@@ -1806,3 +1806,76 @@ describe('the picture and the words agree about what is finished', () => {
     expect(words).toMatch(/done: m\.status === 'done'/)
   })
 })
+
+
+describe('saying something is one gesture', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+
+  it('holds the pen to listen, on both of its homes', () => {
+    /*
+     * Speaking a thought used to be four moves: open the page, find the mic
+     * inside it, tap it, and remember to tap it off. Four is three too many
+     * for the one act the app exists to serve.
+     */
+    expect(page).toMatch(/function holdToTalk\(el: HTMLElement\)/)
+    expect(page).toMatch(/holdToTalk\(writeEl\)/)
+    expect(page).toMatch(/holdToTalk\(nextPen\)/)
+    const at = page.indexOf('function holdToTalk(')
+    const body = page.slice(at, at + 1800)
+    // the page first, then the ear
+    expect(body.indexOf("openPage('capture'")).toBeLessThan(body.indexOf('startMic()'))
+    // …and the finger is still down on a page that just appeared under it
+    expect(body).toMatch(/deafenPage\(\)/)
+  })
+
+  it('uses the same timing as holding the sky, because it is the same gesture', () => {
+    expect(page).toMatch(/const TALK_HOLD = 420/)
+    // the empty-sky capture hold, unchanged and still the sibling of this one
+    expect(page).toMatch(/\}, 420\)/)
+  })
+
+  it('stops the moment the thumb comes up, however the gesture ends', () => {
+    // a microphone that outlives the press is one you find running an hour
+    // later; the only honest claim is that it listens while you hold it
+    const at = page.indexOf('function holdToTalk(')
+    const body = page.slice(at, at + 1800)
+    for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+      expect(body).toMatch(new RegExp(`addEventListener\\('${ev}', stop\\)`))
+    }
+    expect(body).toMatch(/talking = false\n\s*stopMic\(\)/)
+  })
+
+  it('still gives the page to a phone that cannot hear', () => {
+    const at = page.indexOf('function holdToTalk(')
+    // startMic returns false where there is no recognition, and the page —
+    // the useful half — has already opened by then
+    expect(page.slice(at, at + 1800)).toMatch(/talking = startMic\(\)/)
+  })
+
+  it('lets the mic inside the page be held or latched', () => {
+    // a pure toggle is wrong for a mic you are holding a conversation into;
+    // pure push-to-talk is wrong for dictating six sentences hands-free
+    expect(page).not.toMatch(/pageMic\.addEventListener\('click'/)
+    const at = page.indexOf("pageMic.addEventListener('pointerdown'")
+    expect(at).toBeGreaterThan(-1)
+    const body = page.slice(at - 400, at + 700)
+    expect(body).toMatch(/micWasLive = !!rec/)
+    expect(body).toMatch(/performance\.now\(\) - micDownAt >= TALK_HOLD/)
+  })
+
+  it('stops saying "listening…" when it has stopped listening', () => {
+    // the one thing a microphone must never get wrong is claiming to hear you
+    // when it cannot. The line stayed up after the mic was off.
+    expect(page).toMatch(/let micWas: string \| null = null/)
+    const stop = page.indexOf('function stopMic()')
+    expect(page.slice(stop, stop + 700)).toMatch(/pageN\.textContent = micWas/)
+    // …and on the other way it can end: a timeout, a network blip
+    const start = page.indexOf('rec.onend = ()')
+    expect(page.slice(start, start + 260)).toMatch(/pageN\.textContent = micWas/)
+  })
+
+  it('says on the control itself that it can be held', () => {
+    // cheaper than another one-time line, and it is there when you look
+    expect(page).toMatch(/aria-label="Write a thought — hold to speak"/)
+  })
+})

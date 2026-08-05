@@ -128,7 +128,7 @@ export default function SkyPage() {
       {/* The pen alone, for when the bar above has nothing to say. After the
           voice in the DOM on purpose: the CSS that yields this slot to a
           speaking sibling can only look backwards. */}
-      <button className="sky-write" data-sky="write" aria-label="Write a thought">
+      <button className="sky-write" data-sky="write" aria-label="Write a thought — hold to speak">
         ✎ write
       </button>
       {/* speaking is one tap: no page to open first, no button to find inside it */}
@@ -2450,6 +2450,64 @@ function mountSky(root: HTMLDivElement) {
   }
   writeEl.addEventListener('click', startWriting)
   nextPen.addEventListener('click', startWriting)
+
+  /*
+   * …and held, it listens.
+   *
+   * Saying something used to be four moves: open the page, find the mic
+   * inside it, tap it, and remember to tap it off. Four moves is three too
+   * many for the one act this whole app exists to serve, and a mic you have
+   * to remember to switch off is one you find still running an hour later.
+   *
+   * Hold instead. It opens the page with the ear already on, it is plainly on
+   * for exactly as long as your thumb is down, and letting go ends it. There
+   * is no state to get wrong and nothing to switch off, which is also the
+   * only honest way to hold a microphone on a phone: it can only be listening
+   * while you are holding it.
+   *
+   * The same 420ms as holding empty sky, because it is the same gesture —
+   * press and hold to say something — and a gesture worth learning once
+   * should not have two timings.
+   */
+  const TALK_HOLD = 420
+  function holdToTalk(el: HTMLElement) {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let talking = false
+    const stop = () => {
+      if (timer) clearTimeout(timer)
+      timer = undefined
+      if (!talking) return
+      talking = false
+      stopMic()
+    }
+    el.addEventListener('pointerdown', (e) => {
+      e.stopPropagation()
+      if (pageFor) return
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => {
+        timer = undefined
+        if (pageFor) return
+        const into = openPool
+        if (into) closeMoons()
+        else clearAll()
+        openPage('capture', undefined, innerWidth / 2, innerHeight * 0.42, into)
+        // your finger is still down and the page has just appeared under it —
+        // the same reason holding the sky does this
+        deafenPage()
+        // A phone with no speech recognition still gets the page, which is
+        // the useful half. It simply does not claim to be listening.
+        talking = startMic()
+        haptics.grab()
+      }, TALK_HOLD)
+    })
+    // `startWriting` bails when a page is already open, so the click that
+    // follows this release is already harmless and needs no suppressing
+    el.addEventListener('pointerup', stop)
+    el.addEventListener('pointercancel', stop)
+    el.addEventListener('lostpointercapture', stop)
+  }
+  holdToTalk(writeEl)
+  holdToTalk(nextPen)
   // Sky, tapped while already in the sky: step out of whatever is focused
   // and frame all of it — the "take me back" every platform tab bar means.
   const tabAgain = (e: Event) => {
@@ -5008,6 +5066,8 @@ function mountSky(root: HTMLDivElement) {
   // the stored thumbnail is far too small to read text from, so a capture also
   // keeps a legible copy in memory for as long as the page is open
   let pendingImage: { mediaType: string; dataB64: string } | null = null
+  /** what the page was saying before it said "listening…" */
+  let micWas: string | null = null
   function stopMic() {
     if (rec) {
       const r = rec
@@ -5019,6 +5079,13 @@ function mountSky(root: HTMLDivElement) {
       }
     }
     pageMic.classList.remove('live')
+    // …and it stops saying so. The line stayed at "listening…" after the mic
+    // was off, which is the app claiming to hear you when it cannot — the one
+    // thing a microphone must never get wrong.
+    if (micWas !== null) {
+      pageN.textContent = micWas
+      micWas = null
+    }
   }
   /** Begin listening, from the mic inside the page. Holding the sky opens
    *  that page, so speaking a thought is still one gesture away — which is
@@ -5041,11 +5108,16 @@ function mountSky(root: HTMLDivElement) {
     rec.onend = () => {
       rec = null
       pageMic.classList.remove('live')
+      if (micWas !== null) {
+        pageN.textContent = micWas
+        micWas = null
+      }
     }
     rec.onerror = () => stopMic()
     try {
       rec.start()
       pageMic.classList.add('live')
+      if (micWas === null) micWas = pageN.textContent ?? ''
       pageN.textContent = 'listening…'
       return true
     } catch {
@@ -5053,10 +5125,32 @@ function mountSky(root: HTMLDivElement) {
       return false
     }
   }
-  pageMic.addEventListener('click', () => {
-    if (rec) stopMic()
-    else startMic()
+  /*
+   * Held it talks, tapped it latches.
+   *
+   * A pure toggle is wrong for a microphone you are holding a conversation
+   * into — it is on until you remember it — and pure push-to-talk is wrong
+   * for dictating six sentences with your thumb somewhere else. So the press
+   * decides: let go inside a moment and it stays on until you tap it again,
+   * hold it and it listens for exactly as long as you do.
+   */
+  let micDownAt = 0
+  let micWasLive = false
+  pageMic.addEventListener('pointerdown', () => {
+    micWasLive = !!rec
+    micDownAt = performance.now()
+    if (!micWasLive) startMic()
   })
+  const micUp = () => {
+    // a tap on a live mic is the way to stop a latched one
+    if (micWasLive) {
+      stopMic()
+      return
+    }
+    if (performance.now() - micDownAt >= TALK_HOLD) stopMic()
+  }
+  pageMic.addEventListener('pointerup', micUp)
+  pageMic.addEventListener('pointercancel', micUp)
   /**
    * Out of the app and into the world.
    *
