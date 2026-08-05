@@ -166,8 +166,8 @@ describe('memory that can grow to a hundred', () => {
      */
     seed([...many(3, 'constraint', 'rule'), ...many(20, 'fact', 'detail')])
     show()
-    expect(screen.getByText('Always true of you')).toBeTruthy()
-    expect(screen.getByText(/Carried on every request/)).toBeTruthy()
+    expect(screen.getByText('Whatever you are working on')).toBeTruthy()
+    expect(screen.getByText(/These come along every time/)).toBeTruthy()
     expect(screen.getByText('When it comes up')).toBeTruthy()
   })
 
@@ -177,21 +177,21 @@ describe('memory that can grow to a hundred', () => {
     const fold = screen.getByText('When it comes up').closest('details')
     expect(fold).toBeTruthy()
     // the governing half is never folded: it is the half worth reading
-    expect(screen.getByText('Always true of you').closest('details')).toBeNull()
+    expect(screen.getByText('Whatever you are working on').closest('details')).toBeNull()
   })
 
   it('leaves a small memory alone, unfolded and unfiltered', () => {
     // a filter is a control asking to be used on four things
     seed([...many(2, 'constraint', 'rule'), ...many(2, 'fact', 'detail')])
     show()
-    expect(screen.queryByLabelText('Filter what it knows about you')).toBeNull()
+    expect(screen.queryByLabelText('Filter what it has picked up')).toBeNull()
     expect(screen.getByText('When it comes up').closest('details')).toBeNull()
   })
 
   it('offers a way through it once there is enough to need one', () => {
     seed(many(14, 'fact', 'detail'))
     show()
-    const box = screen.getByLabelText('Filter what it knows about you')
+    const box = screen.getByLabelText('Filter what it has picked up')
     fireEvent.change(box, { target: { value: 'detail 3' } })
     expect(screen.getAllByRole('button', { name: /detail 3/ }).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: /^detail 7$/ })).toBeNull()
@@ -200,10 +200,10 @@ describe('memory that can grow to a hundred', () => {
   it('says so rather than looking empty when the filter matches nothing', () => {
     seed(many(14, 'fact', 'detail'))
     show()
-    fireEvent.change(screen.getByLabelText('Filter what it knows about you'), {
+    fireEvent.change(screen.getByLabelText('Filter what it has picked up'), {
       target: { value: 'zzzz' },
     })
-    expect(screen.getByText(/Nothing it knows matches that/)).toBeTruthy()
+    expect(screen.getByText(/Nothing here matches that/)).toBeTruthy()
   })
 
   it('counts the whole of what it knows, not what the filter left', () => {
@@ -211,7 +211,7 @@ describe('memory that can grow to a hundred', () => {
     // way of looking at it, and must not appear to shrink it
     seed(many(14, 'fact', 'detail'))
     show()
-    fireEvent.change(screen.getByLabelText('Filter what it knows about you'), {
+    fireEvent.change(screen.getByLabelText('Filter what it has picked up'), {
       target: { value: 'detail 1' },
     })
     expect(screen.getByText(/14 things kept/)).toBeTruthy()

@@ -760,10 +760,20 @@ describe('a thumb on the other surfaces', () => {
   })
 
   it('names the fields a screen reader would otherwise skip', () => {
-    // a placeholder is not a label: it goes the moment you type, and is
-    // announced only while the field is empty
-    expect(memory).toMatch(/aria-label="Add a fact, preference, or constraint"/)
-    expect(memory).toMatch(/aria-label="Paste something for it to learn from"/)
+    /*
+     * A placeholder is not a label: it goes the moment you type, and is
+     * announced only while the field is empty.
+     *
+     * What is pinned is that every field carries one — not the words in it.
+     * These are copy, and the last time they changed (the page stopped
+     * sounding like a dossier being kept on somebody) this test failed for
+     * saying nothing about accessibility at all.
+     */
+    for (const ph of memory.match(/placeholder="[^"]*"/g) ?? []) {
+      const at = memory.indexOf(ph)
+      const field = memory.slice(Math.max(0, at - 300), at + 300)
+      expect(field).toMatch(/aria-label="[^"]+"/)
+    }
     expect(memory).toMatch(/aria-label="What it remembers"/)
     expect(settings).toMatch(/aria-label="New password"/)
   })

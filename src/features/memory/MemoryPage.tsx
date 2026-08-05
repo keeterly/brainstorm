@@ -1,5 +1,21 @@
-// Memory — what the water keeps: the editable facts the AI knows about you,
-// what it has changed its mind about, and the ocean of finished work.
+// Memory — what the water keeps: what the app has picked up about how you
+// work, what it has changed its mind about, and the ocean of finished work.
+//
+// The heading here read "Known about you", which is a passive with nobody in
+// it — the grammar of a file somebody keeps on you rather than of a thing that
+// has been working alongside you and formed some impressions. Nothing was
+// doing the knowing and nothing was admitting it might be wrong. It read as
+// surveillance because that is the sentence surveillance uses.
+//
+// "What it has picked up" says who, says it is partial, and says it came out
+// of use rather than observation — and it sits with the two sections under it,
+// which have always been "what it changed its mind about" and "what it has
+// never needed". Three admissions in a row, which is the honest shape for a
+// screen whose only job is letting you check what a machine believes.
+//
+// The two halves stopped pronouncing on the person, too. "Always true of you"
+// is a claim the app is in no position to make; when a thing gets used is a
+// claim it can stand behind, and it is the more useful of the two anyway.
 //
 // It used to also hold the app's controls: a notification card above the
 // memories, then autonomy, export, import, the account and Sign out below. All
@@ -113,10 +129,11 @@ export default function MemoryPage() {
       <Find />
 
       <section className="card" style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>Known about you</h2>
+        <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>What it has picked up</h2>
         <p className="muted" style={{ fontSize: 'var(--fs-label)', marginBottom: 6 }}>
-          Fully yours — edit or delete anything. It picks from this for whatever you
-          are working on, rather than sending all of it every time.
+          Picked up from working with you, and yours to correct — change or remove
+          anything here. It brings a few of these to whatever you are doing rather than
+          all of them, every time.
         </p>
         {/* …and here is that sentence being kept. Twelve get carried on every
             run and whatever gets carried is marked, so this is a measurement
@@ -141,8 +158,8 @@ export default function MemoryPage() {
         {live.length >= FILTER_FROM && (
           <input
             className="field"
-            aria-label="Filter what it knows about you"
-            placeholder="Filter what it knows…"
+            aria-label="Filter what it has picked up"
+            placeholder="Filter…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             style={{ ...inputStyle, marginBottom: 12 }}
@@ -162,9 +179,9 @@ export default function MemoryPage() {
         <div style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
           {always.length > 0 && (
             <>
-              <div className="eyebrow" style={{ marginBottom: 2 }}>Always true of you</div>
+              <div className="eyebrow" style={{ marginBottom: 2 }}>Whatever you are working on</div>
               <p className="faint" style={{ fontSize: 'var(--fs-caption)', marginBottom: 8 }}>
-                Carried on every request, whatever it is about.
+                These come along every time, whatever you have asked for.
               </p>
               <Kinds items={always} onSave={updateMemory} onDelete={deleteMemory} />
             </>
@@ -179,7 +196,7 @@ export default function MemoryPage() {
                   </span>
                 </summary>
                 <p className="faint" style={{ fontSize: 'var(--fs-caption)', margin: '8px 0' }}>
-                  Brought only when the question is about it.
+                  These come along when what you are doing is about them.
                 </p>
                 <Kinds items={situational} onSave={updateMemory} onDelete={deleteMemory} />
               </details>
@@ -187,26 +204,26 @@ export default function MemoryPage() {
               <div style={{ marginTop: always.length ? 10 : 0 }}>
                 <div className="eyebrow" style={{ marginBottom: 2 }}>When it comes up</div>
                 <p className="faint" style={{ fontSize: 'var(--fs-caption)', marginBottom: 8 }}>
-                  Brought only when the question is about it.
+                  These come along when what you are doing is about them.
                 </p>
                 <Kinds items={situational} onSave={updateMemory} onDelete={deleteMemory} />
               </div>
             ))}
           {filter.trim() && !always.length && !situational.length && (
-            <p className="faint" style={{ fontSize: 'var(--fs-label)' }}>Nothing it knows matches that.</p>
+            <p className="faint" style={{ fontSize: 'var(--fs-label)' }}>Nothing here matches that.</p>
           )}
           {live.length === 0 && (
             <p className="faint" style={{ fontSize: 'var(--fs-label)' }}>
-              Nothing yet. This fills itself as you use the app — anything ⚡ or the
-              daily read works out about how you work lands here, and you can edit
-              or delete any of it.
+              Nothing yet. It picks things up as you use it — anything ⚡ or the daily
+              read works out about how you work turns up here, and you can change or
+              remove any of it.
             </p>
           )}
         </div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
           <input
-            aria-label="Add a fact, preference, or constraint"
-            placeholder="Add a fact, preference, or constraint…"
+            aria-label="Tell it something about how you work"
+            placeholder="Tell it something about how you work…"
             value={newMem}
             onChange={(e) => setNewMem(e.target.value)}
             onKeyDown={(e) => {
@@ -358,7 +375,7 @@ const KIND_WORDS: Record<string, string> = {
   goal: 'What you are aiming at',
   person: 'Who you work with',
   tool: 'What you work in',
-  fact: 'About your situation',
+  fact: 'Where things stand',
   '': 'Everything else',
 }
 
