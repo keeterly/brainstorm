@@ -18,6 +18,7 @@ import { supabase } from '@/lib/supabase'
 import { useGraph } from '@/store/graph'
 import { exportMarkdown } from '@/domain/export-markdown'
 import { clearSnapshot } from '@/lib/idb'
+import { askToHear, canHear, mayHear } from '@/lib/hearing'
 import { clearTrail, readTrail, trailWhen } from '@/lib/trail'
 import { disable as pushOff, enable as pushOn, explain as pushWhy, readiness, subscribed } from '@/lib/push'
 import {
@@ -153,6 +154,54 @@ function TellMe() {
   )
 }
 
+/**
+ * Where the microphone is actually asked for.
+ *
+ * Holding the pen opens the writing page with the ear on, and it will not ask
+ * for permission while your thumb is down — a sheet over a page mid-gesture
+ * eats the hold and gets a badly-considered answer. So the asking lives here,
+ * behind a button that says what it is going to do, at a moment chosen by the
+ * person doing it.
+ */
+function LetItHear() {
+  const [on, setOn] = useState(mayHear())
+  const [busy, setBusy] = useState(false)
+  const [why, setWhy] = useState('')
+
+  async function ask() {
+    setBusy(true)
+    setWhy('')
+    const res = await askToHear()
+    setOn(res.ok || mayHear())
+    if (!res.ok) setWhy(res.why)
+    setBusy(false)
+  }
+
+  if (!canHear()) return null
+  return (
+    <section className="card" style={{ marginBottom: 16 }}>
+      <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>Speaking</h2>
+      <p className="muted" style={{ fontSize: 'var(--fs-label)', marginBottom: 10 }}>
+        Hold the pen in the sky and it writes down what you say, for as long as you hold it. Your
+        phone has to allow the microphone first, and it will ask once — better here than in the
+        middle of the gesture.
+      </p>
+      {on ? (
+        <p className="muted" style={{ fontSize: 'var(--fs-label)' }}>
+          On for this device. Hold the pen to say something.
+        </p>
+      ) : (
+        <button className="btn" onClick={ask} disabled={busy}>
+          {busy ? 'Asking…' : 'Let it hear me'}
+        </button>
+      )}
+      {why ? (
+        <p style={{ fontSize: 'var(--fs-label)', marginTop: 8, color: 'var(--warn, #e0a05a)' }}>{why}</p>
+      ) : null}
+    </section>
+  )
+}
+
 function WhatItDid() {
   const [trail, setTrail] = useState(() => readTrail())
   if (!trail.length) return null
@@ -248,6 +297,7 @@ export default function SettingsPage() {
       <h1 className="page-title">Settings</h1>
 
       <TellMe />
+      <LetItHear />
 
       <section className="card" style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>How much the AI does</h2>

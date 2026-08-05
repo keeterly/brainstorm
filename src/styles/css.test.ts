@@ -1794,7 +1794,7 @@ describe('the picture and the words agree about what is finished', () => {
   it('sends what is left before what is done, to both of them', () => {
     const at = page.indexOf('function shareThing(')
     expect(at).toBeGreaterThan(-1)
-    const body = page.slice(at, at + 1800)
+    const body = page.slice(at, at + 2400)
     // the card already drew a finished row struck through with its dot
     // filled, and at the size a message thumbnail gives it that strike is two
     // pixels. Order carries it where styling cannot — and the same array
@@ -1821,7 +1821,7 @@ describe('saying something is one gesture', () => {
     expect(page).toMatch(/holdToTalk\(writeEl\)/)
     expect(page).toMatch(/holdToTalk\(nextPen\)/)
     const at = page.indexOf('function holdToTalk(')
-    const body = page.slice(at, at + 1800)
+    const body = page.slice(at, at + 2400)
     // the page first, then the ear
     expect(body.indexOf("openPage('capture'")).toBeLessThan(body.indexOf('startMic()'))
     // …and the finger is still down on a page that just appeared under it
@@ -1838,7 +1838,7 @@ describe('saying something is one gesture', () => {
     // a microphone that outlives the press is one you find running an hour
     // later; the only honest claim is that it listens while you hold it
     const at = page.indexOf('function holdToTalk(')
-    const body = page.slice(at, at + 1800)
+    const body = page.slice(at, at + 2400)
     for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) {
       expect(body).toMatch(new RegExp(`addEventListener\\('${ev}', stop\\)`))
     }
@@ -1848,8 +1848,9 @@ describe('saying something is one gesture', () => {
   it('still gives the page to a phone that cannot hear', () => {
     const at = page.indexOf('function holdToTalk(')
     // startMic returns false where there is no recognition, and the page —
-    // the useful half — has already opened by then
-    expect(page.slice(at, at + 1800)).toMatch(/talking = startMic\(\)/)
+    // the useful half — has already opened by then. Same path as a phone that
+    // has not been asked yet, which is the point: neither one prompts.
+    expect(page.slice(at, at + 2400)).toMatch(/talking = mayHear\(\) && startMic\(\)/)
   })
 
   it('lets the mic inside the page be held or latched', () => {
@@ -1861,6 +1862,33 @@ describe('saying something is one gesture', () => {
     const body = page.slice(at - 400, at + 700)
     expect(body).toMatch(/micWasLive = !!rec/)
     expect(body).toMatch(/performance\.now\(\) - micDownAt >= TALK_HOLD/)
+  })
+
+  it('never raises a permission sheet in the middle of the gesture', () => {
+    /*
+     * The first time anybody holds the pen, the OS would put a dialog over
+     * the page with their thumb still down: the hold is eaten, and the reward
+     * for learning the gesture is a question they did not ask. A dialog that
+     * interrupts a gesture also gets the wrong answer, because nobody reads
+     * one. So the gesture listens when it already may, and says where to turn
+     * it on when it may not — the asking has its own screen.
+     */
+    const at = page.indexOf('function holdToTalk(')
+    const body = page.slice(at, at + 2400)
+    expect(body).toMatch(/talking = mayHear\(\) && startMic\(\)/)
+    expect(body).toMatch(/turn on speaking in settings first/)
+  })
+
+  it('learns it is allowed from the mic that may ask, and unlearns a refusal', () => {
+    // tapping a microphone is a deliberate act and may prompt; that grant is
+    // what teaches the hold it is allowed
+    const at = page.indexOf('rec.start()')
+    expect(page.slice(at, at + 300)).toMatch(/markHeard\(\)/)
+    const err = page.indexOf('rec.onerror = (e)')
+    expect(err).toBeGreaterThan(-1)
+    const body = page.slice(err, err + 500)
+    expect(body).toMatch(/not-allowed/)
+    expect(body).toMatch(/forgetHeard\(\)/)
   })
 
   it('stops saying "listening…" when it has stopped listening', () => {
@@ -1877,5 +1905,25 @@ describe('saying something is one gesture', () => {
   it('says on the control itself that it can be held', () => {
     // cheaper than another one-time line, and it is there when you look
     expect(page).toMatch(/aria-label="Write a thought — hold to speak"/)
+  })
+})
+
+
+describe('the microphone is asked for on its own screen', () => {
+  const settings = readFileSync(join('src/features/settings', 'SettingsPage.tsx'), 'utf8')
+
+  it('offers it as a thing you go and do, not a thing that happens to you', () => {
+    expect(settings).toMatch(/function LetItHear\(\)/)
+    expect(settings).toMatch(/<LetItHear \/>/)
+    expect(settings).toMatch(/Let it hear me/)
+    // and says why it is here rather than in the gesture
+    expect(settings).toMatch(/better here than in the/)
+  })
+
+  it('is absent on a phone that cannot turn speech into words', () => {
+    // a button offering a capability that does not exist is worse than no
+    // button: it reads as broken rather than unavailable
+    const at = settings.indexOf('function LetItHear()')
+    expect(settings.slice(at, at + 1400)).toMatch(/if \(!canHear\(\)\) return null/)
   })
 })

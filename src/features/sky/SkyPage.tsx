@@ -55,6 +55,7 @@ import { holdReload } from '@/lib/sw'
 import { noteTrail } from '@/lib/trail'
 import { echoRing, wabiBlob, wabiPill, wabiSeed } from '@/world/echo'
 import { rippleAt, WAKE } from '@/world/ripple'
+import { canHear, forgetHeard, markHeard, mayHear } from '@/lib/hearing'
 import { type Body, card, contact, disc, oilPath, pull } from '@/world/shape'
 import type { Thought, ThoughtType } from '@/domain/types'
 import './sky.css'
@@ -2494,9 +2495,18 @@ function mountSky(root: HTMLDivElement) {
         // your finger is still down and the page has just appeared under it —
         // the same reason holding the sky does this
         deafenPage()
-        // A phone with no speech recognition still gets the page, which is
-        // the useful half. It simply does not claim to be listening.
-        talking = startMic()
+        /*
+         * …but only if it already may. The first time anybody holds this,
+         * the OS would put a permission sheet over the page with the thumb
+         * still down: the hold is eaten, and the reward for learning the
+         * gesture is a question nobody asked. A dialog that interrupts a
+         * gesture also gets the wrong answer, because nobody reads it.
+         *
+         * A phone with no speech recognition takes the same path, and both
+         * still get the page — which is the useful half.
+         */
+        talking = mayHear() && startMic()
+        if (!talking && canHear() && !mayHear()) say('turn on speaking in settings first')
         haptics.grab()
       }, TALK_HOLD)
     })
@@ -5113,9 +5123,22 @@ function mountSky(root: HTMLDivElement) {
         micWas = null
       }
     }
-    rec.onerror = () => stopMic()
+    rec.onerror = (e) => {
+      // …and if it was refused, or the permission was taken away since, stop
+      // believing we have it — otherwise the hold keeps opening a mic that
+      // cannot listen and says nothing about why
+      const err = (e as { error?: string } | undefined)?.error ?? ''
+      if (err === 'not-allowed' || err === 'service-not-allowed') {
+        forgetHeard()
+        say('speaking is switched off for this app')
+      }
+      stopMic()
+    }
     try {
       rec.start()
+      // it started, so it evidently may — which is how tapping the mic inside
+      // the page teaches the hold that it is allowed
+      markHeard()
       pageMic.classList.add('live')
       if (micWas === null) micWas = pageN.textContent ?? ''
       pageN.textContent = 'listening…'
@@ -8390,7 +8413,7 @@ interface SpeechRecognitionLike {
   lang: string
   onresult: ((ev: { resultIndex: number; results: { length: number; [i: number]: { isFinal: boolean; [j: number]: { transcript: string } } } }) => void) | null
   onend: (() => void) | null
-  onerror: (() => void) | null
+  onerror: ((e?: { error?: string }) => void) | null
   start(): void
   stop(): void
 }
