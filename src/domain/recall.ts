@@ -67,6 +67,23 @@ const STANDING: Record<MemoryKind, number> = {
  */
 const UNKNOWN_STANDING = 0.55
 
+/**
+ * Above this, a memory rides along on everything.
+ *
+ * The number is already the most consequential thing this file decides — it is
+ * what separates the three kinds that shape every single answer from the four
+ * that have to be about the question — and until now it was invisible: the
+ * Memory page showed eight equal buckets in a row, so a constraint that
+ * governs every piece of work the app does looked exactly like a fact about
+ * one supplier. Named and exported so one rule draws the line in both places.
+ */
+export const RIDES_ALONG = 0.75
+
+/** Is this the sort of thing that is true regardless of what is being asked? */
+export function ridesAlong(kind?: string | null): boolean {
+  return (STANDING[kind as MemoryKind] ?? UNKNOWN_STANDING) >= RIDES_ALONG
+}
+
 export interface Recallable {
   id: string
   content: string

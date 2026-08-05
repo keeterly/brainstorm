@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { rank, recall, tokens, topicOf } from './recall'
+import { rank, recall, ridesAlong, tokens, topicOf } from './recall'
 
 const NOW = Date.parse('2026-07-30T12:00:00Z')
 const days = (n: number) => new Date(NOW - n * 86400000).toISOString()
@@ -133,5 +133,26 @@ describe('working out what an ask is about', () => {
     let deep: unknown = 'bottom'
     for (let i = 0; i < 30; i++) deep = { next: deep }
     expect(() => topicOf(deep)).not.toThrow()
+  })
+})
+
+describe('which kinds shape everything, and which have to be about the ask', () => {
+  it('draws the line where the ranker draws it', () => {
+    /*
+     * The Memory page used to show eight equal buckets in a row, so a
+     * constraint that governs every piece of work the app does looked exactly
+     * like a fact about one supplier. One rule now draws the line in both
+     * places rather than the page guessing at it.
+     */
+    for (const k of ['constraint', 'preference', 'pattern']) expect(ridesAlong(k)).toBe(true)
+    for (const k of ['goal', 'tool', 'person', 'fact']) expect(ridesAlong(k)).toBe(false)
+  })
+
+  it('does not promote something it has never formed a view on', () => {
+    // an unclassified memory is not one the app decided is unimportant — but
+    // it is not one it decided governs everything either
+    expect(ridesAlong(null)).toBe(false)
+    expect(ridesAlong('')).toBe(false)
+    expect(ridesAlong('something invented')).toBe(false)
   })
 })

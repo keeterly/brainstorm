@@ -14,6 +14,7 @@ import { humanDate } from '@/domain/human-date'
 import { todayISO } from '@/domain/prioritize-prepass'
 import { learn, type Learned } from '@/ai/memoryFlow'
 import { leanedWords, neverNeeded, workingSet } from '@/domain/leaned'
+import { ridesAlong } from '@/domain/recall'
 import { Find } from './Find'
 import type { Memory, MemoryEvent } from '@/domain/types'
 
@@ -28,6 +29,7 @@ export default function MemoryPage() {
   const toggleDone = useGraph((s) => s.toggleDone)
 
   const memoryEvents = useGraph((s) => s.memoryEvents)
+  const [filter, setFilter] = useState('')
   const [newMem, setNewMem] = useState('')
   const [distillText, setDistillText] = useState('')
   const [learning, setLearning] = useState(false)
@@ -47,6 +49,12 @@ export default function MemoryPage() {
   const nowMs = Date.now()
   const working = workingSet(live, nowMs)
   const unread = neverNeeded(live, nowMs)
+
+  // …and, once there is enough of it, a way through it
+  const q = filter.trim().toLowerCase()
+  const shown = q ? live.filter((m) => m.content.toLowerCase().includes(q)) : live
+  const always = shown.filter((m) => ridesAlong(m.kind))
+  const situational = shown.filter((m) => !ridesAlong(m.kind))
 
   const finished = thoughts
     .filter((t) => t.status === 'done')
@@ -125,27 +133,68 @@ export default function MemoryPage() {
             {working > 0 && working === live.length && `${live.length} things kept, all of them in use.`}
           </p>
         )}
-        {/* Grouped, because the kinds are not equal. A constraint you gave it is
-            worth reading before a fact it happened to notice, and a flat list in
-            the order things were written buries the important half. */}
+        {/* A way through it, once there is enough of it to need one. Below that
+            a filter is a control asking to be used on four things, and the top
+            of this page already has a search — for what you have written,
+            which is a different question and must not be confused with this
+            one. Hence the placement, inside the card it filters. */}
+        {live.length >= FILTER_FROM && (
+          <input
+            className="field"
+            aria-label="Filter what it knows about you"
+            placeholder="Filter what it knows…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            style={{ ...inputStyle, marginBottom: 12 }}
+          />
+        )}
+        {/*
+         * Two halves, because the ranker treats them as two halves.
+         *
+         * A constraint, a preference and how you work ride along on every
+         * single request — see recall.ts, where standing decides it. The rest
+         * have to be about the question to travel at all. Shown as eight equal
+         * buckets in a row, a rule that governs every piece of work the app
+         * does looked exactly like a fact about one supplier; and with a
+         * hundred memories in here the situational half — facts accumulate
+         * fastest and matter least — would bury the governing half entirely.
+         */}
         <div style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
-          {byKind(live).map(([kind, items]) => (
-            <div key={kind} style={{ marginBottom: 6 }}>
-              <div className="eyebrow" style={{ marginBottom: 6 }}>
-                {KIND_WORDS[kind] ?? kind}
+          {always.length > 0 && (
+            <>
+              <div className="eyebrow" style={{ marginBottom: 2 }}>Always true of you</div>
+              <p className="faint" style={{ fontSize: 'var(--fs-caption)', marginBottom: 8 }}>
+                Carried on every request, whatever it is about.
+              </p>
+              <Kinds items={always} onSave={updateMemory} onDelete={deleteMemory} />
+            </>
+          )}
+          {situational.length > 0 &&
+            (situational.length > FOLD_FROM ? (
+              <details style={{ marginTop: always.length ? 10 : 0 }}>
+                <summary style={{ cursor: 'pointer', listStyle: 'none' }}>
+                  <span className="eyebrow">When it comes up</span>
+                  <span className="faint" style={{ fontSize: 'var(--fs-caption)', marginLeft: 8 }}>
+                    {situational.length}
+                  </span>
+                </summary>
+                <p className="faint" style={{ fontSize: 'var(--fs-caption)', margin: '8px 0' }}>
+                  Brought only when the question is about it.
+                </p>
+                <Kinds items={situational} onSave={updateMemory} onDelete={deleteMemory} />
+              </details>
+            ) : (
+              <div style={{ marginTop: always.length ? 10 : 0 }}>
+                <div className="eyebrow" style={{ marginBottom: 2 }}>When it comes up</div>
+                <p className="faint" style={{ fontSize: 'var(--fs-caption)', marginBottom: 8 }}>
+                  Brought only when the question is about it.
+                </p>
+                <Kinds items={situational} onSave={updateMemory} onDelete={deleteMemory} />
               </div>
-              <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'minmax(0, 1fr)' }}>
-                {items.map((m) => (
-                  <MemoryRow
-                    key={m.id}
-                    memory={m}
-                    onSave={(v) => updateMemory(m.id, v)}
-                    onDelete={() => deleteMemory(m.id)}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
+            ))}
+          {filter.trim() && !always.length && !situational.length && (
+            <p className="faint" style={{ fontSize: 'var(--fs-label)' }}>Nothing it knows matches that.</p>
+          )}
           {live.length === 0 && (
             <p className="faint" style={{ fontSize: 'var(--fs-label)' }}>
               Nothing yet. This fills itself as you use the app — anything ⚡ or the
@@ -314,6 +363,39 @@ const KIND_WORDS: Record<string, string> = {
 }
 
 const KIND_ORDER = ['constraint', 'preference', 'pattern', 'goal', 'person', 'tool', 'fact', '']
+
+/** The kinds inside one half of the page, each under its own word. */
+function Kinds({
+  items,
+  onSave,
+  onDelete,
+}: {
+  items: Memory[]
+  onSave: (id: string, v: string) => void
+  onDelete: (id: string) => void
+}) {
+  return (
+    <>
+      {byKind(items).map(([kind, group]) => (
+        <div key={kind} style={{ marginBottom: 6 }}>
+          <div className="faint" style={{ fontSize: 'var(--fs-caption)', marginBottom: 4 }}>
+            {KIND_WORDS[kind] ?? kind}
+          </div>
+          <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'minmax(0, 1fr)' }}>
+            {group.map((m) => (
+              <MemoryRow key={m.id} memory={m} onSave={(v) => onSave(m.id, v)} onDelete={() => onDelete(m.id)} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </>
+  )
+}
+
+/** Enough of it to want a way through. */
+const FILTER_FROM = 12
+/** …and enough of the situational half to be worth putting away. */
+const FOLD_FROM = 10
 
 function byKind(memories: Memory[]): [string, Memory[]][] {
   const groups = new Map<string, Memory[]>()

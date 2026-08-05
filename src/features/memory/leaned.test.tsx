@@ -150,3 +150,70 @@ describe('what has ridden along unread', () => {
     expect(screen.queryByText('What it has never needed')).toBeNull()
   })
 })
+
+describe('memory that can grow to a hundred', () => {
+  const many = (n: number, kind: string, tag = 'item') =>
+    Array.from({ length: n }, (_, i) =>
+      mem({ content: `${tag} ${i}`, kind, last_used_at: new Date().toISOString() }),
+    )
+
+  it('separates what governs everything from what has to be about the ask', () => {
+    /*
+     * Eight equal buckets in a row meant a constraint that shapes every piece
+     * of work the app does looked exactly like a fact about one supplier. And
+     * at a hundred memories the situational half — facts accumulate fastest
+     * and matter least — buries the governing half entirely.
+     */
+    seed([...many(3, 'constraint', 'rule'), ...many(20, 'fact', 'detail')])
+    show()
+    expect(screen.getByText('Always true of you')).toBeTruthy()
+    expect(screen.getByText(/Carried on every request/)).toBeTruthy()
+    expect(screen.getByText('When it comes up')).toBeTruthy()
+  })
+
+  it('puts the situational half away once there is a lot of it', () => {
+    seed([...many(2, 'preference', 'want'), ...many(20, 'fact', 'detail')])
+    show()
+    const fold = screen.getByText('When it comes up').closest('details')
+    expect(fold).toBeTruthy()
+    // the governing half is never folded: it is the half worth reading
+    expect(screen.getByText('Always true of you').closest('details')).toBeNull()
+  })
+
+  it('leaves a small memory alone, unfolded and unfiltered', () => {
+    // a filter is a control asking to be used on four things
+    seed([...many(2, 'constraint', 'rule'), ...many(2, 'fact', 'detail')])
+    show()
+    expect(screen.queryByLabelText('Filter what it knows about you')).toBeNull()
+    expect(screen.getByText('When it comes up').closest('details')).toBeNull()
+  })
+
+  it('offers a way through it once there is enough to need one', () => {
+    seed(many(14, 'fact', 'detail'))
+    show()
+    const box = screen.getByLabelText('Filter what it knows about you')
+    fireEvent.change(box, { target: { value: 'detail 3' } })
+    expect(screen.getAllByRole('button', { name: /detail 3/ }).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: /^detail 7$/ })).toBeNull()
+  })
+
+  it('says so rather than looking empty when the filter matches nothing', () => {
+    seed(many(14, 'fact', 'detail'))
+    show()
+    fireEvent.change(screen.getByLabelText('Filter what it knows about you'), {
+      target: { value: 'zzzz' },
+    })
+    expect(screen.getByText(/Nothing it knows matches that/)).toBeTruthy()
+  })
+
+  it('counts the whole of what it knows, not what the filter left', () => {
+    // the line under the heading is a fact about your memory; a filter is a
+    // way of looking at it, and must not appear to shrink it
+    seed(many(14, 'fact', 'detail'))
+    show()
+    fireEvent.change(screen.getByLabelText('Filter what it knows about you'), {
+      target: { value: 'detail 1' },
+    })
+    expect(screen.getByText(/14 things kept/)).toBeTruthy()
+  })
+})
