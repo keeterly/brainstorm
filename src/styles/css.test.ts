@@ -1175,23 +1175,29 @@ describe('reversal is bulletproof', () => {
 })
 
 // The type is the most consequential fact about a thought and it was
-// invisible: the Current and the sky's own suggestion consider only `action`
-// and `task`, so anything classified `note` is exiled from every surface that
-// answers "what next" — silently, for ever. A playtester captured six dated
-// tasks, watched every one called a note, and never saw his own work
-// recommended once.
+// invisible: `prioritizePrepass` considers only `action` and `task`, so
+// anything classified `note` is exiled from every surface that answers "what
+// next" — silently, for ever. A playtester captured six dated tasks, watched
+// every one called a note, and never saw his own work recommended once.
 describe('what this is, and one tap to disagree', () => {
   const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
   const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
 
   it('says it as a consequence rather than as vocabulary', () => {
-    // "note" is a word only this app uses; "it stays out of the Current" is
-    // a claim the person can go and check
-    expect(page).toMatch(/it flows in the Current/)
-    expect(page).toMatch(/it stays out of the Current/)
+    /*
+     * "note" is a word only this app uses, so the line names what follows from
+     * it instead. It used to name that consequence after the screen it
+     * happened on — "it flows in the Current" — and then that screen was
+     * deleted and the words stayed, so for three commits the app went on
+     * telling you where your thing had gone after there was anywhere for it
+     * to go. Whatever this line says has to be checkable.
+     */
+    expect(page).toMatch(/it can come up as your next step/)
+    expect(page).toMatch(/it will not come up as a next step/)
+    expect(page).not.toMatch(/the Current'/)
   })
 
-  it('turns a note into something the Current can see', () => {
+  it('turns a note into something that can come up as a next step', () => {
     const at = page.indexOf("pageA.querySelector('.kindline')")
     const body = page.slice(at, at + 900)
     expect(body).toMatch(/S\(\)\.updateThought\(tl\.t\.id, \{ type: 'action' \}\)/)

@@ -1751,7 +1751,11 @@ function mountSky(root: HTMLDivElement) {
         ? `<div class="state blue">a brief${brief.sources.length ? ` · ${brief.sources.length} sources` : ''}</div>`
         : due ||
           (isRipe(t)
-            ? `<div class="state blue">saturated</div>`
+            ? // "saturated" is a word only this app used, and it named a state
+              // by its weather rather than by what you can now do. It means
+              // the ⚡ button on this thing will make you steps — so it says
+              // that, in the button's own words.
+              `<div class="state blue">ready for steps</div>`
             : dots)
     const photo = imgOf(t) ? `<div class="photo"></div>` : ''
     // …and a mark, so a thing the agent has been out for looks different from
@@ -2234,7 +2238,7 @@ function mountSky(root: HTMLDivElement) {
       for (let k = 0; k < 3; k++) setTimeout(() => evaporateAt(x + (Math.random() - 0.5) * 60), k * 130)
     }
     haptics.arrive()
-    say('finished — it’s gone up')
+    say('finished — off the sky')
     offerAction(
       `“${trim(label(t), 26)}”${under.length ? ` and the ${under.length} inside` : ''} is finished`,
       'bring it back',
@@ -2285,7 +2289,7 @@ function mountSky(root: HTMLDivElement) {
     }
     setTimeout(() => splash(p.rx * cam.k + cam.x), reduced ? 0 : 420)
     haptics.sink()
-    say('let go — the deep keeps it')
+    say('let go — it is in what you set aside')
     offerAction(
       `“${trim(label(t), 26)}”${under.length ? ` and the ${under.length} inside` : ''} let go`,
       'bring it back',
@@ -2361,7 +2365,7 @@ function mountSky(root: HTMLDivElement) {
     // off the water, which is where the thing it came from just went
     evaporateAt(p.rx * cam.k + cam.x)
     haptics.arrive()
-    record(`“${trim(label(res.thought), 30)}” rose`, label(res.thought))
+    record(`“${trim(label(res.thought), 30)}” came out of finishing that`, label(res.thought))
     offerAction(res.note || trim(label(res.thought), 42), 'go to it', () => {
       focusOn(posOf(res.thought.id))
       const tl = view.byId.get(res.thought.id)
@@ -2385,7 +2389,7 @@ function mountSky(root: HTMLDivElement) {
     S().updateThought(t.id, { status: 'snoozed', snooze_until: until })
     for (const id of under) S().updateThought(id, { status: 'snoozed', snooze_until: until })
     clearAll()
-    say('rising into the high clouds — back tomorrow')
+    say('resting — back tomorrow')
     offerAction(
       `“${trim(label(fresh), 26)}”${under.length ? ` and the ${under.length} inside` : ''} — resting`,
       'bring it back',
@@ -2712,7 +2716,7 @@ function mountSky(root: HTMLDivElement) {
         say(`called it “${better}”`)
       })
       say(parent ? `a group inside — “${name}”` : `pooled — “${name}”`)
-      record(parent ? `a group inside — “${name}”` : `pooled — “${name}”`)
+      record(parent ? `a group inside — “${name}”` : `grouped — “${name}”`)
       offerUndo('', () => {
         // the group existed only to hold these two; unmaking it takes its
         // edges with it — see deleteThought — and each goes back where it stood
@@ -2739,7 +2743,7 @@ function mountSky(root: HTMLDivElement) {
    */
   function releaseMember(t: Thought, poolId: string) {
     const done = takeOut(t.id)
-    say(done ? done.note : 'released from the pool')
+    say(done ? done.note : 'out of the group, loose in the sky')
     const remaining = view.byId.get(poolId)?.members.filter((m) => m.id !== t.id) ?? []
     if (remaining.length === 0) openPool = null
   }
@@ -2751,16 +2755,17 @@ function mountSky(root: HTMLDivElement) {
       .slice(0, 6)
       .filter((k) => k.pool || !hasThread(tl.t.id, k.tl.t.id))
     if (!kin.length) {
-      // named as an outcome of the gesture, not a riddle — "nothing
-      // like-minded nearby yet" with no subject left a playtester unsure
-      // what she had even done
-      say('held to gather — nothing like-minded near it yet')
+      // Named as an outcome, not a riddle: "nothing like-minded nearby yet"
+      // with no subject left a playtester unsure what she had even done. It
+      // said "held to gather" until the hold on a bubble was cut — this comes
+      // from a button now, so it says nothing about how you asked.
+      say('nothing else up here is much like it')
       return
     }
     holding = { id: tl.t.id, auto, started: performance.now() }
     els.get(tl.t.id)?.classList.add('holding')
     haptics.grab()
-    say(auto ? 'gathering like-minded ideas…' : 'hold — like-minded ideas are drawn in')
+    say('looking for what is like it…')
   }
   function stepHold() {
     if (!holding) return
@@ -3418,7 +3423,7 @@ function mountSky(root: HTMLDivElement) {
       // Nothing here has a Save. Every field commits when you leave it, because
       // the × sits an inch from the name box and a page that loses your typing
       // when you close it the obvious way is a page that does not work.
-      pageQ.textContent = tl.kind === 'pool' ? 'This group' : 'This drop'
+      pageQ.textContent = tl.kind === 'pool' ? 'This group' : 'This thought'
       pageT.value = label(tl.t)
       asking('Name it')
       nameFor = tl.t.id
@@ -3474,22 +3479,27 @@ function mountSky(root: HTMLDivElement) {
        * What the app decided this is, and one tap to disagree.
        *
        * The type is the single most consequential fact about a thought and it
-       * was invisible: the Current and the sky's own suggestion only ever
-       * consider `action` and `task`, so a thing classified `note` is exiled
-       * from everything that answers "what do I do next" — silently, for
-       * ever. A playtester captured six dated tasks, watched every one get
-       * called a note, and never saw his own work recommended once. He could
-       * not have known why, because nothing anywhere said so.
+       * was invisible: `prioritizePrepass` only ever considers `action` and
+       * `task`, so a thing classified `note` is exiled from everything that
+       * answers "what do I do next" — silently, for ever. A playtester captured
+       * six dated tasks, watched every one get called a note, and never saw his
+       * own work recommended once. He could not have known why, because nothing
+       * anywhere said so.
        *
-       * So the drop's own page says which it is, in the consequence rather
-       * than the vocabulary — "in the current" is a thing you can check, and
-       * "note" is a word only this app uses.
+       * So the drop's own page says which it is, in the consequence rather than
+       * the vocabulary — "note" is a word only this app uses, and being left
+       * out of what comes next is a thing you can check.
+       *
+       * It used to say "it flows in the Current", which was that consequence
+       * named after the screen it happened on. That screen was deleted and the
+       * words stayed, so the app went on telling you where your thing had gone
+       * for three commits after there was anywhere for it to go.
        */
       const isDoing = tl.t.type === 'action' || tl.t.type === 'task'
       const kindLine =
         tl.kind === 'drop'
           ? `<button class="kindline" aria-label="${isDoing ? 'Make it a note' : 'Make it something to do'}">` +
-            `<span>${isDoing ? 'something to do · it flows in the Current' : 'a note · it stays out of the Current'}</span>` +
+            `<span>${isDoing ? 'something to do · it can come up as your next step' : 'a note · it will not come up as a next step'}</span>` +
             `<b>${isDoing ? 'make it a note' : 'make it a to-do'}</b>` +
             `</button>`
           : ''
@@ -3647,11 +3657,11 @@ function mountSky(root: HTMLDivElement) {
         const was = ex(tl.t).wasType as ThoughtType | undefined
         if (isDoing) {
           S().updateThought(tl.t.id, { type: was ?? 'note' })
-          say('a note — out of the Current')
+          say('a note — it will not come up as a next step')
         } else {
           patchExtra(tl.t, { wasType: tl.t.type })
           S().updateThought(tl.t.id, { type: 'action' })
-          say('something to do — it flows in the Current now')
+          say('something to do — it can come up as your next step')
         }
         openPage('open', tl, ox, oy)
       })
@@ -4053,7 +4063,7 @@ function mountSky(root: HTMLDivElement) {
       // lose anything.
       const kept = heldDraft()
       pageT.value = kept
-      asking('Let it storm.')
+      asking('Write as much as you like.')
       // The destination used to be said here too — truncated, in the footer,
       // beside Done, which is exactly where two playtesters failed to see it.
       // It is the tappable chip under the question now (see paintInto), and
@@ -4146,7 +4156,7 @@ function mountSky(root: HTMLDivElement) {
         })
       }
     } else if (tl) {
-      pageQ.textContent = 'Inside this drop'
+      pageQ.textContent = 'Inside this thought'
       pageT.value = tl.t.raw_content
       asking('')
       pageN.textContent = answersOf(tl.t).length ? '' : 'edits are kept'
@@ -4570,14 +4580,18 @@ function mountSky(root: HTMLDivElement) {
       const t = tl.t
       patchExtra(t, { answers: [...answersOf(t), txt], plan: null, planSig: null })
       absorbAnim(t.id)
-      say(answersOf(t).length === 0 ? 'saturated — it’s ready to rain' : 'absorbed — the path grows richer')
+      say(
+        answersOf(t).length === 0
+          ? 'that’s enough to make the steps now'
+          : 'added — there is more to go on now',
+      )
       // The other thing you might have meant, offered once it has landed
       // rather than asked before you had written it. Telling the map that
       // something turned out otherwise is a real act and it is rare; this is
       // where the app already puts the follow-up to what just happened.
       if (!S().offline) {
         const spoken = micUsed
-        offerAction('kept — it can move the map too', 'work it in', () => {
+        offerAction('kept — it can change what it knows too', 'work it in', () => {
           hideUndo()
           void runReshape(tl, txt, img, spoken)
         })
@@ -5912,7 +5926,7 @@ function mountSky(root: HTMLDivElement) {
       // five invented chores. Saying so is the honest answer, and the old
       // template could never give it.
       hold(res.missing[0] ?? 'nothing follows from this yet', trim(label(tl.t), 34))
-      record('rained · nothing follows yet', trim(label(tl.t), 40))
+      record('made the steps · nothing follows yet', trim(label(tl.t), 40))
       return
     }
     landRain(tl, res)
@@ -5936,7 +5950,7 @@ function mountSky(root: HTMLDivElement) {
     paintAll()
     haptics.join()
     hold(res.note || `${res.added} thing${res.added === 1 ? '' : 's'} fell out of it`, trim(label(tl.t), 34))
-    record(`rained · ${res.added} to do`, trim(label(tl.t), 40))
+    record(`made the steps · ${res.added} to do`, trim(label(tl.t), 40))
     // …and the way to say no to it. See declineAdded.
     declineAdded([...view.byId.keys()].filter((id) => !before.has(id)))
     fitWhenSettled()
@@ -6119,8 +6133,8 @@ function mountSky(root: HTMLDivElement) {
     paintAll()
     haptics.join()
     hold(res.change.note, trim(label(tl.t), 34))
-    record(`${reshapeTally(res.change) || 'the map moved'} — you told it something`, trim(label(tl.t), 40))
-    offerAction(reshapeTally(res.change) || 'the map moved', 'put it back', () => {
+    record(`${reshapeTally(res.change) || 'what it knows changed'} — you told it something`, trim(label(tl.t), 40))
+    offerAction(reshapeTally(res.change) || 'what it knows changed', 'put it back', () => {
       res.change.undo()
       rebuild()
       paintAll()
@@ -7027,7 +7041,7 @@ function mountSky(root: HTMLDivElement) {
         meter.textContent =
           best.kind === 'pool'
             ? label(best.t)
-            : (sharedConcept([label(drag.tl.t), label(best.t)]) ?? 'a new pool')
+            : (sharedConcept([label(drag.tl.t), label(best.t)]) ?? 'a new group')
         meter.style.left = ((p.x + bp.x) / 2) * cam.k + cam.x + 'px'
         meter.style.top = ((p.y + bp.y) / 2) * cam.k + cam.y - (Math.max(ra, rb) * cam.k + 26) + 'px'
         meter.classList.add('on')
@@ -8093,7 +8107,17 @@ function mountSky(root: HTMLDivElement) {
   })
   raf = requestAnimationFrame(step)
   const n = view.tls.length
-  if (n > 0) say(view.tls.some((tl) => tl.kind === 'drop' && isRipe(tl.t)) ? 'something is saturated' : n >= 8 ? 'a storm is brewing — hold a drop to gather it' : 'welcome back')
+  // "hold a drop to gather it" taught a gesture that no longer exists — the
+  // hold on a bubble went when a bubble was cut back to one tap, and gathering
+  // is the ✦ tidy control, which is on screen from six loose thoughts up.
+  if (n > 0)
+    say(
+      view.tls.some((tl) => tl.kind === 'drop' && isRipe(tl.t))
+        ? 'something is ready for its steps'
+        : n >= 8
+          ? 'a lot up here — ✦ tidy puts together what belongs together'
+          : 'welcome back',
+    )
   /**
    * A notification was tapped, and it was about one particular thing.
    *
