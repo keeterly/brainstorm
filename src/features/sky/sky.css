@@ -268,7 +268,6 @@ body.sky-held {
     0 0 46px rgba(var(--accent-rgb), 0.28),
     0 14px 44px rgba(0, 0, 0, 0.55);
 }
-@keyframes sky-pop { from { scale: 0.25; opacity: 0; } to { scale: 1; opacity: 1; } }
 
 /* the body deforms as it reaches for another; the words ride it undistorted */
 .skyb > .t,
@@ -310,84 +309,6 @@ body.sky-held {
 }
 .skyb .photo + .t { position: relative; z-index: 1; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.95); }
 
-/* A thing's actions are bubbles too.
- *
- * They used to be opaque discs with the word crammed inside them under the
- * icon, and both readings were wrong. Wrong as objects: this world is made of
- * one material and these were the only things in it made of something else —
- * dark plastic counters laid on the glass, each with its own hard black halo.
- * And wrong as layout: a 54px circle holding an icon *and* a word gives the
- * word about eleven pixels and thirty-eight to fit in, so "gather" ran to the
- * rim, the icon shrank to make room, and the whole row read as smudges.
- *
- * So the disc holds the icon and nothing else, and the word stands underneath
- * it in the open where it has all the room it needs. The disc is the same
- * glass as a drop — a little brighter, because it is a control and has to stay
- * legible over whatever it happens to be covering.
- */
-.sky-moon {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 50px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  color: var(--water);
-  cursor: pointer;
-  animation: sky-pop 380ms cubic-bezier(0.2, 1.35, 0.4, 1) backwards;
-  z-index: 6;
-}
-.sky-moon .ic {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  position: relative;
-  isolation: isolate;
-  pointer-events: none;
-  backdrop-filter: blur(16px) saturate(170%) brightness(1.42);
-  -webkit-backdrop-filter: blur(16px) saturate(170%) brightness(1.42);
-  background: linear-gradient(
-    rgba(255, 255, 255, 0.2),
-    rgba(255, 255, 255, 0.07) 48%,
-    rgba(255, 255, 255, 0.13)
-  );
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.16),
-    inset 0 0 0 0.5px rgba(var(--accent-rgb), 0.3),
-    /* the sky darkens under the disc, softly, so the row is plainly in front
-       of whatever it is covering — a ring of flat black was doing this job by
-       drawing a second circle around every button */
-    0 0 22px 6px rgba(6, 9, 14, 0.42),
-    0 10px 26px rgba(0, 0, 0, 0.55);
-}
-/* the same refracting rim the drops have */
-.sky-moon .ic::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(
-    150deg,
-    rgba(255, 255, 255, 0.72) 0%,
-    rgba(255, 255, 255, 0.08) 34%,
-    rgba(255, 255, 255, 0) 58%,
-    rgba(var(--accent-rgb), 0.5) 100%
-  );
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  mask-composite: exclude;
-}
 /* Outside the disc, so it can be a readable size and a real word. Nowrap and
    a width it is allowed to exceed: the labels are short, the spacing is set so
    they clear each other, and an ellipsised verb helps nobody. */
@@ -395,33 +316,8 @@ body.sky-held {
    brighter rather than merely tinted: you are looking at the thing you are
    aiming *from*, not at the menu, so it has to be readable out of the corner
    of an eye. */
-/* Opened under a finger that is already choosing: no entrance. See the
-   `atOnce` argument to showMoons — an animating disc is a moving target. */
-.sky-moon.now { animation: none; }
 
-.sky-moon.aimed { z-index: 8; }
-.sky-moon.aimed .ic {
-  background: rgba(var(--accent-rgb), 0.28);
-  border-color: rgba(var(--accent-rgb), 0.7);
-  box-shadow: 0 0 18px rgba(var(--accent-rgb), 0.35);
-}
-.sky-moon.aimed .lb { opacity: 1; }
 
-.sky-moon .lb {
-  font-size: 11.5px;
-  font-weight: 500;
-  letter-spacing: 0.004em;
-  line-height: 1;
-  white-space: nowrap;
-  pointer-events: none;
-  color: var(--ink);
-  text-shadow: 0 1px 3px rgba(2, 4, 9, 0.9), 0 0 10px rgba(2, 4, 9, 0.7);
-}
-.sky-moon:active .ic {
-  background: linear-gradient(rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.16));
-}
-.sky-moon.dim { opacity: 0.42; }
-.sky-moon.dim .ic { box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.16), 0 0 18px 5px rgba(6, 9, 14, 0.36); }
 
 .sky-drop-in {
   position: absolute;
@@ -1220,6 +1116,21 @@ body.sky-dragging .sky-undo.show {
      readable at a glance, without a single line or chevron drawn for it. */
   margin-left: calc(var(--d, 0) * 18px);
 }
+/* The three verbs, on the page rather than on a ring of glass discs over the
+   sky. Above the destructive row and separated from it: what you came here to
+   do should not sit in the same block as putting the thing away. */
+.sky-page .pans .acts {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0 8px;
+}
+.sky-page .pans .acts .ctl.go {
+  font-weight: 600;
+  color: var(--paper-ink, #3d4b5c);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.45);
+}
+.sky-page .pans .acts .ctl[disabled] { opacity: 0.45; }
+
 /* The words of a step, and under them what it is for.
    A column inside the row, so the reason sits under the title rather than
    beside it — every rule written against `.row .t` still finds it, because
@@ -2346,7 +2257,7 @@ body.sky-dragging .sky-undo.show {
 .sky-page .step .d { font-size: 13px; line-height: 1.55; color: var(--paper-soft, #5b6b7e); }
 
 @media (prefers-reduced-motion: reduce) {
-  .sky-ripple, .skyb.saturated .ring, .sky-moon { animation: none; }
+  .sky-ripple, .skyb.saturated .ring { animation: none; }
   .sky-drop-in, .sky-rain-drop, .sky-page, .sky-page .top, .sky-page > textarea,
   .sky-page .pans, .sky-page .bot, .sky-page .step, .skyb { transition: none; }
 }

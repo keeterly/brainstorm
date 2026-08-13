@@ -1504,229 +1504,19 @@ describe('the colour and the handing-over live in the top bar', () => {
   })
 })
 
-describe('holding a bubble opens its actions under your thumb', () => {
-  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
-  const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
+/*
+ * The hold menu is gone, and its nine tests with it.
+ *
+ * They pinned a ring of glass discs that appeared when you held a bubble, the
+ * aim that chose one, and the row that had to hold still while a thumb
+ * crossed it. All three verbs are on the page a thing opens onto now, written
+ * as words. A pin outlives the thing it pins only as a lie.
+ */
 
-  // the sky has two hold timers — the empty-sky one that opens capture, and
-  // this one, on a bubble you have your finger on
-  const held = page.indexOf('const held = drag.tl')
-
-  it('no longer spends the gesture on gathering', () => {
-    // holding used to run `startPull`, whose commonest honest answer on a
-    // lone thought is "nothing like-minded near it" — a gesture whose usual
-    // outcome is being told it did nothing
-    expect(held).toBeGreaterThan(-1)
-    const body = page.slice(held, held + 520)
-    expect(body).not.toMatch(/startPull\(/)
-    expect(body).toMatch(/showMoons\(held, true\)/)
-    expect(body).toMatch(/sliding = true/)
-    // and it aims immediately, so the moon nearest where the thumb already is
-    // lights up without waiting for a first move
-    expect(body).toMatch(/aimAt\(e\.clientX, e\.clientY\)/)
-  })
-
-  it('is offered inside an open group too', () => {
-    // the timer used to be wrapped in `if (!memberPool)`, so a thing sitting
-    // in a pool — the place you are most likely to want to act on it — was
-    // the one place the hold did nothing at all
-    expect(page.slice(Math.max(0, held - 900), held)).not.toMatch(/if \(!memberPool\) \{/)
-  })
-
-  it('tracks the finger while it is down', () => {
-    const at = page.indexOf('if (sliding) {')
-    expect(at).toBeGreaterThan(-1)
-    expect(page).toMatch(/if \(sliding\) \{\n\s*aimAt\(e\.clientX, e\.clientY\)\n\s*return/)
-  })
-
-  it('forgives a thumb that lands short', () => {
-    // a fingertip is wider than an icon; the reach is deliberately past the
-    // disc rather than exactly it
-    expect(page).toMatch(/const AIM_SLOP = \d+/)
-    expect(page).toMatch(/d < r\.width \/ 2 \+ AIM_SLOP/)
-    // …and nearest wins, so overlapping reaches do not pick by DOM order
-    expect(page).toMatch(/d < bestD/)
-  })
-
-  it('runs the one under the finger on release, and keeps the rest up on a miss', () => {
-    const at = page.indexOf('if (sliding) {\n      sliding = false')
-    expect(at).toBeGreaterThan(-1)
-    const body = page.slice(at, at + 220)
-    expect(body).toMatch(/if \(fireAimed\(\)\) return/)
-    // releasing on nothing must not also close them: that punishes the miss
-    expect(body).not.toMatch(/closeMoons\(\)/)
-  })
-
-  it('fires through the moon’s own handler rather than a second copy of it', () => {
-    // the dim case, the action and the closing all live on the click handler
-    // already; a parallel path here is a second place to forget one of them
-    const at = page.indexOf('function fireAimed()')
-    expect(at).toBeGreaterThan(-1)
-    expect(page.slice(at, at + 420)).toMatch(/m\.click\(\)/)
-  })
-
-  it('grows the aimed moon from the frame loop, not the stylesheet', () => {
-    // `layoutMoons` writes an inline transform every frame, so a transform in
-    // the stylesheet is overwritten before it is ever seen
-    const at = page.indexOf('const grow = ')
-    expect(at).toBeGreaterThan(-1)
-    expect(page.slice(at, at + 260)).toMatch(/classList\.contains\('aimed'\)/)
-    expect(page.slice(at, at + 260)).toMatch(/scale\(\$\{\(\(grow \/ cam\.k\)\)/)
-    expect(sky).not.toMatch(/\.sky-moon\.aimed[^{]*\{[^}]*transform:/s)
-  })
-
-  it('lights the aimed one brightly enough to read out of the corner of an eye', () => {
-    expect(sky).toMatch(/\.sky-moon\.aimed \{[^}]*z-index/s)
-    expect(sky).toMatch(/\.sky-moon\.aimed \.ic \{[^}]*box-shadow/s)
-    // the label comes up with it: at a glance the glow alone says "one of
-    // them", not "this one"
-    expect(sky).toMatch(/\.sky-moon\.aimed \.lb \{[^}]*opacity: 1/s)
-  })
-
-  it('holds the row still while a thumb is choosing from it', () => {
-    // measured with a finger down on a member of an open group: the row
-    // walked 170 points down the glass in under a second, because the thing
-    // it hangs off was still going round its orbit
-    expect(page).toMatch(/if \(sliding && !slideRow\) slideRow = \{ x: p\.x, y: p\.y \+ below \}/)
-    expect(page).toMatch(/const rowX = slideRow \? slideRow\.x : p\.x/)
-    expect(page).toMatch(/const rowY = slideRow \? slideRow\.y : p\.y \+ below/)
-    // and the row is actually placed from those, not from the live position
-    expect(page).toMatch(/Math\.min\(hi, rowX\)/)
-    expect(page).toMatch(/const y = Math\.min\(rowY, floor\)/)
-    // the anchor lets go with the menu, or the next one opens in the old spot
-    for (const at of ['function closeMoons()', 'function fireAimed()']) {
-      const i = page.indexOf(at)
-      expect(i).toBeGreaterThan(-1)
-      expect(page.slice(i, i + 400)).toMatch(/slideRow = null/)
-    }
-  })
-
-  it('arrives already in place when it opens under a finger', () => {
-    // the row pops in over ~380ms, staggered, each disc scaling about its own
-    // centre — a third of a second of moving targets, right when the thumb is
-    // travelling toward one
-    expect(page).toMatch(/function showMoons\(tl: TL, atOnce = false\)/)
-    expect(page).toMatch(/showMoons\(held, true\)/)
-    expect(page).toMatch(/\(atOnce \? ' now' : ''\)/)
-    expect(page).toMatch(/if \(!reduced && !atOnce\) m\.style\.animationDelay/)
-    expect(sky).toMatch(/\.sky-moon\.now \{ animation: none; \}/)
-    // a tap still gets the entrance: nothing is moving toward it yet
-    expect(page).toMatch(/showMoons\(tl\)\n/)
-  })
-
-  it('lets go of the aim when the moons go', () => {
-    const at = page.indexOf('function closeMoons()')
-    expect(at).toBeGreaterThan(-1)
-    const body = page.slice(at, at + 300)
-    expect(body).toMatch(/sliding = false/)
-    expect(body).toMatch(/aimed = null/)
-  })
-})
-
-describe('a tap goes in; the actions belong to the hold', () => {
-  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
-
-  // Three glass discs used to appear under everything you touched. On a screen
-  // whose whole argument is that thinking needs room, the commonest gesture in
-  // the app spent that room on a menu nobody had asked for.
-  const at = page.indexOf('function onTap(')
-  const body = page.slice(at, page.indexOf('// ---------- frame loop', at))
-
-  it('puts no actions under a tap, anywhere', () => {
-    expect(at).toBeGreaterThan(-1)
-    expect(body).not.toMatch(/showMoons\(/)
-  })
-
-  it('still opens a group, reads one of its members, and puts it away', () => {
-    // what a tap is actually for — going in — is untouched
-    expect(body).toMatch(/openPool = tl\.t\.id/)
-    expect(body).toMatch(/peek = id/)
-    expect(body).toMatch(/peek = null/)
-  })
-
-  it('clears whatever was up rather than leaving it behind', () => {
-    // the menu belonged to the last thing you touched; touching another thing
-    // must not leave its actions floating over this one
-    expect(body).toMatch(/closeMoons\(\)/)
-  })
-
-  it('does not resurrect a menu when you back out of what you were reading', () => {
-    // backing out of a peeked member used to restore the group's actions,
-    // which made sense only while a tap was what put them there
-    expect(page).not.toMatch(/if \(g\) showMoons\(g\)/)
-    expect(page).toMatch(/…and nothing comes back up with it/)
-  })
-
-  it('teaches the hold once, and only when the tap gave nothing back', () => {
-    expect(page).toMatch(/bs-taught-menu/)
-    expect(page).toMatch(/press and hold anything for what you can do with it/)
-    // a tap that opened a group answered itself; a line about a different
-    // gesture on top of that is the app talking over its own reply
-    const t = page.indexOf('function teachMenu()')
-    expect(t).toBeGreaterThan(-1)
-    expect(page.slice(t, t + 500)).toMatch(/localStorage\.getItem\('bs-taught-menu'\)/)
-    expect(page.slice(t, t + 500)).toMatch(/catch/)
-    expect(body).not.toMatch(/tapPt = at\n\s*teachMenu\(\)/)
-  })
-
-  it('is the only thing ringing while a finger is held on something', () => {
-    const at = page.indexOf('function drawEchoes()')
-    expect(at).toBeGreaterThan(-1)
-    const body = page.slice(at, page.indexOf('function coast(', at))
-    /*
-     * Two other things used to ring at the same moment, and between them they
-     * are what "the rings are coming from somewhere else" actually was.
-     *
-     * The thing with its actions open pulsed here as well — a ring capped at
-     * 76 world units and grown to more than twice that, so on a group you
-     * never saw a ring, only two arcs entering and leaving the screen with
-     * nothing in their curvature to say where they came from. And up to three
-     * unrelated ripe drops pulsed wherever they happened to be.
-     */
-    expect(body).not.toMatch(/push\(moonsFor/)
-    // the ambient pulse survives, behind a guard: ambience is fine until a
-    // finger is choosing, and then it is somebody else's rings
-    expect(body).toMatch(/if \(!moonsFor && !holding\) \{/)
-    const ripe = body.indexOf('isRipe(')
-    expect(ripe).toBeGreaterThan(body.indexOf('if (!moonsFor && !holding) {'))
-  })
-
-  it('answers the hold out of the thing held, and stays on it', () => {
-    const h = page.indexOf('showMoons(held, true)')
-    expect(h).toBeGreaterThan(-1)
-    expect(page.slice(h, h + 320)).toMatch(/rouse\(held\.t\.id\)/)
-    expect(page.slice(h, h + 320)).not.toMatch(/wake\(e\.clientX/)
-
-    /*
-     * It was an overlay: an SVG hung on the body at the point the gesture
-     * happened, in viewport coordinates, sized once. In a still sky it landed
-     * on the bubble to the pixel. On a real one it did not — a bubble breathes,
-     * the constellation re-centres after anything changes, a member of an open
-     * group is going round, and the camera flies — so over the second the rings
-     * take to travel, the thing that sent them walked out from under them.
-     */
-    expect(page).not.toMatch(/roused\(/)
-    expect(page).toMatch(/function drawBurst\(\)/)
-    const b = page.indexOf('function drawBurst()')
-    const body = page.slice(b, b + 1400)
-    // redrawn from the live position every frame, so it cannot separate
-    expect(body).toMatch(/const p = posOf\(burst\.id\)/)
-    expect(body).toMatch(/echoRing\(p\.rx, p\.ry,/)
-    // …and off the rim of what you are actually looking at: rings leaving the
-    // little disc in the middle of an opened group cross its members on the
-    // way out and read as unrelated
-    expect(body).toMatch(/openPool === burst\.id/)
-    expect(body).toMatch(/Math\.max\(orbitR\(tl\), ringR\) \+ memberR\(tl\.members\.length\)/)
-    // it is drawn before anything ambient, and it ends
-    const e = page.indexOf('function drawEchoes()')
-    expect(page.slice(e, e + 700)).toMatch(/drawBurst\(\)/)
-    expect(body).toMatch(/burst = null/)
-    // a hold on empty sky still uses the overlay, which is right: there is no
-    // thing there for it to be attached to
-    expect(page).toMatch(/rippleAt\(x, y, WAKE\)/)
-  })
-})
-
+/*
+ * …and the tests that described a tap by contrast with a hold. There is no
+ * hold on a bubble left to contrast it with.
+ */
 
 describe('a brief that leaves the app reads like a message', () => {
   const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
@@ -1998,5 +1788,67 @@ describe('a plan looks like a plan', () => {
     expect(prepass).toMatch(/import \{ waitingOn \} from '\.\/plan'/)
     expect(prepass).toMatch(/new Set\(waitingOn\(byId, relationships\)\.keys\(\)\)/)
     expect(prepass).not.toMatch(/blocked\.add\(/)
+  })
+})
+
+describe('one tap, and where it lands is what it means', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+  const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
+
+  /*
+   * A bubble used to answer to three gestures — a tap, a quick second tap, and
+   * a hold that opened a ring of glass discs over the sky. Only the discs did
+   * anything you could not reach another way, and they cost a gesture nobody
+   * is born knowing plus a menu on the one surface whose whole argument is
+   * that thinking needs room.
+   */
+
+  it('has no moons left anywhere', () => {
+    for (const gone of ['showMoons', 'layoutMoons', 'closeMoons', 'moonsFor', 'moonSvg', 'MOON_ICONS']) {
+      expect(page).not.toMatch(new RegExp(`\\b${gone}\\b`))
+    }
+    expect(sky).not.toMatch(/\.sky-moon/)
+  })
+
+  it('does not open a menu when a bubble is held', () => {
+    // the hold that survives is on empty sky (write) and on the pen (speak);
+    // neither is a menu
+    const at = page.indexOf('No hold on a bubble any more')
+    expect(at).toBeGreaterThan(-1)
+    expect(page).not.toMatch(/aimAt\(|fireAimed\(|slideRow/)
+  })
+
+  it('sends a tap on a group inside it, and a tap on anything else into it', () => {
+    const at = page.indexOf('One tap, and where it lands is what it means')
+    expect(at).toBeGreaterThan(-1)
+    const body = page.slice(at, at + 1400)
+    expect(body).toMatch(/if \(!isMember && tl\?\.kind === 'pool' && openPool !== tl\.t\.id\)/)
+    expect(body).toMatch(/openPool = tl\.t\.id/)
+    expect(body).toMatch(/openThing\(id\)/)
+  })
+
+  it('puts the three verbs on the page, in words', () => {
+    expect(page).toMatch(/data-act="onwith"/)
+    expect(page).toMatch(/data-act="ask">Ask about this/)
+    expect(page).toMatch(/data-act="say">Add what you know/)
+    // the first one's wording comes from the thing itself — read a wall, find
+    // more like a photograph, answer a question, write a step, rain a cloud
+    expect(page).toMatch(/const onWith = getOnWithIt\(tl\)/)
+    expect(page).toMatch(/sentence\(onWith\.lb\)/)
+  })
+
+  it('runs what the discs ran, from the page', () => {
+    const at = page.indexOf(`pageA.querySelector('[data-act="onwith"]')`)
+    expect(at).toBeGreaterThan(-1)
+    const body = page.slice(at, at + 900)
+    expect(body).toMatch(/onWith\.run\(\)/)
+    expect(body).toMatch(/openPage\('ask', tl,/)
+    expect(body).toMatch(/openPage\('say', tl,/)
+  })
+
+  it('lets the next-action line open the thing rather than ring it', () => {
+    const at = page.indexOf('a loose one opens where everything opens now')
+    expect(at).toBeGreaterThan(-1)
+    expect(page.slice(at, at + 300)).toMatch(/openThing\(nextFor\)/)
   })
 })

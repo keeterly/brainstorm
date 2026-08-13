@@ -231,6 +231,9 @@ export default function SkyPage() {
 export const esc = (t: string) =>
   t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
+/** A label written for a small disc, standing up as a button on a page. */
+export const sentence = (t: string) => (t ? t[0].toUpperCase() + t.slice(1) : t)
+
 export function briefHtml(
   md: string,
   sources: { title: string; url: string }[],
@@ -422,37 +425,6 @@ const QUESTIONS = [
 const STOP = new Set(['what', 'when', 'where', 'which', 'would', 'could', 'should', 'about', 'with', 'this', 'that', 'than', 'then', 'like', 'look', 'from', 'have', 'over', 'into', 'your', 'their', 'there', 'they', 'want', 'need', 'make', 'build', 'helps', 'really', 'thing', 'something', 'anything'])
 
 // the same drawn family as the page tools — no stray emoji in the sky
-const MOON_ICONS: Record<string, string> = {
-  grow: 'M12 3.4c.72 4.3 1.94 5.52 6.24 6.24-4.3.72-5.52 1.94-6.24 6.24-.72-4.3-1.94-5.52-6.24-6.24 4.3-.72 5.52-1.94 6.24-6.24ZM17.7 15.6c.32 1.9.88 2.46 2.78 2.78-1.9.32-2.46.88-2.78 2.78-.32-1.9-.88-2.46-2.78-2.78 1.9-.32 2.46-.88 2.78-2.78Z',
-  gather: 'M3.2 12h5.4M20.8 12h-5.4M6.2 9.2 8.9 12l-2.7 2.8M17.8 9.2 15.1 12l2.7 2.8',
-  rain: 'M7.6 13.6a3.7 3.7 0 0 1-.44-7.37 4.95 4.95 0 0 1 9.5-1.06 3.36 3.36 0 0 1 .3 6.67 3.6 3.6 0 0 1-.53.03H7.6M8.4 16.4l-1 3M13 16.4l-1 3M17.6 16.4l-1 3',
-  // the bolt from the first Brainstorm: hand it over and it goes to work
-  work: 'M13.2 2.8 5.4 13.1a.5.5 0 0 0 .4.8h4.3l-1.3 7.3 7.8-10.3a.5.5 0 0 0-.4-.8h-4.3l1.3-7.3Z',
-  // what it brought back: pages, with something written on them
-  brief: 'M6.2 3.6h8.1l3.5 3.5v13.3H6.2zM14.3 3.6v3.5h3.5M9 12.2h6M9 15.6h4.2',
-  // telling it something: a line going in, and the shape rearranging around it
-  tell: 'M3.4 8.6h6.2M3.4 12h4M3.4 15.4h6.2M14 5.4l6 6.6-6 6.6M20 12h-6.4',
-  // asking it something: the mark itself, because nothing else means this
-  ask: 'M9.1 8.6a3 3 0 1 1 3.9 2.87c-.7.24-1.1.85-1.1 1.58v.85M12 17.6v.5',
-  // what is in this group, as a list you can work on: rows, each with a mark
-  list: 'M4.4 6.6h1.2M4.4 12h1.2M4.4 17.4h1.2M9 6.6h10.6M9 12h10.6M9 17.4h10.6',
-  // making the thing: a nib, and the line it has just drawn
-  make: 'M20.1 4.2a2.1 2.1 0 0 0-3 0l-8.5 8.5-1.2 4.2 4.2-1.2 8.5-8.5a2.1 2.1 0 0 0 0-3ZM14.6 6.7l2.7 2.7M4 20.4h11',
-  // reading a wall of references: an eye, because that is the whole act — the
-  // app looking at the pictures you gathered and telling you what it sees
-  look: 'M2.6 12s3.4-6 9.4-6 9.4 6 9.4 6-3.4 6-9.4 6-9.4-6-9.4-6ZM14.4 12a2.4 2.4 0 1 1-4.8 0 2.4 2.4 0 0 1 4.8 0Z',
-  // the picture you kept, at the size you kept it: a frame with a horizon in it
-  photo:
-    'M3.6 6.8a2 2 0 0 1 2-2h12.8a2 2 0 0 1 2 2v10.4a2 2 0 0 1-2 2H5.6a2 2 0 0 1-2-2V6.8ZM3.9 16l4.6-4.3a1.7 1.7 0 0 1 2.3 0l4 3.7M14 13.4l1.6-1.5a1.7 1.7 0 0 1 2.3 0l2.2 2M9 9.4a1.2 1.2 0 1 1-2.4 0 1.2 1.2 0 0 1 2.4 0Z',
-}
-function moonSvg(key: string) {
-  return (
-    `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" aria-hidden="true">` +
-    `<path d="${MOON_ICONS[key] ?? MOON_ICONS.grow}" stroke="currentColor" stroke-width="1.5" ` +
-    `stroke-linecap="round" stroke-linejoin="round"/></svg>`
-  )
-}
-
 // Wabi-sabi: a real droplet is never a true circle. Each drop gets its own
 // quiet asymmetry, derived from its id so it is the same one every time.
 function blobOf(id: string) {
@@ -636,6 +608,7 @@ export function metaballPath(
  * per visit is a tic, not a teaching.
  */
 let taughtOut = false
+
 
 function mountSky(root: HTMLDivElement) {
   const $ = <T extends HTMLElement>(k: string) => root.querySelector(`[data-sky="${k}"]`) as T
@@ -2446,8 +2419,7 @@ function mountSky(root: HTMLDivElement) {
     e.stopPropagation()
     if (pageFor) return
     const into = openPool
-    if (into) closeMoons()
-    else clearAll()
+        clearAll()
     openPage('capture', undefined, innerWidth / 2, innerHeight * 0.42, into)
   }
   writeEl.addEventListener('click', startWriting)
@@ -2490,8 +2462,7 @@ function mountSky(root: HTMLDivElement) {
         timer = undefined
         if (pageFor) return
         const into = openPool
-        if (into) closeMoons()
-        else clearAll()
+        clearAll()
         openPage('capture', undefined, innerWidth / 2, innerHeight * 0.42, into)
         // your finger is still down and the page has just appeared under it —
         // the same reason holding the sky does this
@@ -2744,7 +2715,6 @@ function mountSky(root: HTMLDivElement) {
       say('held to gather — nothing like-minded near it yet')
       return
     }
-    closeMoons()
     holding = { id: tl.t.id, auto, started: performance.now() }
     els.get(tl.t.id)?.classList.add('holding')
     haptics.grab()
@@ -2836,7 +2806,7 @@ function mountSky(root: HTMLDivElement) {
     // which is exactly where the "let it go" pill has to be, so the two were
     // printed on top of each other every time you carried something down.
     const hide =
-      !!openPool || !!pageFor || !!moonsFor || voiceEl.classList.contains('show') || !!drag?.moved
+      !!openPool || !!pageFor || voiceEl.classList.contains('show') || !!drag?.moved
     /*
      * Worked out here, from the graph, and not asked of anybody.
      *
@@ -2874,12 +2844,9 @@ function mountSky(root: HTMLDivElement) {
       return
     }
     if (!tl) return
-    // Moons first: opening them pushes the drop down to make room for them,
-    // and framing where it *was* left the thing you asked for below the tab
-    // bar with its actions off the bottom of the screen entirely.
-    showMoons(tl)
-    focusOn(posOf(nextFor))
-    paintAll()
+    // …and a loose one opens where everything opens now: its own page, with
+    // its verbs on it. This used to ring the drop with icon buttons instead.
+    openThing(nextFor)
     haptics.grab()
   })
 
@@ -3459,6 +3426,8 @@ function mountSky(root: HTMLDivElement) {
       const shot = fullOf(tl.t)
       const hasBrief = !!briefOf(tl.t.id)
       const kin = kinOf(tl)
+      // what "get on with it" means for this particular thing — see getOnWithIt
+      const onWith = getOnWithIt(tl)
       /*
        * What the app decided this is, and one tap to disagree.
        *
@@ -3583,6 +3552,25 @@ function mountSky(root: HTMLDivElement) {
         (answers.length
           ? `<div class="lab">what it has absorbed</div>` + answers.map(() => `<div class="a"></div>`).join('')
           : '') +
+        /*
+         * The three verbs, on the page you already open to work.
+         *
+         * They used to be a ring of glass discs that appeared when you held a
+         * bubble: an icon each, a gesture nobody is born knowing, and a menu
+         * over the one surface whose whole argument is that thinking needs
+         * room. Here there is space for the words, and you are already looking
+         * at the thing they act on.
+         *
+         * The first of them changes with what this is — read a wall of
+         * references, find more like a photograph, answer a question, write a
+         * step, rain a cloud — which is why its label comes from
+         * `getOnWithIt` rather than being written here.
+         */
+        `<div class="acts">` +
+        `<button class="ctl d go" data-act="onwith"${onWith.dim ? ' disabled' : ''}>${esc(sentence(onWith.lb))}</button>` +
+        `<button class="ctl d" data-act="ask">Ask about this</button>` +
+        `<button class="ctl d" data-act="say">Add what you know</button>` +
+        `</div>` +
         `<div class="danger">` +
         (hasBrief ? `<button class="ctl d" data-act="brief">Read what it brought back</button>` : '') +
         (kin.length ? `<button class="ctl d" data-act="gather">Gather what is like this</button>` : '') +
@@ -3625,6 +3613,32 @@ function mountSky(root: HTMLDivElement) {
         }
         openPage('open', tl, ox, oy)
       })
+      /*
+       * The three verbs, wired to what the moons ran.
+       *
+       * Same calls, same pages — only the way in changed. Each closes this
+       * page first: `openPage` replaces what is on screen, and the writing
+       * page opening out of a thing wants the thing's own place on the glass
+       * to fly out of, which is where it was in the sky rather than where the
+       * list happened to be scrolled to.
+       */
+      const at = posOf(tl.t.id)
+      pageA.querySelector('[data-act="onwith"]')?.addEventListener('click', (e) => {
+        e.stopPropagation()
+        closePage(true)
+        onWith.run()
+      })
+      pageA.querySelector('[data-act="ask"]')?.addEventListener('click', (e) => {
+        e.stopPropagation()
+        closePage(true)
+        openPage('ask', tl, toScreenX(at.x), toScreenY(at.y))
+      })
+      pageA.querySelector('[data-act="say"]')?.addEventListener('click', (e) => {
+        e.stopPropagation()
+        closePage(true)
+        openPage('say', tl, toScreenX(at.x), toScreenY(at.y))
+      })
+
       const gatherBtn = pageA.querySelector('[data-act="gather"]')
       gatherBtn?.addEventListener('click', (e) => {
         e.stopPropagation()
@@ -5433,27 +5447,6 @@ function mountSky(root: HTMLDivElement) {
     restDrop(t)
   })
 
-  // ---------- moons ----------
-  /** half the glass disc — the label hangs below it and is not part of this */
-  const MOON_R = 25
-  /** what the outermost disc must keep between itself and the edge */
-  const MOON_EDGE = 12
-  /** the most air a row is allowed; fewer moons do not spread further apart */
-  const MOON_STEP = 76
-  let moonsFor: string | null = null
-  const moonEls: HTMLDivElement[] = []
-  /**
-   * "Get on with it", read off the thing rather than asked of you.
-   *
-   * A question wants an answer. A step somebody could sit down and produce
-   * wants producing. Something already worked out wants to become work.
-   * Anything else has to be worked out first.
-   *
-   * This used to live inline in the moon that offered it, which was fine while
-   * the moon was the only place you could act. The brief now lists the steps ⚡
-   * came back with and offers the same act on each one, and two copies of a
-   * decision this load-bearing would be two different apps within a week.
-   */
   function getOnWithIt(tl: TL): { icon: string; lb: string; dim: boolean; run: () => void } {
     const asking = tl.kind === 'drop' && isQuestion(label(tl.t))
     const ready = isKept(tl.t) || isRipe(tl.t) || !!briefOf(tl.t.id)
@@ -5568,289 +5561,18 @@ function mountSky(root: HTMLDivElement) {
   }
 
   /*
-   * Aiming with the finger that opened them.
+   * The moons are gone.
    *
-   * `sliding` is true from the moment a hold turns into a menu until the
-   * finger comes up. While it is, whatever moon is under the finger — or
-   * nearest it, within a forgiving reach, because a thumb is wider than an
-   * icon and lands short at least as often as on — is the one that will run.
+   * A ring of glass discs — say, ask, get on with it — that appeared when you
+   * held a bubble, each one an icon, over the single surface whose whole
+   * argument is that thinking needs room. Three of the app's gestures existed
+   * to serve them: the hold that opened them, the aim that chose one, and the
+   * quick second tap that had to be told apart from the first.
+   *
+   * All three verbs are on the page a thing opens onto now, written as words,
+   * where there is space to say what they do. A bubble answers to a tap and a
+   * drag, and both of those you can guess without being taught.
    */
-  let sliding = false
-  let aimed: HTMLDivElement | null = null
-  /** How far past a moon still counts as meaning it. */
-  const AIM_SLOP = 26
-  /**
-   * Where the row stood when the slide began.
-   *
-   * The moons hang off whatever they belong to, and in this sky that thing is
-   * never still: a drop breathes, a member of an open group is going round,
-   * and the constellation re-centres itself for a second after anything
-   * changes. Measured with a finger down on a member, the row walked 170
-   * points down the glass in under a second — out from under the thumb that
-   * had just opened it.
-   *
-   * So the row stops where it was when you started choosing. Followed until
-   * then, still afterwards, which is exactly as long as it matters.
-   */
-  let slideRow: { x: number; y: number } | null = null
-  function aimAt(x: number, y: number) {
-    let best: HTMLDivElement | null = null
-    let bestD = Infinity
-    for (const m of moonEls) {
-      const r = m.getBoundingClientRect()
-      const cx = r.x + r.width / 2
-      const cy = r.y + r.height / 2
-      const d = Math.hypot(x - cx, y - cy)
-      if (d < r.width / 2 + AIM_SLOP && d < bestD) {
-        bestD = d
-        best = m as HTMLDivElement
-      }
-    }
-    if (best === aimed) return
-    aimed?.classList.remove('aimed')
-    aimed = best
-    if (aimed) {
-      aimed.classList.add('aimed')
-      // one tick per moon crossed, so they can be found without looking
-      haptics.grab()
-    }
-  }
-  /** Let go: the one under the finger runs. */
-  function fireAimed(): boolean {
-    if (!aimed) return false
-    const m = aimed
-    aimed = null
-    m.classList.remove('aimed')
-    sliding = false
-    slideRow = null
-    // its own click handler already holds the action, the dim case and the
-    // closing — this is the same press, arrived at differently
-    m.click()
-    return true
-  }
-  function closeMoons() {
-    // whatever was being aimed at is gone with them
-    sliding = false
-    aimed = null
-    slideRow = null
-    moonEls.forEach((m) => m.remove())
-    moonEls.length = 0
-    moonsFor = null
-    // the recommendation comes back out when the actions go away
-    paintNext()
-  }
-  /**
-   * @param atOnce they arrive already in place, with no entrance.
-   *
-   * The row pops in over about 380ms, staggered a moon at a time, and each
-   * disc scales about its own centre — so for that third of a second the
-   * things you would aim at are still moving. Fine when you tapped and are
-   * about to look; wrong when your finger is already down and travelling,
-   * which is the whole of the hold gesture. Under a finger they are simply
-   * there.
-   */
-  function showMoons(tl: TL, atOnce = false) {
-    closeMoons()
-    moonsFor = tl.t.id
-    // The recommendation steps out of the way of the actions. It knew to — it
-    // is hidden whenever a menu is up — but nothing repainted when a menu was
-    // opened by tapping a bubble, so the two sat on top of each other and
-    // neither could be read.
-    paintNext()
-    /*
-     * Where it stands is layoutMoons's problem, not this one.
-     *
-     * There was a line here that shoved the drop down to `radiusOf(tl) + 170`
-     * so the actions would have room under it. Two things wrong with it, and
-     * the second is what put a photograph half off the top of the screen.
-     *
-     * `radiusOf` on a drop tops out at 112, and a photograph you have opened
-     * is not a disc — it is a card as tall as the picture, up to 54% of the
-     * glass. So the room reserved was less than half what the thing needed and
-     * its top went under the status bar.
-     *
-     * And it ran once, on the tap. The card *grows* into its size over about
-     * half a second, so even the measured height is not knowable yet at the
-     * moment this fires. The rule belongs in the frame loop, where the true
-     * size is already known and can be corrected as it changes.
-     */
-    const p = posOf(tl.t.id)
-    /*
-     * Three. Always the same three, always in this order.
-     *
-     * There were six, and which six depended on what you had tapped, so the
-     * row was never twice in the same shape and nothing about it could be
-     * learned. Worse, it was six because it had grown one button per feature
-     * rather than one per intention, and three separate pairs of them were
-     * saying the same thing:
-     *
-     *   the brief · the group · the photo   — three ways to say "open what
-     *     this holds", which is one destination and should be one button.
-     *   grow · tell it                      — both "put words into this". The
-     *     only difference was whether they went to the agent, which is my
-     *     concern and not yours, and it made you choose before you had
-     *     written a word.
-     *   gather                              — the same act as ✦ tidy, which
-     *     is already standing in the sky. It moves in with the other
-     *     organising verbs, on the page where organising happens.
-     *
-     * What is left is the three things you can actually intend: look at it,
-     * add to it, and get on with it.
-     */
-    const acts: { icon: string; lb: string; dim?: boolean; run: () => void }[] = []
-
-    // 1. Words into it. Yours, kept, no round trip.
-    acts.push({
-      icon: 'tell',
-      lb: 'say',
-      run: () => {
-        closeMoons()
-        openPage('say', tl, toScreenX(p.x), toScreenY(p.y))
-      },
-    })
-
-    // 2. Words *to* it. Anything you want to know, with this as the context —
-    //    which is most of what makes the question worth asking.
-    acts.push({
-      icon: 'ask',
-      lb: 'ask',
-      dim: S().offline,
-      run: () => {
-        closeMoons()
-        openPage('ask', tl, toScreenX(p.x), toScreenY(p.y))
-      },
-    })
-
-    // 3. Get on with it — see getOnWithIt, which is the only place that
-    //    decision is made now, because the brief makes it too.
-    const third = getOnWithIt(tl)
-    acts.push({ ...third, run: () => { closeMoons(); getOnWithIt(tl).run() } })
-
-    /*
-     * 4. …and what it already brought back, when there is any.
-     *
-     * Three was the right number while every thing had the same three things
-     * you could intend. But a thing ⚡ has already been out for is not in that
-     * state any more: there is a minute of research sitting on it, and the
-     * only way to reach it was the group page, four taps away, behind a fold,
-     * under a heading about deleting things. The pool's own label even said
-     * "the brief is one moon away and never goes anywhere" — it was not, and
-     * this is the moon that makes that true.
-     *
-     * It appears only when there is something to read, so nothing on a plain
-     * drop has changed, and never twice: `get on with it` already says
-     * `read it` on a step that has been written.
-     */
-    if (briefOf(tl.t.id) && third.lb !== 'read it') {
-      acts.push({
-        icon: 'brief',
-        lb: 'read it',
-        run: () => {
-          closeMoons()
-          const q = posOf(tl.t.id)
-          openPage('brief', tl, toScreenX(q.x), toScreenY(q.y))
-        },
-      })
-    }
-    acts.forEach((a, i) => {
-      const m = document.createElement('div')
-      m.className = 'sky-moon' + (a.dim ? ' dim' : '') + (atOnce ? ' now' : '')
-      m.innerHTML = `<div class="ic">${moonSvg(a.icon)}</div><div class="lb">${a.lb}</div>`
-      if (!reduced && !atOnce) m.style.animationDelay = i * 45 + 'ms'
-      // the disc's own centre, so a moon shrinks and grows around the thing you
-      // are aiming at rather than around the top-left of its label block
-      m.style.transformOrigin = `${MOON_R}px ${MOON_R}px`
-      m.addEventListener('pointerdown', (e) => e.stopPropagation())
-      m.addEventListener('click', (e) => {
-        e.stopPropagation()
-        if (!a.dim) a.run()
-        else say('nothing similar yet')
-      })
-      field.appendChild(m)
-      moonEls.push(m)
-      ;(m as HTMLDivElement & { _slot?: number; _of?: number })._slot = i
-      ;(m as HTMLDivElement & { _slot?: number; _of?: number })._of = acts.length
-    })
-  }
-  /**
-   * Where a thing's actions wait.
-   *
-   * In one row, directly beneath it, always. They used to fan out on an arc
-   * swung toward open space, which sounded considerate and was chaos: five of
-   * them at five angles, overlapping each other and whatever else was nearby,
-   * each a different distance from the thing it acts on, and never twice in
-   * the same place. Nothing about that helps you — you cannot learn where a
-   * button is if it moves, and you read a row far faster than an arc.
-   *
-   * One rule for a drop and for an open pool. The only difference is how far
-   * down they sit, because a pool has rings to clear first.
-   */
-  function layoutMoons() {
-    if (!moonsFor) return
-    const tl = view.byId.get(moonsFor)
-    if (!tl) {
-      closeMoons()
-      return
-    }
-    const p = posOf(tl.t.id)
-    const open = openPool === tl.t.id
-    // below whatever the thing actually occupies: its own body, or the whole
-    // orbit if it has opened out into one. A member you have opened up is a
-    // card rather than a disc and is measured, not guessed — radiusOf would
-    // put its actions across the middle of it.
-    const grown = shapes.get(tl.t.id)
-    const below = open
-      ? Math.max(orbitR(tl), ringR) + memberR(tl.members.length) + 46
-      : (peek === tl.t.id && grown ? grown.hh : radiusOf(tl)) + 52
-
-    /*
-     * …unless a finger is choosing from it, in which case it stands still.
-     *
-     * Taken on the first frame of the slide rather than when the hold fired:
-     * a freshly made moon has no transform yet and is briefly at the world
-     * origin, so anchoring any earlier would nail the row to the top of the
-     * sky. See `slideRow`.
-     */
-    if (sliding && !slideRow) slideRow = { x: p.x, y: p.y + below }
-    const rowX = slideRow ? slideRow.x : p.x
-    const rowY = slideRow ? slideRow.y : p.y + below
-
-    // As wide as they can be and still all fit — worked out in screen pixels,
-    // because the glass is measured in screen pixels and a moon undoes the
-    // camera's scale to keep its real size. The old sum did the spacing in
-    // world units and then compared it against a screen-width budget, so it
-    // was only ever right at one zoom level: pull the camera in and the row it
-    // thought it had centred hung off the left edge.
-    const n0 = moonEls.length || 1
-    const room = n0 > 1 ? (W - 2 * MOON_R - 2 * MOON_EDGE) / (n0 - 1) : MOON_STEP
-    const step = Math.min(MOON_STEP, room)
-    const gap = step / cam.k
-    moonEls.forEach((m) => {
-      const el = m as HTMLDivElement & { _slot?: number; _of?: number }
-      const n = el._of ?? 1
-      const slot = el._slot ?? 0
-      // Centred on the subject, but never off the glass — a thing near an edge
-      // is exactly when you most need its actions to still be reachable. `half`
-      // is how far the outermost disc sits from the row's centre, plus the
-      // margin it must keep; `step` is capped so this can never exceed W/2.
-      const half = ((n - 1) / 2) * step + MOON_R + MOON_EDGE
-      const lo = toWorldX(half)
-      const hi = toWorldX(W - half)
-      const cx = lo > hi ? (toWorldX(0) + toWorldX(W)) / 2 : Math.max(lo, Math.min(hi, rowX))
-      const x = cx + (slot - (n - 1) / 2) * gap - MOON_R
-      // and never under the tab bar, however low the thing itself is — the
-      // label hangs below the disc now, so this clears more than the disc
-      const floor = toWorldY(waterlineY() - 132) - MOON_R
-      const y = Math.min(rowY, floor)
-      // the moons live in the world but are things you tap: they keep their
-      // real size however far out the camera has pulled
-      // …and the one being aimed at stands up out of the row. Folded into the
-      // inline transform because this line runs every frame and would
-      // otherwise overwrite anything the stylesheet had to say about it.
-      const grow = m.classList.contains('aimed') ? 1.18 : 1
-      m.style.transform = `translate(${x}px, ${y}px) scale(${((grow / cam.k)).toFixed(3)})`
-    })
-  }
 
 
   /**
@@ -5897,7 +5619,6 @@ function mountSky(root: HTMLDivElement) {
    */
   async function runFindLike(tl: TL) {
     if (working || S().offline) return
-    closeMoons()
     const pic = fullOf(tl.t) ?? imgOf(tl.t)
     if (!pic || !pic.includes(',')) {
       say('there is no picture on this one')
@@ -6029,7 +5750,6 @@ function mountSky(root: HTMLDivElement) {
 
   async function runLook(tl: TL) {
     if (working || S().offline) return
-    closeMoons()
     setWorking(tl.t.id)
     hold('reading them across…', trim(label(tl.t), 34))
     const res = await lookAtWall(tl.t.id)
@@ -6062,7 +5782,6 @@ function mountSky(root: HTMLDivElement) {
 
   async function rain(tl: TL) {
     if (working || S().offline) return
-    closeMoons()
     openPool = null
     const p = posOf(tl.t.id)
     const r0 = radiusOf(tl)
@@ -6721,7 +6440,6 @@ function mountSky(root: HTMLDivElement) {
 
   let openPool: string | null = null
   function clearAll() {
-    closeMoons()
     const wasOpen = openPool
     // Closing a member you were reading is a step of its own: it should not
     // also throw you out of the group you were reading it in. Decide where we
@@ -6997,8 +6715,7 @@ function mountSky(root: HTMLDivElement) {
             // cleared when there is a group open: closing the thing you are
             // writing into, to write into it, is the app forgetting mid-gesture.
             const into = openPool
-            if (into) closeMoons()
-            else clearAll()
+        clearAll()
             openPage('capture', undefined, b.x, b.y, into)
             // Your finger is still down, and the page has just appeared under
             // it. iOS then treats the rest of that press as a long-press on
@@ -7044,35 +6761,16 @@ function mountSky(root: HTMLDivElement) {
       el: bubEl,
     }
     stage.setPointerCapture(e.pointerId)
+    /*
+     * No hold on a bubble any more.
+     *
+     * It opened a ring of glass discs — say, ask, get on with it — over the
+     * one surface whose whole argument is that thinking needs room, behind a
+     * gesture nobody is born knowing. Those three verbs are on the page the
+     * thing opens onto now, written as words. What a bubble answers to is a
+     * tap and a drag, and both of those you can guess.
+     */
     if (holdTimer) clearTimeout(holdTimer)
-    holdTimer = setTimeout(() => {
-      if (drag && !drag.moved) {
-        /*
-         * Hold, slide, release.
-         *
-         * Holding a bubble used to try to gather what was like it, which on
-         * most things answers "nothing like-minded near it yet" — a gesture
-         * whose commonest outcome is being told it did nothing. Gather
-         * belongs with the other organising verbs on the group page anyway,
-         * which is where the moons' own note says it went.
-         *
-         * So the hold opens the thing's actions and *keeps your finger*: the
-         * one under it lights up, and letting go there does it. No second
-         * tap, no aiming twice, and nothing left on the screen afterwards
-         * unless you released without choosing.
-         */
-        const held = drag.tl
-        drag.el.classList.remove('dragging')
-        drag = null
-        showMoons(held, true)
-        // the thing itself answering, out of its own rim, and staying with it
-        // however it moves for the second that takes — see rouse()
-        rouse(held.t.id)
-        haptics.grab()
-        sliding = true
-        aimAt(e.clientX, e.clientY)
-      }
-    }, 430)
   })
   stage.addEventListener('pointermove', (e) => {
     if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
@@ -7081,11 +6779,6 @@ function mountSky(root: HTMLDivElement) {
       const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1
       camTarget = null
       zoomAt(pinch.mx, pinch.my, pinch.k * (dist / pinch.dist))
-      return
-    }
-    // the finger that opened the menu is still choosing from it
-    if (sliding) {
-      aimAt(e.clientX, e.clientY)
       return
     }
     if (!drag && panFrom) {
@@ -7119,7 +6812,6 @@ function mountSky(root: HTMLDivElement) {
       // worse than noise, it was drawn on top of the thing in your hand and
       // across the line you were aiming for. See the tab bar's own rule.
       document.body.classList.add('sky-dragging')
-      closeMoons()
     }
     if (!drag.moved) return
     const p = posOf(drag.id)
@@ -7283,18 +6975,6 @@ function mountSky(root: HTMLDivElement) {
     }
     panFrom = null
     if (holdTimer) clearTimeout(holdTimer)
-    /*
-     * Released out of a hold. Landing on one of them does it; landing on
-     * nothing leaves them up, because a hold that opens a menu and then takes
-     * it away when your thumb was a few points short is a gesture that
-     * punishes you for using it. From there it is the row it has always been.
-     */
-    if (sliding) {
-      sliding = false
-      if (fireAimed()) return
-      aimed = null
-      return
-    }
     if (holding && !holding.auto) {
       endHold(true)
       return
@@ -7472,7 +7152,6 @@ function mountSky(root: HTMLDivElement) {
    * the second of two quick taps gets you, from wherever the first one landed.
    */
   function openThing(id: string) {
-    closeMoons()
     const tl = view.byId.get(id)
     const p = posOf(id)
     if (tl) {
@@ -7501,24 +7180,6 @@ function mountSky(root: HTMLDivElement) {
     tapPt = null
     return id
   }
-  /*
-   * Said once, the first time a tap lands on something and gets nothing back.
-   *
-   * Tapping used to put three buttons under everything you touched, which is
-   * how anybody ever found out those buttons existed. Now that they belong to
-   * the hold, the tap is the moment somebody is asking "what can I do with
-   * this?" and the moment to answer it — once per device, then never again.
-   */
-  function teachMenu() {
-    try {
-      if (localStorage.getItem('bs-taught-menu')) return
-      localStorage.setItem('bs-taught-menu', '1')
-      setTimeout(() => say('press and hold anything for what you can do with it'), 900)
-    } catch {
-      /* private mode — the hold is still there to be found */
-    }
-  }
-
   function onTap(id: string, isMember: boolean, at: { x: number; y: number }) {
     /*
      * One tap opens what is inside. A press and hold is what you can do to it.
@@ -7541,70 +7202,30 @@ function mountSky(root: HTMLDivElement) {
     tapAt = performance.now()
     tapPt = at
     const tl = view.byId.get(id)
-    if (isMember) {
-      // a group inside a group opens like any other: you go in one more level
-      if (tl && tl.kind === 'pool') {
-        peek = null
-        peekAt = null
-        openPool = tl.t.id
-        closeMoons()
-        frameOpen(tl)
-        paintAll()
-        return
-      }
-      // Read first, edit second. Twenty in a ring are too small to read, so the
-      // first tap opens this one up and pushes the ring apart around it; the
-      // second, on a thing you can now actually see, takes you in to write.
-      if (peek !== id) {
-        // hold the slot it is standing in now, before the paint makes it a card
-        const g = openPool ? view.byId.get(openPool) : null
-        const mp = pos.get(id)
-        if (g && mp) {
-          const gp = posOf(g.t.id)
-          peekAt = {
-            a: Math.atan2(mp.y - gp.y, mp.x - gp.x) - ringSpin(),
-            r: Math.hypot(mp.x - gp.x, mp.y - gp.y),
-          }
-        } else peekAt = null
-        peek = id
-        peekSettle = 96
-        // anything that was up belonged to whatever you were looking at before
-        closeMoons()
-        paintAll()
-        haptics.grab()
-        return
-      }
-      // open already, and this tap asked for something a tap no longer gives
-      teachMenu()
+    /*
+     * One tap, and where it lands is what it means.
+     *
+     * A bubble used to answer to three gestures — a tap, a quick second tap,
+     * and a hold that opened a ring of glass discs — and only the discs did
+     * anything you could not get to another way. Two of the three are gone.
+     * What is left reads as one rule:
+     *
+     *   a drop            → open it
+     *   a group           → go inside it, and see what it holds
+     *   the group you are inside → open it: the plan
+     *
+     * Nothing is hidden behind a gesture nobody is born knowing, and the
+     * verbs that were on the discs are on the page you land on.
+     */
+    if (!isMember && tl?.kind === 'pool' && openPool !== tl.t.id) {
+      clearAll()
+      openPool = tl.t.id
+      frameOpen(tl)
+      paintAll()
+      haptics.grab()
       return
     }
-    if (!tl) return
-    if (tl.kind === 'pool') {
-      // tapping the group you are reading out of puts the card away: the thing
-      // it was covering is the obvious place to press to get it back
-      if (openPool === tl.t.id && peek) {
-        peek = null
-        peekAt = null
-        closeMoons()
-        paintAll()
-        return
-      }
-      if (openPool !== tl.t.id) {
-        clearAll()
-        openPool = tl.t.id
-        // the camera goes to the pool rather than the pool being shoved into
-        // whatever part of the sky happens to be on screen
-        frameOpen(tl)
-        paintAll()
-      } else teachMenu()
-      return
-    }
-    clearAll()
-    // Nothing visible happened, and that is the one moment worth explaining.
-    // Said here rather than on every tap: a tap that opened a group answered
-    // itself, and a line telling you about a different gesture on top of that
-    // is the app talking over its own reply.
-    teachMenu()
+    openThing(id)
   }
 
   // ---------- frame loop ----------
@@ -7664,61 +7285,6 @@ function mountSky(root: HTMLDivElement) {
   }
   const ECHO_LAYERS = 4
 
-  /*
-   * One burst, thrown out by the thing you have just taken hold of.
-   *
-   * This used to be an overlay: an SVG hung on the body at the point the
-   * gesture happened, in viewport coordinates, sized once. Measured in a still
-   * sky it landed on the bubble to the pixel — and on a real one it did not,
-   * because a bubble is never where you left it. It breathes, the constellation
-   * re-centres for a second after anything changes, a member of an open group
-   * is going round, and the camera flies. Over the second the rings take to
-   * travel the thing that sent them walks out from under them, and what you see
-   * is rings sitting in open sky next to the bubble you pressed.
-   *
-   * So it belongs where everything else that belongs to a bubble belongs: in
-   * the world, redrawn every frame from the thing's live position. It cannot
-   * come from anywhere else now, because there is nowhere else for it to be.
-   */
-  let burst: { id: string; at: number } | null = null
-  /** how far past the rim each ring gets */
-  const BURST_REACH = [17, 41, 72, 110]
-  /** …and how long after the press it sets off, in seconds */
-  const BURST_WAIT = [0, 0.1, 0.21, 0.33]
-  const BURST_LIFE = 1.15
-  function rouse(id: string) {
-    if (reduced) return
-    burst = { id, at: t }
-  }
-  function drawBurst() {
-    if (!burst) return
-    const tl = view.byId.get(burst.id)
-    const age = t - burst.at
-    if (!tl || age > BURST_LIFE + BURST_WAIT[BURST_WAIT.length - 1]) {
-      burst = null
-      return
-    }
-    const p = posOf(burst.id)
-    // off the rim of what you are actually looking at: an opened group is its
-    // whole orbit, and rings leaving the little disc in the middle of one
-    // cross its members on the way out and read as unrelated
-    const open = openPool === burst.id
-    const r0 = open
-      ? Math.max(orbitR(tl), ringR) + memberR(tl.members.length)
-      : radiusOf(tl) * p.s
-    const h = hashN(burst.id)
-    for (let i = 0; i < BURST_REACH.length; i++) {
-      const u = (age - BURST_WAIT[i]) / BURST_LIFE
-      if (u <= 0 || u >= 1) continue
-      // out fast, then easing off, the way a wave loses its push
-      const travel = 1 - Math.pow(1 - u, 2.4)
-      const el = echoPath()
-      el.setAttribute('d', echoRing(p.rx, p.ry, r0 + BURST_REACH[i] * travel, h + i * 2.7, 0.05 + i * 0.014))
-      el.style.opacity = (0.62 * (1 - u) * (1 - i * 0.12)).toFixed(3)
-      el.style.strokeWidth = (1.3 - i * 0.12).toFixed(2)
-      echoUsed++
-    }
-  }
   function echoFrom(id: string, cx: number, cy: number, r: number, strength: number) {
     const h = hashN(id)
     for (let i = 0; i < ECHO_LAYERS; i++) {
@@ -7749,9 +7315,6 @@ function mountSky(root: HTMLDivElement) {
     const rest = () => {
       for (let i = echoUsed; i < echoPool.length; i++) echoPool[i].style.opacity = '0'
     }
-    // first, because it is the one ring in this sky that is answering
-    // something you just did
-    drawBurst()
     const seen = new Set<string>()
     const push = (id: string | null | undefined, strength: number) => {
       if (!id || seen.has(id) || echoUsed >= 40) return
@@ -7796,7 +7359,7 @@ function mountSky(root: HTMLDivElement) {
      * than the one you pressed. The sky goes quiet while you are holding
      * something, and comes back the moment you let go.
      */
-    if (!moonsFor && !holding) {
+    if (!holding) {
       let ripe = 0
       for (const tl of view.tls) {
         if (ripe >= 3) break
@@ -7883,12 +7446,6 @@ function mountSky(root: HTMLDivElement) {
        * things wandering off.
        */
       view.tls.forEach((tl, i) => {
-        if (moonsFor === tl.t.id) {
-          const p = posOf(tl.t.id)
-          // the one you have opened stands still, the way it always did
-          p.bx = p.by = 0
-          return
-        }
         const p = posOf(tl.t.id)
         const b = breath(t, i)
         p.bx = b.x
@@ -7900,7 +7457,6 @@ function mountSky(root: HTMLDivElement) {
        */
       let moved = 0
       for (const pair of settled ? [] : allKinPairs()) {
-        if (moonsFor && (moonsFor === pair.a.t.id || moonsFor === pair.b.t.id)) continue
         const pa = posOf(pair.a.t.id)
         const pb = posOf(pair.b.t.id)
         // Both ends have to be unarranged for the spring to mean anything.
@@ -8179,35 +7735,6 @@ function mountSky(root: HTMLDivElement) {
         }
       }
     }
-    /*
-     * A thing's actions clear their own row.
-     *
-     * They are opaque and lit from the front, so they are legible over
-     * anything — but being legible over a bubble still means covering the
-     * bubble's name, and you opened the menu *on* that thing. So while the row
-     * is up, whatever it lands on drifts out from under it: the same idea as
-     * an open pool pushing the sky out of its orbit, applied to a band rather
-     * than a circle. Vertically only — sliding sideways would scatter the sky
-     * every time you tapped something.
-     */
-    if (moonsFor && openPool !== moonsFor && !reduced) {
-      const host = view.byId.get(moonsFor)
-      const hp = host ? posOf(host.t.id) : null
-      if (host && hp) {
-        const rowY = Math.min(hp.y + radiusOf(host) + 52, toWorldY(waterlineY() - 118) - 27)
-        const halfRow = 34 / cam.k
-        for (const other of view.tls) {
-          if (other.t.id === host.t.id) continue
-          const op = posOf(other.t.id)
-          const need = radiusOf(other) + halfRow + 10
-          const gap = op.y - rowY
-          if (Math.abs(gap) < need) {
-            const push = (need - Math.abs(gap)) * 0.09
-            op.y += gap >= 0 ? push : -push
-          }
-        }
-      }
-    }
     // render — settle every body first, then decide how each one is deformed,
     // then draw. The neck and the drops have to be built from the same numbers
     // or the outline reads as a reflection floating behind two hard circles.
@@ -8353,7 +7880,6 @@ function mountSky(root: HTMLDivElement) {
       if (Math.abs(camTarget.k - cam.k) < 0.002 && Math.abs(camTarget.x - cam.x) < 0.6) camTarget = null
       applyCam()
     }
-    layoutMoons()
     lineUsed = 0
     if (!openPool) {
       for (const pair of allKinPairs()) {
