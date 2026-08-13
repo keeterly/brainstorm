@@ -4,7 +4,7 @@
 // clouds backed by snooze. No cards, no forms — hold the sky and write.
 import { useEffect, useRef } from 'react'
 import { useGraph } from '@/store/graph'
-import { parseCapture } from '@/domain/parse-blocks'
+import { parseCapture } from '@/domain/capture'
 import { runAction } from '@/ai/client'
 import { isWebUrl } from '@shared/ai/url'
 import type { ClassifyOutput } from '@shared/ai/actions/classify-thought'
@@ -719,10 +719,21 @@ function mountSky(root: HTMLDivElement) {
   const DRAFT_KEY = 'brainstorm-sky-draft-v1'
   let draftT: ReturnType<typeof setTimeout> | null = null
   function keepDraft() {
-    const v = pageT.value
+    if (pageFor?.mode === 'capture') putDraft(pageT.value)
+  }
+  /**
+   * Hold these words for next time — page or no page.
+   *
+   * `keepDraft` reads the field, which is right while you are typing and no use
+   * afterwards: taking a capture back happens once the page has closed and the
+   * field is empty, and the words it has to give you are the ones that went
+   * into the graph. Same key either way, so the sheet finds them next time and
+   * says "still here from before".
+   */
+  function putDraft(text: string) {
     try {
-      if (pageFor?.mode === 'capture' && v.trim()) localStorage.setItem(DRAFT_KEY, v)
-      else if (pageFor?.mode === 'capture') localStorage.removeItem(DRAFT_KEY)
+      if (text.trim()) localStorage.setItem(DRAFT_KEY, text)
+      else localStorage.removeItem(DRAFT_KEY)
     } catch {
       /* private mode — the hold below is still doing its half of the job */
     }
@@ -4047,7 +4058,10 @@ function mountSky(root: HTMLDivElement) {
       // beside Done, which is exactly where two playtesters failed to see it.
       // It is the tappable chip under the question now (see paintInto), and
       // one voice saying it clearly beats two saying it small.
-      pageN.textContent = kept ? 'still here from before' : '✦ organizes · or a line, a drop'
+      // …and the shape of the rest is worth keeping: what the button does ·
+      // what happens if you do not press it. Only the second half was ever a
+      // lie, and it is a bigger one now — it taught the line-by-line split.
+      pageN.textContent = kept ? 'still here from before' : '✦ organizes · or it all lands as one'
     } else if (mode === 'say' && tl) {
       /*
        * Your words, into the thing. One page, one way out.
@@ -4335,10 +4349,8 @@ function mountSky(root: HTMLDivElement) {
     if (pf.mode === 'capture') {
       // it is in the graph now (or it was whitespace) — the copy is spent
       dropDraft()
-      const blocks = parseCapture(v.trim())
-      if (!blocks.length) return
-      let drops = 0
-      let pools = 0
+      const written = parseCapture(v.trim())
+      if (!written) return
       // The group that was open when you started writing, if there was one.
       // Checked against the store rather than trusted: a group can be put away
       // while its page is up, and hanging a new thought off something that is
@@ -4348,27 +4360,25 @@ function mountSky(root: HTMLDivElement) {
           ? pf.into
           : null
       /*
-       * The storm, made visible.
+       * Born where you were writing, and leaving from there.
        *
-       * A capture has always been able to be several things at once — blank
-       * lines split it into independent blocks, and a heading over bullets
-       * becomes a goal with its steps under it. That has been true since the
-       * first version of this page and *nothing showed it happening*: the
-       * drops were written straight to their final places, so they simply
-       * existed, already scattered, the instant the page closed. Nobody would
-       * ever have guessed the app could do it, and the one moment that would
-       * have taught them was the moment being skipped.
-       *
-       * So everything is born where you were writing, and leaves from there —
-       * one after another, a beat apart, out to where it belongs. Same
-       * positions, same graph, same everything: only the departure is new. The
-       * target stays authoritative throughout (see `Pos.hold`), so the physics
-       * and any layout saved mid-flight are of where things are going.
+       * A heading over bullets becomes a goal with its steps under it, and
+       * *nothing showed it happening*: they were written straight to their
+       * final places, so they simply existed, already arranged, the instant the
+       * page closed. Nobody would ever have guessed the app could do it, and
+       * the one moment that would have taught them was the moment being
+       * skipped. So they leave the point of the splash one after another, a
+       * beat apart, out to where they belong. Same positions, same graph, same
+       * everything: only the departure is new. The target stays authoritative
+       * throughout (see `Pos.hold`), so the physics and any layout saved
+       * mid-flight are of where things are going.
        */
       const leaving: { p: Pos; at: number }[] = []
-      // what got filed into the group you were standing in — see the offer
-      // after the storm settles
-      const filed: string[] = []
+      // everything this one capture made, so it can be taken back in one tap
+      const made: string[] = []
+      // …and what of it went into the group you were standing in. One capture
+      // is one thing now, so this is one id or none.
+      let filed: string | null = null
       const born = (id: string, x: number, y: number) => {
         const p = posOf(id)
         p.x = x
@@ -4380,53 +4390,65 @@ function mountSky(root: HTMLDivElement) {
         leaving.push({ p, at: 0 })
         return p
       }
-      for (const b of blocks) {
-        if (b.children.length) {
-          pools++
-          const g = S().addThought({ raw_content: b.title, title: b.title, type: 'goal', due_date: b.due })
-          if (into) {
-            S().addRelationship(g.id, into, 'part_of')
-            filed.push(g.id)
-          }
-          const gp = born(
-            g.id,
-            pf.ox + (Math.random() - 0.5) * 60,
-            Math.max(140, pf.oy - 60),
-          )
-          // …and its steps ring the goal rather than landing wherever the
-          // default placement felt like putting them. They were unplaced
-          // entirely before this, which is why a pool arrived looking shaken
-          // rather than formed.
-          b.children.forEach((c, i, all) => {
-            const child = S().addThought({ raw_content: c, title: c, type: 'action' })
-            S().addRelationship(child.id, g.id, 'part_of')
-            const a = -Math.PI / 2 + (i / Math.max(1, all.length)) * Math.PI * 2
-            born(
-              child.id,
-              Math.max(60, Math.min(W - 60, gp.x + Math.cos(a) * 122)),
-              Math.max(140, Math.min(H - 160, gp.y + Math.sin(a) * 104)),
-            )
-          })
-        } else {
-          for (const line of b.body.split(/\n+/).map((s) => s.trim()).filter(Boolean)) {
-            drops++
-            const t = S().addThought({ raw_content: line, due_date: b.due, source: micUsed ? 'voice' : 'text' })
-            if (into) {
-              S().addRelationship(t.id, into, 'part_of')
-              filed.push(t.id)
-            }
-            const a = Math.random() * Math.PI * 2
-            const rad = drops === 1 && pools === 0 ? 0 : 100 + (drops % 3) * 46
-            const p = born(
-              t.id,
-              Math.max(60, Math.min(W - 60, pf.ox + Math.cos(a) * rad)),
-              Math.max(140, Math.min(H - 160, pf.oy + Math.sin(a) * rad * 0.8)),
-            )
-            // a lone drop has nowhere to go, so it should not appear to travel
-            if (rad === 0) p.rx = p.x
-            classifyQuiet(t)
-          }
+      if (written.steps.length) {
+        const g = S().addThought({
+          raw_content: written.heading,
+          title: written.heading,
+          type: 'goal',
+          due_date: written.due,
+        })
+        made.push(g.id)
+        if (into) {
+          S().addRelationship(g.id, into, 'part_of')
+          filed = g.id
         }
+        const gp = born(g.id, pf.ox + (Math.random() - 0.5) * 60, Math.max(140, pf.oy - 60))
+        // …and its steps ring the goal rather than landing wherever the
+        // default placement felt like putting them. They were unplaced
+        // entirely before this, which is why a group arrived looking shaken
+        // rather than formed.
+        written.steps.forEach((c, i, all) => {
+          const child = S().addThought({ raw_content: c, title: c, type: 'action' })
+          made.push(child.id)
+          S().addRelationship(child.id, g.id, 'part_of')
+          const a = -Math.PI / 2 + (i / Math.max(1, all.length)) * Math.PI * 2
+          born(
+            child.id,
+            Math.max(60, Math.min(W - 60, gp.x + Math.cos(a) * 122)),
+            Math.max(140, Math.min(H - 160, gp.y + Math.sin(a) * 104)),
+          )
+        })
+      } else {
+        /*
+         * All of it, as one thing, with the words joined the way you wrote
+         * them. This used to be a loop over `body.split(/\n+/)` — the
+         * line-by-line split that threw away the body `parseCapture` had just
+         * built, so a thought and the line that finished it became two bubbles
+         * and the second of them, alone in the sky, meant nothing.
+         *
+         * And no title, which is not an omission. The page for a drop has one
+         * field and it is filled with `title || raw_content`: a first-line
+         * title would show that line there and hide every line after it, with
+         * nowhere left in the app to reach them — and closing the page runs
+         * `rename`, which for a title that differs from the body writes the
+         * title alone and strands the rest in the store for ever. The bubble
+         * does not need one: `trim` flattens the newlines and cuts it to width.
+         */
+        const t = S().addThought({
+          raw_content: written.body,
+          due_date: written.due,
+          source: micUsed ? 'voice' : 'text',
+        })
+        made.push(t.id)
+        if (into) {
+          S().addRelationship(t.id, into, 'part_of')
+          filed = t.id
+        }
+        // It stays where you wrote it. There is nowhere else for the only thing
+        // you made to be, and a lone drop that travels is a drop that appears
+        // to have been moved by somebody else.
+        born(t.id, pf.ox, pf.oy)
+        classifyQuiet(t)
       }
       /*
        * One at a time, and the whole burst over in about a third of a second
@@ -4442,36 +4464,29 @@ function mountSky(root: HTMLDivElement) {
       splash(pf.ox)
       persistLayout()
       /*
-       * A storm is the one landing that could leave the sky unframed.
+       * A long list is the one landing that could leave the sky unframed.
        *
-       * Every ⚡ landing ends in fitWhenSettled(); this one did not, and it is
-       * the only gesture that can add thirty things at once. Measured with a
-       * thirty-line capture: drops clipped off both edges of the glass and a
-       * pool half-buried under the tab bar, with the camera still framing the
-       * seven bubbles that existed before the storm. One or two new drops land
-       * where you wrote them and the frame is fine; a real storm re-frames.
+       * Every ⚡ landing ends in fitWhenSettled(); this one did not, and a
+       * heading over twenty bullets adds twenty-one things at once. Measured:
+       * steps clipped off both edges of the glass and the goal half-buried
+       * under the tab bar, with the camera still framing the seven bubbles that
+       * existed before. One thing lands where you wrote it and the frame is
+       * fine; a whole plan re-frames.
        */
-      if (drops + pools >= 3) fitWhenSettled()
+      if (made.length >= 3) fitWhenSettled()
       const home = into ? S().thoughts.find((t) => t.id === into) : null
+      const steps = written.steps.length
+      // Three outcomes, where there used to be six. One capture makes one drop
+      // or one group, and it lands either in the group you were standing in or
+      // in open sky — so "the storm settles — 5 drops in the sky" and the
+      // "· 3 loose drops" suffix described states that can no longer happen.
       say(
         home
-          ? `${drops + pools === 1 ? 'it is' : `${drops + pools} are`} in “${trim(label(home), 26)}”`
-          : pools
-            ? `${pools === 1 ? 'a pool formed' : pools + ' pools formed'}${drops ? ` · ${drops} loose drop${drops > 1 ? 's' : ''}` : ''}`
-            : drops > 1
-              ? `the storm settles — ${drops} drops in the sky`
-              : 'it’s yours — drag it, grow it, pool it',
+          ? `it is in “${trim(label(home), 26)}”`
+          : steps
+            ? `a group — ${steps} step${steps > 1 ? 's' : ''} inside`
+            : 'it’s yours — drag it onto another to group them',
       )
-      /*
-       * "Where you were standing is where it goes" is right most of the time
-       * and infuriating the rest: two playtesters wrote their whole week while
-       * a seeded group happened to be open, watched it all get filed inside
-       * somebody else's campaign, and found no way back — one spent five
-       * minutes hunting for one. The filing stands, but the one tap out of it
-       * has to be there, and for longer than the six seconds an accident gets:
-       * you notice this one only after the page has closed and the pill has
-       * said where things went.
-       */
       /*
        * The gesture, taught once, right after the one moment it is learnable.
        *
@@ -4489,16 +4504,59 @@ function mountSky(root: HTMLDivElement) {
       } catch {
         /* private mode — they will find it the way everybody used to */
       }
-      if (home && filed.length) {
+      /*
+       * One bar, and it offers the correction the situation makes likely.
+       *
+       * `offerAction` is a single slot — the second call silently replaces the
+       * first — so with two things worth offering here the order has to be
+       * chosen rather than fallen into.
+       *
+       * Where the capture went into the group you were standing in, that is the
+       * likely mistake and it is a documented one: two playtesters wrote their
+       * whole week while a seeded group happened to be open, watched it all get
+       * filed inside somebody else's campaign, and found no way back — one
+       * spent five minutes hunting for one. It is also the smaller and
+       * non-destructive correction, and the words are right; only the place is
+       * wrong. So it wins, and the take-back is not offered.
+       *
+       * With no filing, the capture itself is the only thing there is to be
+       * wrong about — and it was the one gesture in the app that *made*
+       * something and offered nothing back. Everything on the taking-apart side
+       * of the grammar has offered its reverse for a year; the making side had
+       * no way out but finding the thing again and letting it go by hand.
+       */
+      if (home && filed) {
+        const one = filed
         offerAction(
           '',
-          filed.length === 1 ? 'keep it loose' : 'keep them loose',
+          'keep it loose',
           () => {
-            for (const id of filed) {
-              const r = partOfRel(id)
-              if (r && r.to_id === into) S().deleteRelationship(r.id)
-            }
+            const r = partOfRel(one)
+            if (r && r.to_id === into) S().deleteRelationship(r.id)
             say('loose in the sky instead')
+          },
+          9000,
+        )
+      } else {
+        /*
+         * It deletes rather than archives, because a thing that did not exist
+         * ninety seconds ago is the one case where taking it away really is
+         * taking it away rather than hiding it somewhere you will have to
+         * remember. And the words go back into the draft rather than into the
+         * bin: you are taking back a capture, not disowning a sentence, and the
+         * sheet already knows how to say "still here from before" when it finds
+         * one waiting.
+         */
+        offerAction(
+          '',
+          'take it back',
+          () => {
+            for (const id of made) S().deleteThought(id)
+            putDraft(v)
+            rebuild()
+            paintAll()
+            persistLayout()
+            say('taken back — still here for next time')
           },
           9000,
         )

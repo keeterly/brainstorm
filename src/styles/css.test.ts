@@ -646,14 +646,92 @@ describe('what you wrote, arriving', () => {
   })
 
   it('rings a new goal with its own steps', () => {
-    // they were not placed at all before, which is why a pool arrived looking
+    // they were not placed at all before, which is why a group arrived looking
     // shaken rather than formed
-    expect(page).toMatch(/b\.children\.forEach\(\(c, i, all\) => \{/)
+    expect(page).toMatch(/written\.steps\.forEach\(\(c, i, all\) => \{/)
     expect(page).toMatch(/gp\.x \+ Math\.cos\(a\) \* 122/)
   })
 
   it('does not make a lone drop appear to travel', () => {
-    expect(page).toMatch(/if \(rad === 0\) p\.rx = p\.x/)
+    // it lands at the point of the splash, which is where it was born, so
+    // there is no journey left to make. This used to be a `rad === 0` special
+    // case among several scattered radii — see the capture below.
+    expect(page).toMatch(/born\(t\.id, pf\.ox, pf\.oy\)/)
+  })
+})
+
+// One capture is one thought.
+//
+// It used to be several, by two rules nobody had put side by side: blank lines
+// split what you wrote into blocks, and then the capture split each block again
+// line by line, throwing away the joined body `parseCapture` had just built for
+// exactly that case. So a thought and the line that finished it arrived as two
+// bubbles, and the second — "they said 3 weeks last time" — was not a thought
+// anybody had.
+describe('what you wrote is what you get', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+
+  it('keeps the words joined instead of splitting them again', () => {
+    expect(page).not.toMatch(/\.body\.split\(/)
+    expect(page).toMatch(/raw_content: written\.body/)
+  })
+
+  it('leaves the title off, so opening it shows all of it', () => {
+    /*
+     * Load-bearing. The page for a drop has one field and it is filled with
+     * `title || raw_content`, so a first-line title would show that line and
+     * hide every line after it with nowhere left in the app to reach them —
+     * and closing that page runs `rename`, which for a title differing from
+     * the body writes the title alone and strands the rest in the store.
+     */
+    const at = page.indexOf('raw_content: written.body')
+    expect(at).toBeGreaterThan(-1)
+    expect(page.slice(at, at + 140)).not.toMatch(/title:/)
+  })
+})
+
+// Everything on the taking-apart side of the grammar offers its reverse at the
+// foot of the sky. The one gesture that *makes* something offered nothing at
+// all: a capture was the single act with no way back short of hunting the thing
+// down and letting it go by hand.
+describe('a capture can be taken back', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+  const at = page.indexOf("'take it back'")
+  const after = page.slice(at, at + 500)
+
+  it('is offered at all', () => {
+    expect(at).toBeGreaterThan(-1)
+  })
+
+  it('expires, like every other offer', () => {
+    // offerAction with no lifetime stays for ever, parked over whatever is
+    // underneath it
+    expect(after).toMatch(/9000/)
+  })
+
+  it('takes away only what this capture made', () => {
+    expect(after).toMatch(/for \(const id of made\) S\(\)\.deleteThought\(id\)/)
+  })
+
+  it('gives the words back rather than only taking the bubbles away', () => {
+    // you are taking back a capture, not disowning a sentence — the sheet finds
+    // them next time and says "still here from before"
+    expect(after).toMatch(/putDraft\(v\)/)
+  })
+
+  it('does not stack a second bar on the one the filing already offered', () => {
+    /*
+     * `offerAction` is a single slot, so two calls means the second silently
+     * replaces the first. Where the capture went into the group you were
+     * standing in, that offer wins: it is the documented mistake, it is the
+     * smaller and non-destructive correction, and the words are right — only
+     * the place is wrong.
+     */
+    const fork = page.indexOf('if (home && filed)')
+    expect(fork).toBeGreaterThan(-1)
+    const branch = page.slice(fork, fork + 2000)
+    expect(branch.indexOf("'keep it loose'")).toBeGreaterThan(-1)
+    expect(branch.indexOf("'keep it loose'")).toBeLessThan(branch.indexOf("'take it back'"))
   })
 })
 
@@ -834,8 +912,11 @@ describe('an accidental pooling can be tapped back apart', () => {
 describe('a capture filed into the open group offers the way out', () => {
   const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
 
-  it('offers to keep the new things loose instead', () => {
-    expect(page).toMatch(/filed\.length === 1 \? 'keep it loose' : 'keep them loose'/)
+  it('offers to keep the new thing loose instead', () => {
+    // one capture is one thing now, so there was never a "them" to keep
+    expect(page).toMatch(/if \(home && filed\) \{/)
+    expect(page).toMatch(/'keep it loose'/)
+    expect(page).not.toMatch(/'keep them loose'/)
   })
 
   it('only unhooks what this capture filed, and only from that group', () => {
