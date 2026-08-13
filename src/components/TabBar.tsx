@@ -11,9 +11,21 @@ import './tabbar.css'
 // neither the capsule nor the lens is a true rounded rectangle — and the
 // answer to a touch, which is the same Joy Division echo a live drop sends
 // out: irregular rings, several at once, none of them in step.
+/*
+ * Two, not three.
+ *
+ * There used to be a Current between these — a screen that picked one action
+ * out of every group you had and said "this first". It was a second place to
+ * do work, and the work was already being done the other way: you open a
+ * group and tick things off. Two surfaces for one act is the kind of thing
+ * that makes an app feel confusing without any single part of it being wrong.
+ *
+ * What it did that was worth keeping — knowing which step comes next — was
+ * never really its own: `domain/next-action.ts` works it out without asking
+ * anybody, and the sky has shown it at the foot of the glass all along.
+ */
 const TABS = [
   { to: '/', label: 'Sky' },
-  { to: '/current', label: 'Current' },
   { to: '/memory', label: 'Memory' },
 ]
 

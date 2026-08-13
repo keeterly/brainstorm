@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ACTION_REGISTRY } from './registry'
 import { classifyThought } from './actions/classify-thought'
-import { prioritize } from './actions/prioritize'
 
 describe('action registry', () => {
   it('every action has schemas, a version, and a prompt builder', () => {
@@ -25,7 +24,6 @@ function sampleInput(name: string): never {
   const ref = { id: 'aaaa', title: 'Sample thought', type: 'idea', summary: null }
   const inputs: Record<string, unknown> = {
     classify_thought: { raw_content: 'need to email supplier by friday' },
-    prioritize: { actions: [{ id: 'aaaa', title: 'do a thing' }] },
     remember: { text: 'I prefer mornings', known: [] },
     rain: { name: 'SS27 campaign', inside: ['shoot on expired film'], known: [], already: [] },
     evaporate: { finished: 'SS27 campaign', inside: ['shoot on expired film'], lately: [], open: [] },
@@ -47,7 +45,6 @@ function sampleInput(name: string): never {
     draft: { subject: ref, alongside: ['book the space'], known: [] },
     gauge: { subject: ref, context: ['book the space'], kind: 'plan' },
     reshape: { subject: ref, inside: [ref], news: 'the studio fell through, Ana offered her garage' },
-    notice: { thoughts: [ref], pools: [], recentlyDone: [] },
     find_like: {
       subject: { id: 'p1', title: 'A black-shrouded seated figure' },
       context: ['shoot on expired film'],
@@ -130,17 +127,6 @@ describe('classify_thought output schema', () => {
         summary: '',
         suggestedDue: 'friday',
         clarifyingQuestion: null,
-      }).success,
-    ).toBe(false)
-  })
-})
-
-describe('prioritize output schema', () => {
-  it('rejects invalid buckets', () => {
-    expect(
-      prioritize.outputSchema.safeParse({
-        buckets: [{ id: 'a', bucket: 'someday', reason: 'r' }],
-        recommended: { id: 'a', why: 'w' },
       }).success,
     ).toBe(false)
   })

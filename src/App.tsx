@@ -6,7 +6,6 @@ import { TabBar } from '@/components/TabBar'
 import { OfflineBanner } from '@/components/OfflineBanner'
 import { Atmosphere, WorldHem } from '@/world/Atmosphere'
 import SkyPage from '@/features/sky/SkyPage'
-import CurrentPage from '@/features/current/CurrentPage'
 import MemoryPage from '@/features/memory/MemoryPage'
 import SettingsPage from '@/features/settings/SettingsPage'
 import Opening from '@/features/opening/Opening'
@@ -52,7 +51,6 @@ export default function App() {
                 for anything holding an old link — a bookmark, a cached PWA
                 start url — but nothing in the app points here. */}
             <Route path="/think" element={<Navigate to="/" replace />} />
-            <Route path="/current" element={<CurrentPage />} />
             <Route path="/memory" element={<MemoryPage />} />
             {/* The thought detail page is gone — see the registry. Old links
                 still arrive though: a notification, a bookmark, the ocean list
@@ -63,7 +61,7 @@ export default function App() {
             <Route path="/import" element={<ImportPage />} />
             {/* pre-v2 paths */}
             <Route path="/brain" element={<Navigate to="/" replace />} />
-            <Route path="/focus" element={<Navigate to="/current" replace />} />
+            <Route path="/focus" element={<Navigate to="/" replace />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

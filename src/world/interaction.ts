@@ -16,11 +16,6 @@ export function nextBest(
 ): NextBest {
   const cloud = saturatedCloud({ thoughts, relationships, profile })
   if (cloud) return { kind: 'rain', cloud }
-  const rec = profile?.settings.recommended_action
-  if (rec) {
-    const t = thoughts.find((x) => x.id === rec.id && x.status === 'open')
-    if (t) return { kind: 'action', thought: t, why: rec.why }
-  }
   return { kind: 'none' }
 }
 

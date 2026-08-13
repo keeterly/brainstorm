@@ -508,14 +508,6 @@ describe('what the agent is doing, while it does it', () => {
     expect(sky).toMatch(/\.sky-voice\.busy \{[^}]*background: linear-gradient\(rgba\(9, 13, 21/s)
   })
 
-  it('says the same thing on paper as it does on glass', () => {
-    const cur = readFileSync(join('src/features/current', 'Working.tsx'), 'utf8')
-    expect(cur).toMatch(/from '@\/features\/sky\/working'/)
-    const page2 = readFileSync(join('src/features/current', 'CurrentPage.tsx'), 'utf8')
-    // the Current kept its own sentence for the same minute; it does not now
-    expect(page2).not.toMatch(/waitingWord/)
-    expect(page2).toMatch(/<Working$/m)
-  })
 })
 
 // Opening the app.
@@ -721,18 +713,11 @@ describe('the width of the app’s voice', () => {
 // off — and three fields with no accessible name at all.
 describe('a thumb on the other surfaces', () => {
   const global = readFileSync(join('src/styles', 'global.css'), 'utf8')
-  const current = readFileSync(join('src/features/current', 'CurrentPage.tsx'), 'utf8')
   const memory = readFileSync(join('src/features/memory', 'MemoryPage.tsx'), 'utf8')
   const settings = readFileSync(join('src/features/settings', 'SettingsPage.tsx'), 'utf8')
-  const noticed = readFileSync(join('src/features/current', 'Noticed.tsx'), 'utf8')
 
-  it('uses the reach class the app already had', () => {
-    // `.hit` has been in global.css the whole time — twenty points of ring,
-    // forty-four of reach — and the Current used it precisely nowhere
-    expect(current).toMatch(/aria-label="Complete"\s*\n\s*className="hit"/)
-    expect(current).toMatch(/aria-label="Snooze one week"\s*\n\s*className="faint hit"/)
-    expect(noticed).toMatch(/className="faint hit"/)
-  })
+  // The reach test that stood here measured the Current's tick and its snooze.
+  // Both went with the screen; a pin outlives the thing it pins only as a lie.
 
   it('gives every disclosure in the app a reach', () => {
     // each `<summary>` is styled inline at its call site and none was given a

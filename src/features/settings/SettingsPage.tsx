@@ -253,14 +253,11 @@ function WhatItDid() {
 
 export default function SettingsPage() {
   const nav = useNavigate()
-  const profile = useGraph((s) => s.profile)
   const thoughts = useGraph((s) => s.thoughts)
   const relationships = useGraph((s) => s.relationships)
   const roadmaps = useGraph((s) => s.roadmaps)
   const memories = useGraph((s) => s.memories)
-  const updateProfileSettings = useGraph((s) => s.updateProfileSettings)
   const [spend, setSpend] = useState<number | null>(null)
-  const autonomy = profile?.settings.autonomy ?? 'suggest'
 
   useEffect(() => {
     const since = new Date()
@@ -298,24 +295,6 @@ export default function SettingsPage() {
 
       <TellMe />
       <LetItHear />
-
-      <section className="card" style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>How much the AI does</h2>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            className={`chip ${autonomy === 'suggest' ? 'chip--on' : ''}`}
-            onClick={() => updateProfileSettings({ autonomy: 'suggest' })}
-          >
-            Suggest only
-          </button>
-          <button
-            className={`chip ${autonomy === 'organize' ? 'chip--on' : ''}`}
-            onClick={() => updateProfileSettings({ autonomy: 'organize' })}
-          >
-            Organize automatically
-          </button>
-        </div>
-      </section>
 
       <section className="card" style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 8 }}>Data</h2>

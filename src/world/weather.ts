@@ -29,13 +29,9 @@ export function saturatedCloud(input: WeatherInput): Thought | null {
 }
 
 export function weatherLine(input: WeatherInput): string {
-  const { thoughts, relationships, profile } = input
+  const { thoughts, relationships } = input
   const saturated = saturatedCloud(input)
   if (saturated) return `“${saturated.title || 'a cloud'}” is saturated — open it to rain`
-
-  const rec = profile?.settings.recommended_action
-  const recThought = rec ? thoughts.find((t) => t.id === rec.id && t.status === 'open') : null
-  if (recThought) return `one action chosen for now — it waits in the current`
 
   const loose = looseDroplets(thoughts, relationships)
   const clouds = thoughts.filter((t) => t.status === 'open' && isCloudType(t)).length

@@ -177,8 +177,14 @@ export interface Profile {
   id: string
   display_name: string | null
   settings: {
-    autonomy?: 'suggest' | 'organize'
-    recommended_action?: { id: string; why: string; at: string } | null
+    /*
+     * `autonomy` and `recommended_action` lived here for the Current: one said
+     * whether its prioritise pass could apply itself without asking, the other
+     * held the step it had picked. That screen is gone — work happens by
+     * opening a group — and what is next is worked out from the graph by
+     * `domain/next-action.ts` without a call to anybody. Left out rather than
+     * kept as dead columns nothing reads.
+     */
     [k: string]: unknown
   }
   created_at: string

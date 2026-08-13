@@ -1,6 +1,5 @@
 import type { ActionDef } from './types'
 import { classifyThought } from './actions/classify-thought'
-import { prioritize } from './actions/prioritize'
 import { absorb } from './actions/absorb'
 import { organize } from './actions/organize'
 import { namePool } from './actions/name-pool'
@@ -8,7 +7,6 @@ import { cluster } from './actions/cluster'
 import { deepen } from './actions/deepen'
 import { answer } from './actions/answer'
 import { gauge } from './actions/gauge'
-import { notice } from './actions/notice'
 import { reshape } from './actions/reshape'
 import { draft } from './actions/draft'
 import { remember } from './actions/remember'
@@ -36,7 +34,6 @@ import { findLike } from './actions/find-like'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const ACTION_REGISTRY: Record<string, ActionDef<any, any>> = {
   [classifyThought.name]: classifyThought,
-  [prioritize.name]: prioritize,
   [absorb.name]: absorb,
   [organize.name]: organize,
   [namePool.name]: namePool,
@@ -44,7 +41,6 @@ export const ACTION_REGISTRY: Record<string, ActionDef<any, any>> = {
   [deepen.name]: deepen,
   [answer.name]: answer,
   [gauge.name]: gauge,
-  [notice.name]: notice,
   [reshape.name]: reshape,
   [draft.name]: draft,
   [remember.name]: remember,

@@ -2837,15 +2837,16 @@ function mountSky(root: HTMLDivElement) {
     // printed on top of each other every time you carried something down.
     const hide =
       !!openPool || !!pageFor || !!moonsFor || voiceEl.classList.contains('show') || !!drag?.moved
-    let n = hide ? null : nextAction(S().thoughts, S().relationships, todayISO())
-    // If the agent has been asked to choose, its pick wins here too. Current
-    // honours it; the sky did not, so the two could name different things at
-    // the same moment — which is two recommendations, not one.
-    const rec = S().profile?.settings.recommended_action as { id?: string; why?: string } | undefined
-    if (!hide && rec?.id) {
-      const t = S().thoughts.find((x) => x.id === rec.id && x.status === 'open')
-      if (t) n = { thought: t, why: rec.why || 'the agent put this first' }
-    }
+    /*
+     * Worked out here, from the graph, and not asked of anybody.
+     *
+     * There used to be a second answer: the Current screen ran `prioritize`
+     * and stored its pick, and this honoured that over its own — two places
+     * naming a next thing, which is one more than there should ever be. The
+     * Current is gone and so is the override; `nextAction` has always been
+     * able to answer this on its own, without a call and without a wait.
+     */
+    const n = hide ? null : nextAction(S().thoughts, S().relationships, todayISO())
     nextFor = n?.thought.id ?? null
     nextEl.classList.toggle('show', !!n)
     if (!n) return
