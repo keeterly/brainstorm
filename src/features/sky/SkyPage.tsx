@@ -389,6 +389,28 @@ interface Pos {
   bx: number
   by: number
   /*
+   * Room being made to look at something — the same trick, for the same reason.
+   *
+   * Opening a group lays its contents out on rings, and the rest of the sky has
+   * to get out of the way of them. That used to be written straight into
+   * `x`/`y`, which meant looking at a group *rearranged* the sky and then never
+   * put it back: open the same group five times and everything around it has
+   * crawled outward five times.
+   *
+   * Wanting to see something is a claim on the view, not on the world. So it is
+   * an offset — it leans away while the group is open, eases back to nothing
+   * when it closes, and the arrangement you made is exactly where you left it.
+   *
+   * `otx`/`oty` is where the offset is heading and `ox`/`oy` is where it has got
+   * to, on the same terms as `mt`/`mk` above: the target is re-stated every
+   * frame by whatever wants the room and cleared straight afterwards, so a
+   * frame in which nobody asks is a frame of coming home.
+   */
+  ox: number
+  oy: number
+  otx: number
+  oty: number
+  /*
    * You put this one here on purpose.
    *
    * The kin spring pulls like-minded drops toward each other for as long as
@@ -398,10 +420,11 @@ interface Pos {
    * sky and it creeps sixty pixels away over the next half a minute and stops,
    * which reads as the app quietly disagreeing with where you put it.
    *
-   * A pinned drop is out of the spring and nothing else. It still cannot
-   * overlap anything, and it still travels with the whole constellation when
-   * the sky re-centres, because that is a uniform move and preserves exactly
-   * the arrangement it is meant to preserve.
+   * A pinned drop is out of the springs. It still cannot overlap anything —
+   * but it is no longer the one that gives way when something drifts into it.
+   * The re-centring does not touch it either, because the re-centring is now
+   * the camera moving rather than the world: nothing in the world moves, so
+   * there is nothing left to be exempt from.
    */
   pinned?: boolean
   /*
@@ -1158,6 +1181,10 @@ function mountSky(root: HTMLDivElement) {
         my: 0,
         bx: 0,
         by: 0,
+        ox: 0,
+        oy: 0,
+        otx: 0,
+        oty: 0,
         // …and it survives a reload, because on an installed PWA a reload is
         // most days. An arrangement that only holds until the app is next
         // opened is not an arrangement.
@@ -1969,7 +1996,11 @@ function mountSky(root: HTMLDivElement) {
   inviteEl.style.width = inviteEl.style.height = '192px'
   inviteEl.innerHTML = `<div class="q">What’s on your mind?</div>`
   field.appendChild(inviteEl)
-  const invitePos: Pos = { x: W / 2, y: H * 0.34, rx: W / 2, ry: H * 0.34, s: 1, vx: 0, vy: 0, mk: 0, mt: 0, mx: 1, my: 0, bx: 0, by: 0 }
+  const invitePos: Pos = {
+    x: W / 2, y: H * 0.34, rx: W / 2, ry: H * 0.34, s: 1,
+    vx: 0, vy: 0, mk: 0, mt: 0, mx: 1, my: 0,
+    bx: 0, by: 0, ox: 0, oy: 0, otx: 0, oty: 0,
+  }
 
   // ---------- splash / say ----------
   function splash(x: number) {
@@ -6888,7 +6919,10 @@ function mountSky(root: HTMLDivElement) {
       for (const tl of candidates) {
         if (tl.t.id === drag.id) continue
         const tp = posOf(tl.t.id)
-        const d = Math.hypot(tp.x - p.x, tp.y - p.y)
+        // measured to where the target is *drawn*, offset and all — while a
+        // group is open the sky is leaning out of its way (see Pos.ox), and
+        // aiming at a bubble has to mean aiming at the one you can see
+        const d = Math.hypot(tp.x + tp.ox - p.x, tp.y + tp.oy - p.y)
         if (d < bestD) {
           bestD = d
           best = tl
@@ -6914,7 +6948,7 @@ function mountSky(root: HTMLDivElement) {
         const held = candidates.find((tl) => tl.t.id === fuse!.b)
         if (held) {
           const hp = posOf(held.t.id)
-          const hd = Math.hypot(hp.x - p.x, hp.y - p.y)
+          const hd = Math.hypot(hp.x + hp.ox - p.x, hp.y + hp.oy - p.y)
           if (hd < rOf(drag.tl) + rOf(held) + slop) {
             best = held
             bestD = hd
@@ -7257,13 +7291,14 @@ function mountSky(root: HTMLDivElement) {
       p.hold = undefined
     }
     const k = reduced ? 1 : dragged ? 0.55 : 0.22
-    // …toward where it belongs *plus* its breath. The breath is an offset
-    // rather than a push — see Pos.bx — so it shows without ever moving the
-    // place the drop is actually standing in.
+    // …toward where it belongs *plus* its breath, plus whatever room it is
+    // making for an open group. Both are offsets rather than pushes — see
+    // Pos.bx and Pos.ox — so they show without ever moving the place the drop
+    // is actually standing in.
     // Never under a finger: three pixels between the touch and the thing being
     // touched is three pixels of the app not doing what your hand is doing.
-    const bx = dragged ? 0 : p.bx
-    const by = dragged ? 0 : p.by
+    const bx = dragged ? 0 : p.bx + p.ox
+    const by = dragged ? 0 : p.by + p.oy
     p.rx += (p.x + bx - p.rx) * k
     p.ry += (p.y + by - p.ry) * k
     p.s += ((dragged ? 1.045 : 1) - p.s) * 0.18
@@ -7507,6 +7542,9 @@ function mountSky(root: HTMLDivElement) {
             const b = view.tls[j]
             const pa = posOf(a.t.id)
             const pb = posOf(b.t.id)
+            // Two things you placed on top of each other is an arrangement, not
+            // a mistake to be corrected.
+            if (pa.pinned && pb.pinned) continue
             let dx = pb.x - pa.x
             let dy = pb.y - pa.y
             let dist = Math.hypot(dx, dy)
@@ -7518,22 +7556,60 @@ function mountSky(root: HTMLDivElement) {
             }
             const min = radiusOf(a) + radiusOf(b) + 26
             if (dist < min) {
+              /*
+               * Whichever end you did not place is the one that gives way, and
+               * it takes the whole of the correction — so the gap opens at the
+               * same rate it always did, just in the one direction that is
+               * nobody's opinion.
+               *
+               * The kin spring above has had this since it was written; this
+               * pass never did, and pushed both ends equally. So a drop you had
+               * put down was shoved aside by the first loose thing that drifted
+               * within reach of it — the promise of a spatial canvas broken by
+               * the tidying-up, in the one pass nobody had checked.
+               */
+              const ka = pa.pinned ? 0 : pb.pinned ? 2 : 1
+              const kb = pb.pinned ? 0 : pa.pinned ? 2 : 1
               const push = (min - dist) * 0.22
-              pa.x -= (dx / dist) * push
-              pa.y -= (dy / dist) * push
-              pb.x += (dx / dist) * push
-              pb.y += (dy / dist) * push
-              moved += push * 2
+              pa.x -= (dx / dist) * push * ka
+              pa.y -= (dy / dist) * push * ka
+              pb.x += (dx / dist) * push * kb
+              pb.y += (dy / dist) * push * kb
+              moved += push * (ka + kb)
             }
           }
         }
       }
-      // The constellation drifts back into frame as a whole — a uniform nudge,
-      // so your own arrangement is preserved, just re-centred. "Frame" means
-      // what the camera is actually showing: aiming at a fixed point in the
-      // world instead put this in a tug of war with fitAll, and drops ended up
-      // pushed off the edge of a sky that had just framed them.
-      if (!settled && view.tls.length && !openPool && !drag && !panning && !pinch && !camTarget) {
+      /*
+       * The constellation comes back into frame — by moving the camera.
+       *
+       * `toScreenX` is `wx * cam.k + cam.x`, so sliding every body by `dx` and
+       * sliding the camera by `dx * cam.k` draw the identical picture. One of
+       * them edits every position in the world; the other edits two numbers.
+       *
+       * It used to be the first, with the drops you had placed exempted — and
+       * that exemption is what made it wrong rather than merely wasteful. A
+       * uniform nudge preserves an arrangement. A nudge that skips half the sky
+       * is not uniform: the loose drops slid relative to the placed ones, so
+       * the tidying-up was quietly deforming the one thing it claimed to keep.
+       * Moving the camera cannot have that problem, because nothing in the
+       * world moves at all.
+       *
+       * "Frame" means what the camera is actually showing: aiming at a fixed
+       * point in the world instead put this in a tug of war with fitAll, and
+       * drops ended up pushed off the edge of a sky that had just framed them.
+       * `!camTarget` is what keeps it out of that fight; the other guards are
+       * hands-off, so it never argues with a finger.
+       *
+       * No longer gated on `!settled`, and no longer counted in `moved`, which
+       * is the same fact twice: `moved` is how much the *world* rearranged
+       * itself this frame and the camera is not the world. Before, framing fed
+       * the settle it was waiting on, so an off-centre sky could not come to
+       * rest until the framing finished — and being asymptotic, it very nearly
+       * never did. Now the arrangement settles and the framing finishes
+       * afterwards, on its own clock, stopping at the threshold below.
+       */
+      if (view.tls.length && !openPool && !drag && !panning && !pinch && !camTarget) {
         let cx = 0
         let cy = 0
         for (const tl of view.tls) {
@@ -7550,27 +7626,12 @@ function mountSky(root: HTMLDivElement) {
         // seconds of nobody touching anything, and being asymptotic it never
         // arrived. Below this it has done its job.
         if (Math.abs(dx) > 0.06 || Math.abs(dy) > 0.06) {
-          /*
-           * …except what you put somewhere on purpose.
-           *
-           * This nudges the whole constellation back towards the middle of the
-           * glass, and it used to nudge everything — including the drops you
-           * had placed by hand. Measured: a bubble dragged and released still
-           * walked ten pixels over the next seven seconds, no differently from
-           * the ones nobody had touched, which makes `pinned` a flag that
-           * exempts a drop from the springs and from nothing else. On a canvas
-           * whose whole promise is that things stay where you put them, that
-           * is the promise being broken by the tidying-up.
-           */
-          let n = 0
-          for (const tl of view.tls) {
-            const p = posOf(tl.t.id)
-            if (p.pinned) continue
-            p.x += dx
-            p.y += dy
-            n++
-          }
-          moved += (Math.abs(dx) + Math.abs(dy)) * n
+          cam.x += dx * cam.k
+          cam.y += dy * cam.k
+          // the glass only moves when it is told to, and applyCam is otherwise
+          // reached solely through camTarget — which this cannot be running
+          // alongside
+          applyCam()
         }
       }
       // …and if that was all next to nothing, for long enough, the sky is
@@ -7735,8 +7796,13 @@ function mountSky(root: HTMLDivElement) {
           peekSettle--
           bringIntoView(reader.id, readBox)
         }
-        // clear the whole orbit's room — the outermost ring, not the first —
-        // so the rest of the sky drifts out of the way of all of it
+        // Clear the whole orbit's room — the outermost ring, not the first — so
+        // the rest of the sky gets out of the way of all of it. As an offset,
+        // not a shove: see Pos.ox. This used to be written into `x`/`y`, which
+        // made every look at a group a permanent outward edit to the sky around
+        // it — five looks, five pushes, and no way back. Now it leans away
+        // while you are looking and comes home when you are done, and the
+        // arrangement underneath never changed.
         const clear = ringR + mr + 34
         for (const other of view.tls) {
           if (other.t.id === g.t.id) continue
@@ -7746,9 +7812,8 @@ function mountSky(root: HTMLDivElement) {
           const dist = Math.hypot(dx, dy) || 1
           const need = clear + radiusOf(other)
           if (dist < need) {
-            const push = (need - dist) * 0.08
-            op.x += (dx / dist) * push
-            op.y += (dy / dist) * push
+            op.otx = (dx / dist) * (need - dist)
+            op.oty = (dy / dist) * (need - dist)
           }
         }
       }
@@ -7759,6 +7824,13 @@ function mountSky(root: HTMLDivElement) {
     for (const id of els.keys()) {
       const p = pos.get(id)
       if (!p) continue
+      // the room it is making, eased toward whatever asked for it this frame —
+      // and then the ask is cleared, so a frame in which nobody asks is a frame
+      // in which it starts coming home
+      p.ox += (p.otx - p.ox) * 0.08
+      p.oy += (p.oty - p.oy) * 0.08
+      p.otx = 0
+      p.oty = 0
       glide(p, drag?.id === id && drag.moved)
       p.mt = 0
     }

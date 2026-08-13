@@ -1284,7 +1284,26 @@ describe('the sky finishes settling, and then stops', () => {
     // not merely a smaller force — none, including the O(n²) pair walk
     expect(page).toMatch(/for \(const pair of settled \? \[\] : allKinPairs\(\)\)/)
     expect(page).toMatch(/for \(let pass = 0; pass < \(settled \? 0 : 3\); pass\+\+\)/)
-    expect(page).toMatch(/if \(!settled && view\.tls\.length && !openPool/)
+  })
+
+  it('can reach settled at all, because framing is no longer world movement', () => {
+    /*
+     * Re-centring used to add to `moved` once per drop per frame, and on any
+     * off-centre constellation that is comfortably over STILL — so the sky
+     * could not come to rest until the framing had finished, and being
+     * asymptotic it very nearly never did. Framing fed the settle it was
+     * waiting on.
+     *
+     * It is a camera move now. `moved` is what the *world* rearranged and the
+     * camera is not the world, so framing neither counts toward the settle nor
+     * waits for it, and the two stop fighting.
+     */
+    const at = page.indexOf('The constellation comes back into frame')
+    expect(at).toBeGreaterThan(-1)
+    const body = page.slice(at, at + 2600)
+    expect(body).toMatch(/if \(view\.tls\.length && !openPool && !drag && !panning && !pinch && !camTarget\)/)
+    expect(body).toMatch(/cam\.x \+= dx \* cam\.k/)
+    expect(body.slice(0, body.indexOf('applyCam()'))).not.toMatch(/moved \+=/)
   })
 
   it('wakes for everything that changes what the layout is of', () => {
@@ -1869,14 +1888,70 @@ describe('what you put somewhere stays there', () => {
     expect(page).toMatch(/const slopFor = \(e: PointerEvent\) => \(e\.pointerType === 'mouse' \? TAP_SLOP : 20\)/)
   })
 
-  it('leaves a pinned drop out of the tidying-up', () => {
-    // measured before this: a bubble dragged and released still walked ten
-    // pixels over seven seconds, no differently from ones nobody had touched
-    const at = page.indexOf('except what you put somewhere on purpose')
+  it('is not the one that gives way when something drifts into it', () => {
+    /*
+     * The hole this pins. The kin spring has had weights for a pinned end since
+     * it was written; the pass that holds bodies apart never did, and pushed
+     * both ends equally. So a drop you had placed was shoved aside by the first
+     * loose thing that wandered within `ra + rb + 26` of it — the promise of a
+     * spatial canvas broken by the tidying-up, in the one pass nobody checked.
+     *
+     * The gap still opens at the same rate: whichever end can move takes the
+     * whole of the correction, which is the shape `separate` already uses for
+     * the card being read.
+     */
+    const at = page.indexOf('nothing may overlap')
     expect(at).toBeGreaterThan(-1)
-    const body = page.slice(at, at + 1500)
-    expect(body).toMatch(/if \(p\.pinned\) continue/)
+    const body = page.slice(at, at + 2400)
+    expect(body).toMatch(/if \(pa\.pinned && pb\.pinned\) continue/)
+    expect(body).toMatch(/const ka = pa\.pinned \? 0 : pb\.pinned \? 2 : 1/)
+    expect(body).toMatch(/const kb = pb\.pinned \? 0 : pa\.pinned \? 2 : 1/)
     // and the settle still counts only what it actually moved
-    expect(body).toMatch(/moved \+= \(Math\.abs\(dx\) \+ Math\.abs\(dy\)\) \* n/)
+    expect(body).toMatch(/moved \+= push \* \(ka \+ kb\)/)
+  })
+
+  it('is not moved by the framing either, because the framing moves the camera', () => {
+    /*
+     * Measured before this: a bubble dragged and released still walked ten
+     * pixels over the next seven seconds, no differently from the ones nobody
+     * had touched. Exempting it from a *uniform* nudge fixed that one drop and
+     * deformed the arrangement around it — a nudge that skips half the sky is
+     * not uniform. Moving the camera moves nothing in the world at all, so
+     * there is no exemption left to get wrong.
+     */
+    const at = page.indexOf('The constellation comes back into frame')
+    expect(at).toBeGreaterThan(-1)
+    const body = page.slice(at, at + 2600)
+    expect(body).not.toMatch(/p\.x \+= dx/)
+    expect(body.slice(0, body.indexOf('applyCam()'))).not.toMatch(/p\.pinned/)
+  })
+
+  it('comes back to where you left it after you have looked at a group', () => {
+    /*
+     * Opening a group pushes the rest of the sky out of the way of its rings,
+     * and that used to be written into `x`/`y` and never given back: five looks
+     * at the same group left everything around it five pushes further out. It
+     * is an offset now, on the same terms as the breath — it leans away while
+     * you are looking and comes home when you are done.
+     */
+    const at = page.indexOf("Clear the whole orbit's room")
+    expect(at).toBeGreaterThan(-1)
+    const body = page.slice(at, at + 1400)
+    expect(body).toMatch(/op\.otx = \(dx \/ dist\) \* \(need - dist\)/)
+    expect(body).not.toMatch(/op\.x \+=/)
+    // eased toward whatever asked this frame, and the ask cleared straight
+    // afterwards — so a frame in which nobody asks is a frame of coming home
+    expect(page).toMatch(/p\.ox \+= \(p\.otx - p\.ox\) \* 0\.08/)
+    expect(page).toMatch(/p\.otx = 0\n\s+p\.oty = 0/)
+    // drawn, never stored: the saved layout is still x/y alone
+    expect(page).toMatch(/const bx = dragged \? 0 : p\.bx \+ p\.ox/)
+    expect(page).toMatch(/out\[tl\.t\.id\] = p\.pinned \? \{ x: p\.x \/ W, y: p\.y \/ H, p: 1 \}/)
+  })
+
+  it('still lets you aim at a bubble that is leaning out of the way', () => {
+    // an offset the drop-target maths did not know about would mean dropping
+    // onto where a bubble looks and missing it by however far it had leaned
+    expect(page).toMatch(/Math\.hypot\(tp\.x \+ tp\.ox - p\.x, tp\.y \+ tp\.oy - p\.y\)/)
+    expect(page).toMatch(/Math\.hypot\(hp\.x \+ hp\.ox - p\.x, hp\.y \+ hp\.oy - p\.y\)/)
   })
 })
