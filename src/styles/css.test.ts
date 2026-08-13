@@ -1852,3 +1852,31 @@ describe('one tap, and where it lands is what it means', () => {
     expect(page.slice(at, at + 300)).toMatch(/openThing\(nextFor\)/)
   })
 })
+
+describe('what you put somewhere stays there', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+
+  it('pins on any deliberate drag, not only a long one', () => {
+    /*
+     * There were two thresholds. `moved` turns true at `slopFor` — twenty
+     * pixels on a finger, which is exactly the thumb-roll filter — and then a
+     * second rule asked for forty before it would pin. Everything between the
+     * two was moved by hand and never pinned, so the settle took it back.
+     */
+    expect(page).toMatch(/if \(!d\.isMember && !d\.target && d\.moved\) posOf\(d\.id\)\.pinned = true/)
+    expect(page).not.toMatch(/Math\.hypot\(p\.x - d\.wx, p\.y - d\.wy\) > 40/)
+    // the slop that actually rejects a wobble is still there and unchanged
+    expect(page).toMatch(/const slopFor = \(e: PointerEvent\) => \(e\.pointerType === 'mouse' \? TAP_SLOP : 20\)/)
+  })
+
+  it('leaves a pinned drop out of the tidying-up', () => {
+    // measured before this: a bubble dragged and released still walked ten
+    // pixels over seven seconds, no differently from ones nobody had touched
+    const at = page.indexOf('except what you put somewhere on purpose')
+    expect(at).toBeGreaterThan(-1)
+    const body = page.slice(at, at + 1500)
+    expect(body).toMatch(/if \(p\.pinned\) continue/)
+    // and the settle still counts only what it actually moved
+    expect(body).toMatch(/moved \+= \(Math\.abs\(dx\) \+ Math\.abs\(dy\)\) \* n/)
+  })
+})

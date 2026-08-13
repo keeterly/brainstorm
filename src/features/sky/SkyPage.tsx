@@ -7079,20 +7079,23 @@ function mountSky(root: HTMLDivElement) {
     /*
      * Wherever it ended up, that is where you meant it.
      *
-     * Only when it actually went somewhere. `moved` alone is not enough — it
-     * turns true on a few pixels of thumb roll, and a tap that happens to
-     * wobble is not an opinion about where a drop belongs. Forty pixels is
-     * about the smallest move nobody makes by accident.
+     * There used to be a second threshold here: `moved` was not enough, it had
+     * to have gone more than forty pixels as well, on the reasoning that
+     * `moved` "turns true on a few pixels of thumb roll". It does not — it
+     * turns true at `slopFor`, which is twenty pixels on a finger and exists
+     * for exactly that purpose. So the forty was a second filter on top of one
+     * already doing the job, and what fell through the gap was every
+     * deliberate nudge between twenty and forty pixels: moved by hand, never
+     * pinned, and quietly taken back by the settle and the springs a moment
+     * later. On a canvas whose whole promise is that you put things where you
+     * want them, that is the promise being broken by a rounding rule.
      *
      * Not for a member being rearranged inside an open pool — that one lives
      * on a ring, and a ring is a layout rather than a place — and not for one
      * that has just been pooled with something else, which is a different act
      * with its own idea of where things go.
      */
-    if (!d.isMember && !d.target && d.moved) {
-      const p = posOf(d.id)
-      if (Math.hypot(p.x - d.wx, p.y - d.wy) > 40) p.pinned = true
-    }
+    if (!d.isMember && !d.target && d.moved) posOf(d.id).pinned = true
     persistLayout()
   }
   const onCancel = (e: PointerEvent) => {
@@ -7547,12 +7550,27 @@ function mountSky(root: HTMLDivElement) {
         // seconds of nobody touching anything, and being asymptotic it never
         // arrived. Below this it has done its job.
         if (Math.abs(dx) > 0.06 || Math.abs(dy) > 0.06) {
+          /*
+           * …except what you put somewhere on purpose.
+           *
+           * This nudges the whole constellation back towards the middle of the
+           * glass, and it used to nudge everything — including the drops you
+           * had placed by hand. Measured: a bubble dragged and released still
+           * walked ten pixels over the next seven seconds, no differently from
+           * the ones nobody had touched, which makes `pinned` a flag that
+           * exempts a drop from the springs and from nothing else. On a canvas
+           * whose whole promise is that things stay where you put them, that
+           * is the promise being broken by the tidying-up.
+           */
+          let n = 0
           for (const tl of view.tls) {
             const p = posOf(tl.t.id)
+            if (p.pinned) continue
             p.x += dx
             p.y += dy
+            n++
           }
-          moved += (Math.abs(dx) + Math.abs(dy)) * view.tls.length
+          moved += (Math.abs(dx) + Math.abs(dy)) * n
         }
       }
       // …and if that was all next to nothing, for long enough, the sky is
