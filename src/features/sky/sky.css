@@ -1220,6 +1220,71 @@ body.sky-dragging .sky-undo.show {
      readable at a glance, without a single line or chevron drawn for it. */
   margin-left: calc(var(--d, 0) * 18px);
 }
+/* The words of a step, and under them what it is for.
+   A column inside the row, so the reason sits under the title rather than
+   beside it — every rule written against `.row .t` still finds it, because
+   they are all descendant selectors. */
+.sky-page .pans .row .body {
+  flex: 1;
+  /* without this the column will not shrink and the row widens past the page
+     rather than wrapping — the same rule the memory list needed */
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sky-page .pans .row .body .t {
+  flex: none;
+  width: 100%;
+}
+/* Why this step, in the agent's own line for it. Quiet: it is the second thing
+   you read on a row, never the first. */
+.sky-page .pans .row .why {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--paper-ink, #3d4b5c);
+  opacity: 0.62;
+  padding: 0 0 4px 6px;
+  margin: -4px 0 0;
+}
+/* What it is waiting on, named rather than merely marked — "waiting" tells you
+   to skip it, the name tells you what to go and do instead. */
+/* It stays in the row when it has nothing to say, so that ticking the blocker
+   can clear it without rebuilding the list — see refreshWaits. */
+.sky-page .pans .row .waits:empty { display: none; }
+.sky-page .pans .row .waits {
+  font-size: 11.5px;
+  line-height: 1.4;
+  font-weight: 500;
+  color: var(--paper-ink, #3d4b5c);
+  opacity: 0.5;
+  padding: 0 0 4px 6px;
+}
+/* A blocked step is not a step you can start, and a list that draws it exactly
+   like one you can is a list that wastes a decision on every read. */
+.sky-page .pans .row.waiting .body .t { opacity: 0.6; }
+/* How big a piece of work it is. Dots rather than a number: "3" invites you to
+   wonder what 3 means, and the only thing worth knowing is whether this is a
+   moment or an afternoon. */
+.sky-page .pans .row .effort {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-top: 15px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--paper-ink, #3d4b5c);
+  opacity: 0.34;
+  white-space: nowrap;
+}
+/* What the group turned out to be about — `rain`'s reading of it, written to
+   the group's summary since the beginning and never once drawn. */
+.sky-page .pans .read {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--paper-ink, #3d4b5c);
+  opacity: 0.72;
+  margin: 0 0 14px;
+}
+
 /* The row is the field. No pencil, no edit mode, no second screen: a list of
    your own words that you may look at and not fix is not a list, it is a
    receipt. Borderless until you are in it, so the page still reads as a list. */

@@ -1937,3 +1937,81 @@ describe('the microphone is asked for on its own screen', () => {
     expect(settings.slice(at, at + 1400)).toMatch(/if \(!canHear\(\)\) return null/)
   })
 })
+
+describe('a plan looks like a plan', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+  const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
+  const prepass = readFileSync(join('src/domain', 'prioritize-prepass.ts'), 'utf8')
+
+  /*
+   * `rain` returns a real plan — a reading of what the thing is about, and
+   * steps that each carry a reason, a size, and what they have to follow. All
+   * of it was written to the graph and none of it was ever drawn: the list
+   * showed the steps in the order the model happened to emit them, each one a
+   * tick and a title. Ten identical rows is a mess; the same ten in order,
+   * with their reasons, is a plan.
+   */
+
+  it('shows the steps in the order they should be done', () => {
+    expect(page).toMatch(/const branches = planned \? orderTree\(tl\.t\.id, walked, rels\) : walked/)
+  })
+
+  it('leaves a group that is not a plan exactly as it was', () => {
+    // a wall of references has no sequence, and numbering it would be the app
+    // inventing one
+    expect(page).toMatch(/const planned = hasPlan\(/)
+    expect(page).toMatch(/planned \? 'the plan' : 'what is inside'/)
+  })
+
+  it('draws the three things that were already in the graph and never shown', () => {
+    const at = page.indexOf('const whyEl = row.querySelector')
+    expect(at).toBeGreaterThan(-1)
+    const body = page.slice(at, at + 1600)
+    expect(body).toMatch(/m\.summary/) // the reason rain wrote for this step
+    expect(body).toMatch(/effortDots\(m\.effort\)/) // how big a piece of work
+    // …and the group's own reading of itself, which rainFlow writes to summary
+    expect(page).toMatch(/const readOf = planned \? \(tl\.t\.summary \?\? ''\)\.trim\(\) : ''/)
+  })
+
+  it('says nothing beside a step you wrote yourself', () => {
+    // the absence is how you tell which ones are yours — a hand-typed step has
+    // no reason and no effort, so both elements take themselves out
+    const at = page.indexOf('const whyEl = row.querySelector')
+    const body = page.slice(at, at + 1600)
+    expect(body).toMatch(/else whyEl\.remove\(\)/)
+    expect(body).toMatch(/else effortEl\.remove\(\)/)
+  })
+
+  it('names what a blocked step is waiting on, rather than only marking it', () => {
+    // "waiting" tells you to skip it; the name tells you what to go and do
+    expect(page).toMatch(/`after \$\{on\.map\(\(x\) => label\(x\)\)\.join\(' · '\)\}`/)
+  })
+
+  it('notices its own progress when a blocker is ticked', () => {
+    /*
+     * The list paints once and a tick only restyles its own row, so the first
+     * build of this left "after Shoot one roll…" under a step whose blocker
+     * had just been ticked off in front of it. A plan that does not notice its
+     * own progress is worse than none: it tells you to wait for something
+     * already done.
+     */
+    expect(page).toMatch(/const refreshWaits = \(\) => \{/)
+    const tick = page.indexOf('landUndo(complete(m.id))')
+    expect(page.slice(tick, tick + 420)).toMatch(/refreshWaits\(\)/)
+    // …which needs the line to still be there when it is empty
+    expect(sky).toMatch(/\.waits:empty \{ display: none; \}/)
+  })
+
+  it('does not move a row out from under the thumb when it comes free', () => {
+    const at = page.indexOf('const refreshWaits = () => {')
+    expect(page.slice(at, at + 900)).not.toMatch(/openPage\(|rebuild\(\)/)
+  })
+
+  it('agrees with the Current about what is blocked, by construction', () => {
+    // one rule, because two would drift and the app would say different things
+    // about the same step on two screens
+    expect(prepass).toMatch(/import \{ waitingOn \} from '\.\/plan'/)
+    expect(prepass).toMatch(/new Set\(waitingOn\(byId, relationships\)\.keys\(\)\)/)
+    expect(prepass).not.toMatch(/blocked\.add\(/)
+  })
+})

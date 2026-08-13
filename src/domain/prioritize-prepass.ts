@@ -2,6 +2,7 @@
 // Rules: unmet depends_on/blocks ⇒ waiting; snoozed-in-future hidden;
 // overdue or due today ⇒ now; due this week ⇒ next; manual buckets respected.
 import type { Relationship, Thought, Bucket } from './types'
+import { waitingOn } from './plan'
 
 export interface PrepassResult {
   visible: Thought[]
@@ -20,17 +21,11 @@ export function prioritizePrepass(
   )
 
   // An action is blocked when it depends on (or is blocked by) an open thought.
-  const blocked = new Set<string>()
-  for (const r of relationships) {
-    if (r.type === 'depends_on') {
-      const dep = byId.get(r.to_id)
-      if (dep && dep.status === 'open' && byId.has(r.from_id)) blocked.add(r.from_id)
-    }
-    if (r.type === 'blocks') {
-      const blocker = byId.get(r.from_id)
-      if (blocker && blocker.status === 'open' && byId.has(r.to_id)) blocked.add(r.to_id)
-    }
-  }
+  //
+  // The rule itself lives in `plan.ts`, because a plan marks what is blocked and
+  // this hides it, and two copies of one rule is two screens eventually saying
+  // different things about the same step.
+  const blocked = new Set(waitingOn(byId, relationships).keys())
 
   const buckets = new Map<string, Bucket>()
   const visible: Thought[] = []

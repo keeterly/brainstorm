@@ -30,6 +30,7 @@ import { emptiedGroup, wouldCircle } from '@/domain/finished'
 import { fullDepth, sizeUp, type Sizing } from './gaugeFlow'
 import { workFace, type Phase, type WorkState } from './working'
 import { isMakeable, isQuestion } from '@/domain/question'
+import { effortDots, hasPlan, orderTree, waitingOn } from '@/domain/plan'
 import {
   addTo,
   bin,
@@ -3418,7 +3419,23 @@ function mountSky(root: HTMLDivElement) {
       // ones is a list you have to read twice to find your place in.
       // Everything under it, not only what it directly holds — because a row
       // you have just nested has to still be on the page. See branchesOf.
-      const branches = branchesOf(tl.t.id, true)
+      /*
+       * In the order it should be done, when there is an order.
+       *
+       * `rain` works out which step has to follow which and writes it down as
+       * real `depends_on` edges — and the list has always shown them in the
+       * order they happened to be created, which is the order the model
+       * emitted them in and means nothing. Most groups are not plans, though:
+       * a wall of references has no sequence, and numbering it would be the
+       * app inventing one. So this only applies where there is a plan to show.
+       */
+      const walked = branchesOf(tl.t.id, true)
+      const rels = S().relationships
+      const planned = hasPlan(
+        walked.map((b) => b.t),
+        rels,
+      )
+      const branches = planned ? orderTree(tl.t.id, walked, rels) : walked
       const inside = branches.map((b) => b.t)
       // …but the tally counts what the group itself holds, so the words under
       // the name agree with the number on the bubble out in the sky
@@ -3464,12 +3481,25 @@ function mountSky(root: HTMLDivElement) {
             `<b>${isDoing ? 'make it a note' : 'make it a to-do'}</b>` +
             `</button>`
           : ''
+      /*
+       * What this turned out to be about.
+       *
+       * `rain` returns a `read` — not the group's name back, but what it
+       * amounted to once there were ten things in it — and `rainFlow` writes
+       * it to the group's own `summary`. It has never been shown anywhere.
+       * Only where there is a plan, and only when it says more than the title
+       * already does.
+       */
+      const readOf = planned ? (tl.t.summary ?? '').trim() : ''
+      const readLine =
+        readOf && readOf !== label(tl.t).trim() ? `<p class="read">${esc(readOf)}</p>` : ''
       pageA.style.display = 'block'
       pageA.innerHTML =
         (shot ? `<button class="shot" aria-label="See the photo full screen"><img alt="" /></button>` : '') +
         kindLine +
+        readLine +
         (inside.length
-          ? `<div class="lab head"><span>what is inside</span>` +
+          ? `<div class="lab head"><span>${planned ? 'the plan' : 'what is inside'}</span>` +
             `<button class="ctl sel">Select</button></div>` +
             branches
               .map(
@@ -3505,7 +3535,25 @@ function mountSky(root: HTMLDivElement) {
                   // says. The only way to hold a row down without the loupe
                   // appearing over the words is for those words not to be in an
                   // editable thing yet. See `tapToEdit`.
+                  /*
+                   * The words, and under them what the step is for.
+                   *
+                   * A column, because a step now carries a reason: `rain`
+                   * writes one for every step it produces and it went into
+                   * `summary` and was never shown, so a plan arrived as ten
+                   * rows that each said only what to do and never why. Both
+                   * lines are removed when they are empty, so a step you typed
+                   * yourself is still one line — the absence is how you tell
+                   * which ones are yours.
+                   */
+                  `<div class="body">` +
                   `<textarea class="t" rows="1" readonly aria-label="What this is called" enterkeyhint="done"></textarea>` +
+                  `<div class="why"></div>` +
+                  `<div class="waits"></div>` +
+                  `</div>` +
+                  // How big a thing it is, which `rain` sizes 1–5 and nothing
+                  // in the app has ever shown.
+                  `<span class="effort"></span>` +
                   // a group inside a group is still a group, and the list has
                   // to say so — a row that looks like any other item is the
                   // page contradicting what the sky just showed you
@@ -3665,6 +3713,33 @@ function mountSky(root: HTMLDivElement) {
         const heldEl = row.querySelector('.held') as HTMLElement
         if (held) heldEl.textContent = `${held} inside`
         else heldEl.remove()
+        /*
+         * Why this one, how big it is, and what it is still waiting on.
+         *
+         * All three were already in the graph and none of them had ever been
+         * drawn: the reason in `summary`, the size in `effort`, the waiting in
+         * the `depends_on` edges `rain` writes between the steps. Each element
+         * removes itself when it has nothing to say, so a step you typed by
+         * hand is one line and looks like what it is.
+         */
+        const whyEl = row.querySelector('.why') as HTMLElement
+        const why = planned ? (m.summary ?? '').trim() : ''
+        if (why && why !== label(m).trim()) whyEl.textContent = why
+        else whyEl.remove()
+
+        const effortEl = row.querySelector('.effort') as HTMLElement
+        const dots = planned ? effortDots(m.effort) : ''
+        if (dots) {
+          effortEl.textContent = dots
+          effortEl.setAttribute('aria-label', `${dots.length} of 5 for size`)
+          effortEl.title = 'how big a piece of work this is'
+        } else effortEl.remove()
+
+        // Named, not merely marked. "Waiting" tells you to skip it; the name
+        // tells you what to go and do instead — which is the only useful thing
+        // a blocked row can say. Left in the DOM when it is empty rather than
+        // removed, because ticking the blocker has to be able to clear it —
+        // see `refreshWaits`. CSS hides it while it says nothing.
         row.classList.toggle('ticked', S().thoughts.find((t) => t.id === m.id)?.status === 'done')
         // No edit mode, no pencil, no second screen: the row is the field, so
         // fixing a name is typing over it. Re-rendering the list here would
@@ -3720,6 +3795,8 @@ function mountSky(root: HTMLDivElement) {
           row.classList.toggle('ticked', nowDone)
           settle(row as HTMLDivElement, nowDone)
           tally()
+          // whatever was waiting on this one is not waiting any more
+          refreshWaits()
           // ticking the last one in here empties the group too — the same
           // offer as ticking it out in the sky, from the other place it happens
           if (nowDone) finishedIt(m.id)
@@ -3739,6 +3816,35 @@ function mountSky(root: HTMLDivElement) {
           openPage('open', tl, ox, oy)
         })
       })
+
+      /*
+       * …and said again whenever something is ticked.
+       *
+       * The list is painted once when the page opens and a tick only restyles
+       * its own row — so the first build of this left "after Shoot one roll of
+       * the expired stock" under a step whose blocker had just been ticked off
+       * in front of it. A plan that does not notice its own progress is worse
+       * than no plan: it tells you to wait for something already done.
+       *
+       * The row does not move when it comes free. Reordering the list under a
+       * thumb between one paint and the next is the thing `planOrder` is
+       * careful not to do; the line simply goes.
+       */
+      const refreshWaits = () => {
+        if (!planned) return
+        const live = new Map(
+          inside.map((m) => [m.id, S().thoughts.find((t) => t.id === m.id) ?? m] as const),
+        )
+        const now = waitingOn(live, S().relationships)
+        for (const row of [...pageA.querySelectorAll('.row[data-id]')] as HTMLDivElement[]) {
+          const id = row.dataset.id as string
+          const on = (now.get(id) ?? []).map((x) => live.get(x)).filter(Boolean) as Thought[]
+          row.classList.toggle('waiting', on.length > 0)
+          const el = row.querySelector('.waits') as HTMLElement | null
+          if (el) el.textContent = on.length ? `after ${on.map((x) => label(x)).join(' · ')}` : ''
+        }
+      }
+      refreshWaits()
 
       // Something new, straight in. Closing the page, finding the sky, holding
       // it, writing and dragging the result back is five moves for one thought.
