@@ -85,7 +85,6 @@ interface GraphState {
 
   saveLayout(scope: string, positions: Record<string, { x: number; y: number; p?: 1 }>): void
   updateProfileSettings(patch: Record<string, unknown>): void
-  setBucket(id: string, bucket: Bucket | null): void
 }
 
 let snapshotTimer: ReturnType<typeof setTimeout> | null = null
@@ -455,9 +454,6 @@ export const useGraph = create<GraphState>((set, get) => ({
     scheduleSnapshot(get)
   },
 
-  setBucket(id, bucket) {
-    get().updateThought(id, { bucket })
-  },
 }))
 
 /**

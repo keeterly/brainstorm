@@ -1,12 +1,23 @@
-// Deterministic prioritization pre-pass — runs before (and without) AI.
-// Rules: unmet depends_on/blocks ⇒ waiting; snoozed-in-future hidden;
-// overdue or due today ⇒ now; due this week ⇒ next; manual buckets respected.
-import type { Relationship, Thought, Bucket } from './types'
+// Deterministic prioritization pre-pass — runs before, and without, any AI.
+//
+// What survives of it: what is open, actionable and not snoozed away, and what
+// of that is waiting on something else. `nextAction` reads both.
+//
+// It used to also sort everything into now/next/later/waiting buckets. Those
+// were the Current's — the screen that laid them out in four columns — and when
+// that screen went, nothing read them. A map computed every call and thrown
+// away is cheap enough to ignore, which is exactly why it would have sat here
+// for years still describing the app as a thing with four columns of work in
+// it, ready for the next person to write words about "flowing". The one live
+// thing it did — hiding what is blocked — was already `waitingOn` in plan.ts.
+//
+// The `bucket` column stays on the row and `Bucket` stays in the types: dropping
+// a column is a migration, and this is not one.
+import type { Relationship, Thought } from './types'
 import { waitingOn } from './plan'
 
 export interface PrepassResult {
   visible: Thought[]
-  buckets: Map<string, Bucket>
   blocked: Set<string>
 }
 
@@ -27,41 +38,8 @@ export function prioritizePrepass(
   // different things about the same step.
   const blocked = new Set(waitingOn(byId, relationships).keys())
 
-  const buckets = new Map<string, Bucket>()
-  const visible: Thought[] = []
-
-  for (const t of openActionable) {
-    // Snoozed into the future stays out of sight entirely.
-    if (t.snooze_until && t.snooze_until > today) continue
-    visible.push(t)
-
-    if (blocked.has(t.id)) {
-      buckets.set(t.id, 'waiting')
-      continue
-    }
-    if (t.bucket) {
-      // Manual assignment wins (except blocked, handled above).
-      buckets.set(t.id, t.bucket === 'waiting' ? 'waiting' : t.bucket)
-      continue
-    }
-    if (t.due_date && t.due_date <= today) {
-      buckets.set(t.id, 'now')
-    } else {
-      // Everything else that is open and unblocked is flowing.
-      //
-      // This used to be `later` for anything without a due date, and almost no
-      // real work has a due date — so the current was empty on a map with two
-      // dozen live actions on it, and every one of them was counted off to a
-      // fourth place called "the world". You could rain a cloud, watch four
-      // things fall out of it, open the Current and be told nothing was
-      // flowing. That is the opposite of what the word means.
-      //
-      // `later` is now what it says: something you deferred. A snooze, or a
-      // bucket you set by hand. Both are handled above this line, so nothing
-      // reaches here except work that is genuinely in the flow.
-      buckets.set(t.id, 'next')
-    }
-  }
+  // Snoozed into the future stays out of sight entirely.
+  const visible = openActionable.filter((t) => !(t.snooze_until && t.snooze_until > today))
 
   // Stable order: due date first, then age (oldest first).
   visible.sort((a, b) => {
@@ -71,7 +49,7 @@ export function prioritizePrepass(
     return a.created_at < b.created_at ? -1 : 1
   })
 
-  return { visible, buckets, blocked }
+  return { visible, blocked }
 }
 
 export function addDays(iso: string, days: number): string {
