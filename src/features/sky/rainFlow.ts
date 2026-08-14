@@ -96,6 +96,17 @@ export function applyRain(subjectId: string, output: RainOutput, runId: string |
       summary: step.why || null,
       type: 'action',
       effort: step.effort,
+      /*
+       * Whether the app could write the first version of this one, from the
+       * model that wrote it.
+       *
+       * The sky used to work this out afterwards by matching the title's
+       * opening against fifteen English verbs, which meant a step had to be
+       * *phrased* a certain way before the app would offer to do it — and the
+       * one thing that reliably knew the answer had already been asked to
+       * produce the step and never asked about it.
+       */
+      extra: { canDraft: step.canDraft },
     })
     have.add(step.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim())
     added++

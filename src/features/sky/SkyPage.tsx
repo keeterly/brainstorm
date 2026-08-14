@@ -5664,11 +5664,26 @@ function mountSky(root: HTMLDivElement) {
      * work under it is a goal and goals get planned, not drafted. And under
      * something — a leaf at the top of the sky is a loose idea, and the answer
      * to an idea is to grow it, not to write it up.
+     *
+     * Makeable is the model's own answer where there is one. `rain` writes
+     * these steps and now says of each whether it could write a first version
+     * of it; that judgement used to be thrown away and reconstructed here from
+     * the wording, by matching the title's opening against fifteen English
+     * verbs. It is a good list and its instinct is right — it deliberately
+     * stays out of the way of booking, signing, paying, meeting — but it only
+     * ever fired on steps that *began* with one of those words. "Linesheet copy
+     * for the Lyon mill" begins with a noun. "Ask the mill for lead times" is an
+     * email. Neither was offered, and the thing that wrote them both knew.
+     *
+     * The fallback is the same list, unchanged, for the two cases with no
+     * answer: a step you typed yourself, and every step written before this.
      */
+    const said = ex(tl.t).canDraft
+    const makeable = typeof said === 'boolean' ? said : isMakeable(label(tl.t))
     const doable =
       tl.kind === 'drop' &&
       !tl.members.length &&
-      isMakeable(label(tl.t)) &&
+      makeable &&
       !!S().relationships.find((r) => r.type === 'part_of' && r.from_id === tl.t.id)
     // …and once it has been made, the thing to do with it is read it. Keyed on
     // the stamp the draft leaves rather than on there being a brief at all: a

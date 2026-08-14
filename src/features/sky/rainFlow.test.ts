@@ -10,8 +10,8 @@ vi.mock('@/ai/memoryFlow', () => ({ learnFacts: vi.fn().mockResolvedValue({ adde
 const OUT: RainOutput = {
   read: 'Whether the memory layer is built on Postgres or rented',
   steps: [
-    { tempId: 's1', title: 'Decide storage: pgvector here or a hosted memory API', why: 'three of these are waiting on it', effort: 2, dependsOn: [] },
-    { tempId: 's2', title: 'Feed a week of real notes through whichever wins', why: 'the only way to know if recall is good enough', effort: 3, dependsOn: ['s1'] },
+    { tempId: 's1', title: 'Decide storage: pgvector here or a hosted memory API', why: 'three of these are waiting on it', effort: 2, dependsOn: [], canDraft: false },
+    { tempId: 's2', title: 'Feed a week of real notes through whichever wins', why: 'the only way to know if recall is good enough', effort: 3, dependsOn: ['s1'], canDraft: false },
   ],
   missing: [],
   learned: ['Prefers to prove a thing before adopting it'],
@@ -175,12 +175,50 @@ describe('raining the same cloud twice', () => {
     const first = kids(pool.id).length
     const res = applyRain(
       pool.id,
-      { ...OUT, steps: [...OUT.steps, { tempId: 's9', title: 'Write the migration off the back of it', why: 'it is the only thing left', effort: 2, dependsOn: [] }] },
+      { ...OUT, steps: [...OUT.steps, { tempId: 's9', title: 'Write the migration off the back of it', why: 'it is the only thing left', effort: 2, dependsOn: [], canDraft: true }] },
       'r2',
     )
     expect(kids(pool.id)).toHaveLength(first + 1)
     expect(res.kind).toBe('rained')
     if (res.kind !== 'rained') return
     expect(res.added).toBe(1)
+  })
+})
+
+describe('whether the app could write the step itself', () => {
+  /*
+   * The one thing that reliably knows is the model that just wrote the step,
+   * and it was never asked. The sky worked it out afterwards from the wording —
+   * matching the title's opening against fifteen English verbs — so a step had
+   * to be *phrased* a certain way before the app would offer to do it. This
+   * carries the answer through to the thought instead.
+   */
+  it('keeps the model’s answer on the step it wrote', () => {
+    const { pool } = seed()
+    applyRain(
+      pool.id,
+      {
+        ...OUT,
+        steps: [
+          { tempId: 'a', title: 'Linesheet copy for the Lyon mill', why: 'x', effort: 2, dependsOn: [], canDraft: true },
+          { tempId: 'b', title: 'Sign the studio lease', why: 'y', effort: 1, dependsOn: [], canDraft: false },
+        ],
+      },
+      'r1',
+    )
+    const by = (title: string) => kids(pool.id).find((t) => t.title === title)!
+    // a noun-first step the fifteen verbs would never have caught
+    expect((by('Linesheet copy for the Lyon mill').extra as Record<string, unknown>).canDraft).toBe(true)
+    // …and something out in the world, which it must still keep out of
+    expect((by('Sign the studio lease').extra as Record<string, unknown>).canDraft).toBe(false)
+  })
+
+  it('leaves nothing behind on a step it did not write', () => {
+    // a step you typed yourself never went past a model, and neither did any
+    // step written before this existed — both fall back to the verb list
+    const { pool } = seed()
+    const mine = useGraph.getState().addThought({ raw_content: 'Draft the buyer note', type: 'action' })
+    useGraph.getState().addRelationship(mine.id, pool.id, 'part_of')
+    expect((useGraph.getState().thoughts.find((t) => t.id === mine.id)!.extra as Record<string, unknown>).canDraft).toBeUndefined()
   })
 })

@@ -57,6 +57,21 @@ const Output = z.object({
         why: z.string().max(200),
         effort: z.number().int().min(1).max(5),
         dependsOn: z.array(z.string().max(24)).max(6),
+        /**
+         * Could the app write the first version of this one?
+         *
+         * The comment at the top of this file has always said what happens to a
+         * step once it lands — a question gets `answer it`, something makeable
+         * gets `do it`, anything else gets `work it` — and nothing ever asked
+         * the model which of those it had just written. The app worked it out
+         * afterwards from the wording, by matching the opening against fifteen
+         * English verbs, so "Linesheet copy for the Lyon mill" and "Ask the mill
+         * for lead times" were never offered even though both are things it
+         * could have drafted in ten seconds.
+         *
+         * Whoever wrote the step knows. This asks.
+         */
+        canDraft: z.boolean(),
       }),
     )
     .min(1)
@@ -130,6 +145,11 @@ export const rain: ActionDef<RainInput, RainOutput> = {
         `  · Nothing generic. "Show it to someone", "sit with it", "make a plan" apply to every group ever ` +
         `made and so belong to none of them. If a step would still make sense under a different group's name, ` +
         `it is not a step.\n` +
+        `  · canDraft: true if you could write a useful first version of this from what is in front of you — a ` +
+        `note, an outline, a shortlist, an email, a brief, a set of questions to send someone. False for ` +
+        `anything whose substance is out in the world and not on this page: booking, signing, paying, meeting, ` +
+        `filing, phoning, going somewhere, deciding something only they can decide. Judge the work, not the ` +
+        `wording — a step that opens with a noun can still be something you could draft.\n` +
         `missing: what you would have to be told to take this further — at most 3, and empty is the usual ` +
         `answer. Use it instead of inventing a step, never as well as one.\n` +
         `learned: anything durable about *them* this taught you. Not about this project. Omit if nothing.\n` +

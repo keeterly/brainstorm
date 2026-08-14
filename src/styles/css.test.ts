@@ -2119,3 +2119,52 @@ describe('finding a thought without leaving the sky', () => {
     expect(body.indexOf('rebuild()')).toBeLessThan(body.indexOf('view.parentOf.get'))
   })
 })
+
+// `rain` writes the steps under a goal, and the file has always said what
+// happens to one once it lands: a question gets `answer it`, something makeable
+// gets `do it`, anything else gets `work it`. Nothing ever asked the model which
+// of those it had just written — the sky reconstructed it from the wording, by
+// matching the title's opening against fifteen English verbs. So "Linesheet copy
+// for the Lyon mill" and "Ask the mill for lead times" were never offered, and
+// the thing that wrote them both knew.
+describe('what the app can do for you, decided by the thing that wrote it', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+  const rain = readFileSync(join('shared/ai/actions', 'rain.ts'), 'utf8')
+  const flow = readFileSync(join('src/features/sky', 'rainFlow.ts'), 'utf8')
+
+  it('asks, on every step it writes', () => {
+    expect(rain).toMatch(/canDraft: z\.boolean\(\)/)
+    // and tells it to judge the work rather than the wording, which is the
+    // whole failure of the verb list it replaces
+    expect(rain).toMatch(/Judge the work, not the /)
+  })
+
+  it('keeps the answer on the step', () => {
+    expect(flow).toMatch(/extra: \{ canDraft: step\.canDraft \}/)
+  })
+
+  it('prefers it to guessing, and still guesses when there is nothing to prefer', () => {
+    // a step you typed yourself never went past a model, and neither did any
+    // step written before this
+    const at = page.indexOf('const said = ex(tl.t).canDraft')
+    expect(at).toBeGreaterThan(-1)
+    expect(page.slice(at, at + 200)).toMatch(
+      /const makeable = typeof said === 'boolean' \? said : isMakeable\(label\(tl\.t\)\)/,
+    )
+    // the verb list is not lengthened — a longer list of verbs is the same
+    // brittle thing further along
+    const q = readFileSync(join('src/domain', 'question.ts'), 'utf8')
+    expect(q).toMatch(/const MAKEABLE = \[/)
+    expect(q.slice(q.indexOf('const MAKEABLE = ['), q.indexOf('const MAKEABLE = [') + 400)).toMatch(/'draft',/)
+  })
+
+  it('still needs the other three things to be true', () => {
+    // a leaf, under something, and a drop — the model saying it could write a
+    // thing is not a reason to offer to write a goal
+    const at = page.indexOf('const doable =')
+    const body = page.slice(at, at + 260)
+    expect(body).toMatch(/tl\.kind === 'drop'/)
+    expect(body).toMatch(/!tl\.members\.length/)
+    expect(body).toMatch(/r\.type === 'part_of' && r\.from_id === tl\.t\.id/)
+  })
+})

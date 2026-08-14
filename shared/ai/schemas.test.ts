@@ -648,8 +648,8 @@ describe('rain — what falls out of a full cloud', () => {
   const good = {
     read: 'Whether to build the memory layer on Postgres or rent it',
     steps: [
-      { tempId: 's1', title: 'Decide storage: pgvector or a hosted memory API', why: 'four of these are waiting on it', effort: 2, dependsOn: [] },
-      { tempId: 's2', title: 'Feed a week of real notes through whichever you pick', why: 'the only way to know if recall is good enough', effort: 3, dependsOn: ['s1'] },
+      { tempId: 's1', title: 'Decide storage: pgvector or a hosted memory API', why: 'four of these are waiting on it', effort: 2, dependsOn: [], canDraft: false },
+      { tempId: 's2', title: 'Feed a week of real notes through whichever you pick', why: 'the only way to know if recall is good enough', effort: 3, dependsOn: ['s1'], canDraft: false },
     ],
     missing: [],
     learned: [],
