@@ -2,10 +2,13 @@
 // bubble "by luck", asked outright for search, lost a week of writing inside
 // the wrong group. Find answers with every thought in every state, and each
 // result carries the one act its state calls for.
+//
+// What counts as a match is domain/find.ts and is tested there; this is about
+// what a result lets you do once you have one.
 import { describe, expect, it, beforeEach } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { Find, findThoughts } from './Find'
+import { Find } from './Find'
 import { useGraph } from '@/store/graph'
 import type { Thought } from '@/domain/types'
 
@@ -41,26 +44,6 @@ const ALL: Thought[] = [
   thought({ id: 'gone1', raw_content: 'Carefree pop-up idea', status: 'archived' }),
   thought({ id: 'other', raw_content: 'Take care of the venue plants' }),
 ]
-
-describe('findThoughts', () => {
-  it('needs two letters before it answers', () => {
-    expect(findThoughts(ALL, 'c')).toHaveLength(0)
-    expect(findThoughts(ALL, '  ')).toHaveLength(0)
-  })
-
-  it('searches title, body and summary, not just one of them', () => {
-    const titled = thought({ id: 't', raw_content: 'x', title: 'Wax seals' })
-    const summed = thought({ id: 's', raw_content: 'y', summary: 'about wax seals' })
-    expect(findThoughts([titled, summed], 'wax').map((t) => t.id)).toEqual(['t', 's'])
-  })
-
-  it('puts what you can still act on first', () => {
-    // "care" hits all four states; the open one leads, the finished one ends
-    const ids = findThoughts(ALL, 'care').map((t) => t.id)
-    expect(ids[0]).toBe('other')
-    expect(ids[ids.length - 1]).toBe('done1')
-  })
-})
 
 describe('what each result lets you do', () => {
   beforeEach(() => {

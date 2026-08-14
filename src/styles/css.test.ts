@@ -2042,3 +2042,80 @@ describe('what you put somewhere stays there', () => {
     expect(page).toMatch(/Math\.hypot\(hp\.x \+ hp\.ox - p\.x, hp\.y \+ hp\.oy - p\.y\)/)
   })
 })
+
+// Most of what is open lives inside a group and is not drawn in the sky at
+// all — measured on real data: 79 open thoughts, ten of them in the sky. So the
+// screen for seeing what you have shows an eighth of it, and "where did I put
+// that" is not a problem that arrives once the sky is crowded. There has been a
+// search the whole time; it was on the memory tab, behind a word that means
+// what the app has picked up about *you*, which is not where anybody looks for
+// their own lost thought.
+describe('finding a thought without leaving the sky', () => {
+  const page = readFileSync(join('src/features/sky', 'SkyPage.tsx'), 'utf8')
+  const sky = readFileSync(join('src/features/sky', 'sky.css'), 'utf8')
+
+  it('is in the corner, and is always there', () => {
+    // not revealed at a threshold — hiding it until there is enough to lose is
+    // how it got lost in the first place
+    expect(page).toMatch(/data-sky="find"/)
+    expect(sky).toMatch(/\.sky-find \{/)
+    expect(sky).not.toMatch(/\.sky-find\.show/)
+    // the corner opposite the cloud and the tidy, which share the other one
+    expect(sky).toMatch(/\.sky-find \{[^}]*left: 14px/)
+  })
+
+  it('answers with one matcher, shared with the memory page', () => {
+    // two copies of "does this match" is two screens eventually giving
+    // different answers to the same question — the reason waitingOn lives in
+    // plan.ts rather than on either screen that asks it
+    expect(page).toMatch(/import \{ findThoughts \} from '@\/domain\/find'/)
+    const mem = readFileSync(join('src/features/memory', 'Find.tsx'), 'utf8')
+    expect(mem).toMatch(/import \{ findThoughts \} from '@\/domain\/find'/)
+  })
+
+  it('reuses the page rather than building a second surface', () => {
+    expect(page).toMatch(/type PageMode =[^\n]*\| 'find'/)
+    const at = page.indexOf("} else if (mode === 'find') {")
+    expect(at).toBeGreaterThan(-1)
+    const body = page.slice(at, at + 2600)
+    // the field it already has for the query, the panel it already has for rows
+    expect(body).toMatch(/pageA\.style\.display = 'block'/)
+    expect(body).toMatch(/findThoughts\(S\(\)\.thoughts, q\)/)
+  })
+
+  it('says where each result is, so the tap holds no surprises', () => {
+    // tapping a finished thing brings it back; the row has to have said so
+    const at = page.indexOf("} else if (mode === 'find') {")
+    const body = page.slice(at, at + 2600)
+    expect(body).toMatch(/finished · brings it back/)
+    expect(body).toMatch(/put away · brings it back/)
+    expect(body).toMatch(/resting · wakes it/)
+  })
+
+  it('opens the group a result lives in, rather than pointing at nothing', () => {
+    /*
+     * The case the whole thing exists for. A member is not drawn in the sky
+     * until its group is open, so flying the camera at its position would land
+     * you on empty water — and that is where most of the graph is.
+     */
+    const at = page.indexOf('function goTo(t: Thought)')
+    expect(at).toBeGreaterThan(-1)
+    const body = page.slice(at, at + 1400)
+    expect(body).toMatch(/const parent = view\.parentOf\.get\(t\.id\)/)
+    expect(body).toMatch(/openPool = home\.t\.id/)
+    expect(body).toMatch(/frameOpen\(home\)/)
+    // …and anything else goes to where it stands, without re-framing the sky
+    expect(body).toMatch(/focusOn\(posOf\(t\.id\)\)/)
+  })
+
+  it('brings back the whole household, not the empty shell of it', () => {
+    // a group rests, or goes under, with everything inside it
+    const at = page.indexOf('function goTo(t: Thought)')
+    const body = page.slice(at, at + 1400)
+    expect(body).toMatch(/household\(t\.id, 'snoozed'\), \.\.\.household\(t\.id, 'archived'\)/)
+    // and the view is rebuilt before it is asked where the thing lives, or a
+    // thing that has only just come back is still filed under the sky it was
+    // missing from
+    expect(body.indexOf('rebuild()')).toBeLessThan(body.indexOf('view.parentOf.get'))
+  })
+})

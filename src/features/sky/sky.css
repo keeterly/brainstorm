@@ -591,6 +591,29 @@ body.sky-offering .sky-voice { bottom: calc(var(--water-line-up, 86px) + 106px);
  * other; then there is one quiet group to notice instead of three separate
  * things to keep noticing.
  */
+/* The corner opposite the cloud and the tidy. Permanent, because most of what
+   you have written lives inside a group and is not drawn in the sky at all —
+   so "where did I put that" is not a problem that arrives once the sky is
+   crowded, it is there from the second group onward. Sized and coloured off
+   .sky-rest so the two corners read as the same kind of thing. */
+.sky-find {
+  position: fixed;
+  z-index: 6;
+  top: calc(var(--sat) + 14px);
+  left: 14px;
+  width: 30px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgba(15, 22, 32, 0.55);
+  border: 0.5px solid rgba(205, 228, 255, 0.18);
+  color: var(--ink-faint);
+  /* the glyph is a small one and sits high in its box */
+  font-size: 15px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+
 .sky-rest {
   position: fixed;
   z-index: 6;

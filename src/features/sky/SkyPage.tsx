@@ -5,6 +5,7 @@
 import { useEffect, useRef } from 'react'
 import { useGraph } from '@/store/graph'
 import { parseCapture } from '@/domain/capture'
+import { findThoughts } from '@/domain/find'
 import { runAction } from '@/ai/client'
 import { isWebUrl } from '@shared/ai/url'
 import type { ClassifyOutput } from '@shared/ai/actions/classify-thought'
@@ -96,6 +97,16 @@ export default function SkyPage() {
         <span className="lb" />
       </div>
       <div className="sky-meter" data-sky="meter" aria-hidden="true" />
+      {/* The corner opposite the cloud and the tidy. Permanent, and not
+          revealed at a threshold: most of what you have written is inside a
+          group and invisible from here, so "where did I put that" is not a
+          problem that arrives late. There has been a search the whole time —
+          it was on the other tab, behind a word that means what the app has
+          learned about you, which is not where anybody looks for their own
+          lost thought. */}
+      <button className="sky-find" data-sky="find" aria-label="Find a thought">
+        ⌕
+      </button>
       <button className="sky-rest" data-sky="rest" aria-label="Resting thoughts">
         ☁
       </button>
@@ -654,6 +665,7 @@ function mountSky(root: HTMLDivElement) {
   const oilG = root.querySelector('[data-sky="oil"]') as unknown as SVGGElement
   const echoG = root.querySelector('[data-sky="echo"]') as unknown as SVGGElement
   const seaWord = $('seaword')
+  const findEl = $('find')
   const restEl = $('rest')
   const tidyEl = $('tidy')
   const writeEl = $('write')
@@ -759,6 +771,7 @@ function mountSky(root: HTMLDivElement) {
     // it is an edit of something that exists. It goes to the graph on the same
     // terms as the rows below it rather than to localStorage.
     if (nameFor) keepEdit(nameFor, pageT.value)
+    if (pageFor?.mode === 'find') findRedraw?.()
   })
   // A name is one line. Enter in the title field committed a newline into the
   // model — "SS27 — Linen & Letters\n" — where every other name field in the
@@ -2457,6 +2470,10 @@ function mountSky(root: HTMLDivElement) {
     clearAll()
     openPage('aside', undefined, W / 2, 120)
   })
+  findEl.addEventListener('click', () => {
+    clearAll()
+    openPage('find', undefined, W / 2, 120)
+  })
   // the pen does what holding empty sky does, with the same standing rule:
   // writing while a group is open writes into it — and the page now says so.
   // One handler, two homes: the bare pill for a quiet sky, and the pen on
@@ -2898,7 +2915,7 @@ function mountSky(root: HTMLDivElement) {
   })
 
   // ---------- the light page ----------
-  type PageMode = 'capture' | 'say' | 'ask' | 'brief' | 'open' | 'aside' | 'like'
+  type PageMode = 'capture' | 'say' | 'ask' | 'brief' | 'open' | 'aside' | 'like' | 'find'
   /** The brief ⚡ brought back for this thought, if it went out for one. */
   const briefOf = (id: string) => S().artifacts.find((a) => a.thought_id === id) ?? null
   /**
@@ -2954,6 +2971,10 @@ function mountSky(root: HTMLDivElement) {
    * field — the same rule every other field on that page already followed.
    */
   let nameFor: string | null = null
+  // the find page re-answers on every keystroke; set when it opens, cleared
+  // when any page closes so a stale closure cannot paint into a page that has
+  // gone
+  let findRedraw: (() => void) | null = null
   /**
    * What still has to be written down before this page can go.
    *
@@ -3212,13 +3233,14 @@ function mountSky(root: HTMLDivElement) {
     pageFor = { mode, tl, ox, oy, into: mode === 'capture' ? (into ?? openPool) : null }
     paintInto()
     nameFor = null
+    findRedraw = null
     pageA.style.display = 'none'
     pageA.innerHTML = ''
     const reading = mode === 'brief' || mode === 'aside' || mode === 'like'
     pageT.style.display = reading ? 'none' : ''
     page.classList.toggle('path', reading)
     page.classList.toggle('brief', mode === 'brief')
-    page.classList.toggle('group', mode === 'open' || mode === 'aside')
+    page.classList.toggle('group', mode === 'open' || mode === 'aside' || mode === 'find')
     // A group's field holds a name and a drop's holds the thought itself, so
     // the two want very different amounts of room. Capping both at a name's
     // worth is what made the drop's own page a separate mode for so long.
@@ -4053,6 +4075,72 @@ function mountSky(root: HTMLDivElement) {
         say(`${rest.length + away.length} back in the sky`)
         fitWhenSettled()
       })
+    } else if (mode === 'find') {
+      /*
+       * Where did I put that.
+       *
+       * Of everything open, most of it is inside a group and not drawn in the
+       * sky at all — so the sky, which is the screen for seeing what you have,
+       * shows you a fraction of it. The search that answers this was written a
+       * while ago and put on the memory tab, which is where you go to see what
+       * the app has picked up about you, not where you go having lost a thought
+       * of your own. When you cannot find something you are standing here.
+       *
+       * A result is a doorway rather than a page: nothing is copied into a
+       * second view of a thought, and every tap ends with you looking at the
+       * real thing in the real sky. What it says on each row is the state it is
+       * in, because tapping a finished thing brings it back and that should
+       * never be a surprise.
+       */
+      pageQ.textContent = 'Find'
+      pageN.textContent = ''
+      pageA.style.display = 'block'
+      asking('Any word in it')
+      pageT.value = ''
+      const drawHits = () => {
+        const q = pageT.value
+        const hits = findThoughts(S().thoughts, q).slice(0, 12)
+        if (q.trim().length < 2) {
+          pageA.innerHTML = `<div class="a">Two letters is enough.</div>`
+          return
+        }
+        if (!hits.length) {
+          pageA.innerHTML = `<div class="a">Nothing holds those words.</div>`
+          return
+        }
+        pageA.innerHTML =
+          `<div class="grp hits">` +
+          hits
+            .map((t, i) => {
+              // where it is, and what the tap is therefore going to do
+              const inside = view.parentOf.get(t.id)
+              const home = inside ? S().thoughts.find((x) => x.id === inside) : null
+              const where =
+                t.status === 'done'
+                  ? 'finished · brings it back'
+                  : t.status === 'archived'
+                    ? 'put away · brings it back'
+                    : t.status === 'snoozed'
+                      ? 'resting · wakes it'
+                      : home
+                        ? `in “${esc(trim(label(home), 22))}”`
+                        : 'in the sky'
+              return (
+                // the same shape a step on a group page has, so the two lists
+                // read alike: what it is on top, where it is underneath
+                `<div class="row" data-i="${i}"><div class="body">` +
+                `<span class="t">${esc(trim(label(t), 46))}</span>` +
+                `<div class="why">${where}</div></div></div>`
+              )
+            })
+            .join('') +
+          `</div>`
+        ;[...pageA.querySelectorAll('.grp.hits .row')].forEach((row, i) => {
+          row.addEventListener('click', () => goTo(hits[i]))
+        })
+      }
+      drawHits()
+      findRedraw = drawHits
     } else if (mode === 'capture') {
       pendingImage = null
       pageQ.textContent = 'What’s on your mind?'
@@ -4326,6 +4414,7 @@ function mountSky(root: HTMLDivElement) {
     const owed = pending
     pending = []
     nameFor = null
+    findRedraw = null
     for (const write of owed) write()
     stopMic()
     // The draft, written now rather than on the debounce that is still 400ms
@@ -7260,6 +7349,49 @@ function mountSky(root: HTMLDivElement) {
    * The thing itself — a group's page, a drop's page, a member's page. What
    * the second of two quick taps gets you, from wherever the first one landed.
    */
+  /**
+   * A found thing, in the sky, in front of you.
+   *
+   * The result is a doorway. Whatever state it was in, this ends with the real
+   * bubble on the glass — which is the whole difference between a search and a
+   * list: you are put back where the thing lives rather than shown a copy of it
+   * somewhere else.
+   *
+   * Anything that is not open comes back first, and the row you tapped said it
+   * would. Then, if it lives inside a group, that group is opened — that is the
+   * common case by a long way, because most of what is open is inside one and
+   * is not drawn in the sky at all until its group is.
+   */
+  function goTo(t: Thought) {
+    if (t.status !== 'open') {
+      // …and its household with it, in whichever way it went away: a group
+      // rests, or goes under, with everything inside it, and bringing back the
+      // shell alone restores an empty group.
+      const under = [...household(t.id, 'snoozed'), ...household(t.id, 'archived')]
+      S().updateThought(t.id, { status: 'open', snooze_until: null, completed_at: null })
+      for (const id of under) S().updateThought(id, { status: 'open', snooze_until: null })
+      rebuild()
+      paintAll()
+    }
+    closePage(false)
+    // read after the rebuild above, or a thing that has only just come back is
+    // still filed under the sky it was missing from
+    const parent = view.parentOf.get(t.id)
+    const home = parent ? view.byId.get(parent) : null
+    if (home && home.kind === 'pool') {
+      clearAll()
+      openPool = home.t.id
+      frameOpen(home)
+      paintAll()
+      // the ring lays its members out over the next few frames, so the camera
+      // goes to the group and the drop settles into it in front of you
+      say(`in “${trim(label(home.t), 26)}”`)
+    } else {
+      focusOn(posOf(t.id))
+      say(t.status === 'open' ? 'found it' : 'it is back')
+    }
+    haptics.grab()
+  }
   function openThing(id: string) {
     const tl = view.byId.get(id)
     const p = posOf(id)
