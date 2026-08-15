@@ -28,3 +28,14 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      # …and then open it.
+      #
+      # Everything above this line checks the app by reading it: the domain
+      # tests import real functions, and the source pins read SkyPage.tsx as a
+      # string, which is the only handle anybody has on an eight-thousand-line
+      # imperative closure. None of it can notice that a control renders and is
+      # covered, that a page opens and paints nothing, or that a tap is wired to
+      # the wrong handler. Those need a browser, and until now there was not one
+      # in here — a push that broke the sky went green.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e

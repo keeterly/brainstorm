@@ -223,6 +223,9 @@ export const DEMO_OUTPUT: Record<string, unknown> = {
         why: 'the whole look rests on it and nobody has seen it yet',
         effort: 2,
         dependsOn: [],
+        // you go and do this one; a roll of film is not a thing that can be
+        // written for you
+        canDraft: false,
       },
       {
         tempId: 's2',
@@ -230,6 +233,9 @@ export const DEMO_OUTPUT: Record<string, unknown> = {
         why: 'six letters is the campaign; a hundred is a mailout',
         effort: 3,
         dependsOn: [],
+        // …and this one it can write the first version of, which is what makes
+        // the demo show `do it` at all
+        canDraft: true,
       },
       {
         tempId: 's3',
@@ -237,6 +243,8 @@ export const DEMO_OUTPUT: Record<string, unknown> = {
         why: 'the pop-up and the letters are both waiting on this',
         effort: 1,
         dependsOn: ['s1'],
+        // a decision, and only one person can make it
+        canDraft: false,
       },
     ],
     missing: [],
