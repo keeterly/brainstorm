@@ -277,7 +277,25 @@ body.sky-held {
 .skyb > .dots { transform: var(--unlean, none); }
 .skyb .q { width: 76%; font-size: 15px; line-height: 1.5; font-weight: 300; color: var(--ink-soft); text-wrap: balance; pointer-events: none; }
 .skyb .t {
-  /* type scales with the drop — set inline; measure kept narrow so a circle reads */
+  /*
+   * Type scales with the drop, and never past reading.
+   *
+   * `--fs` is the size the drop asked for, in world units, set when the drop is
+   * painted. `--k` is how far back the camera is standing, set by applyCam.
+   * What you actually read is the product of the two, and neither floor knew
+   * about the other: 10.5 world pixels on a drop and 0.35× on the camera, so
+   * framing an ordinary week's thinking put words on the glass at eight pixels
+   * and falling. Nine here, so the check that measures it has somewhere to
+   * stand above the eight it calls unreadable.
+   *
+   * The cost is words that grow as you zoom out and so fit less of the disc —
+   * the line clamp and overflow below already handle that, and two lines you
+   * can read beat four you cannot. Members inside an open group still set
+   * `font-size` directly and are deliberately left alone: the camera is zoomed
+   * *in* there, and one of them is fitted to a measured box.
+   */
+  font-size: max(var(--fs, 12px), calc(9px / var(--k, 1)));
+  /* measure kept narrow so a circle reads */
   width: 78%;
   line-height: 1.34;
   font-weight: 450;

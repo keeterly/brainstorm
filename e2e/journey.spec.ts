@@ -90,9 +90,21 @@ describe('jot → group → open → tick', () => {
     // The tick is aimed at with a real tap rather than clicked in the DOM, so
     // this also asserts that the most-pressed control on the page is somewhere
     // a thumb can actually land.
+    //
+    // …once the page has stopped arriving, and once the row is scrolled to.
+    // Rows ride a layer that slides in, so a tick measured on its way past reads
+    // as 129 pixels off the left edge of the glass; and a list long enough to
+    // scroll has rows above the fold, which `tappable` reports as unreachable
+    // because from where it is standing they are. Both look exactly like a
+    // control nobody can press, and neither is one. A person waits for the page
+    // and scrolls to the row; so does this, and then asks.
+    const tick = '.pans .row:not(.ticked) .tick'
+    await pageReady(page)
+    await page.locator(tick).first().scrollIntoViewIfNeeded()
+    await page.waitForTimeout(400)
     const before = await page.evaluate(() => document.querySelectorAll('.pans .row.ticked').length)
-    expect(await tappable(page, '.pans .row:not(.ticked) .tick'), 'the tick is not reachable').toBe(true)
-    await tap(page, '.pans .row:not(.ticked) .tick')
+    expect(await tappable(page, tick), 'the tick is not reachable').toBe(true)
+    await tap(page, tick)
     await page.waitForTimeout(900)
     const after = await page.evaluate(() => document.querySelectorAll('.pans .row.ticked').length)
     expect(after).toBe(before + 1)

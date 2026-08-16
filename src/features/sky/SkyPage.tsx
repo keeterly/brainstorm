@@ -953,6 +953,17 @@ function mountSky(root: HTMLDivElement) {
     field.style.transform = t
     field.style.transformOrigin = '0 0'
     links.setAttribute('transform', `translate(${cam.x} ${cam.y}) scale(${cam.k})`)
+    /*
+     * …and the type is told how far back the camera is standing.
+     *
+     * A drop's words are sized in world units and read on the glass, so what
+     * you can actually read is the product of that size and the zoom — and the
+     * two floors were written a year apart without knowing about each other.
+     * Nothing here can bound that product, because the size is set when a drop
+     * is painted and the zoom changes long afterwards without repainting it.
+     * CSS can hold both numbers at once; this is the half it was missing.
+     */
+    field.style.setProperty('--k', String(cam.k))
   }
   function zoomAt(sx: number, sy: number, k: number) {
     const next = Math.max(MIN_K, Math.min(MAX_K, k))
@@ -1010,19 +1021,46 @@ function mountSky(root: HTMLDivElement) {
     const k = cam.k
     camTarget = { k, x: W / 2 - p.x * k, y: (76 + (waterlineY() - 150)) / 2 - p.y * k }
   }
-  /** Frame everything, with a little air. */
-  function fitAll(animate = true) {
+  /**
+   * Frame everything, with a little air.
+   *
+   * `restir` is whether the layout should be asked to think again afterwards.
+   * It normally should — the re-centring target is read through the camera, so
+   * moving the camera gives the layout a new question to answer. But a stir is
+   * not free: it restarts the springs and the separation pass, and those spread
+   * the sky a little further apart every time they run. Framing *because*
+   * something had drifted off the edge and stirring as a result is therefore a
+   * chase, and it was measured being lost — a sky re-framed on each new thought
+   * walked the camera out to 0.59× and still had a group seventy-six pixels off
+   * the side, worse at every step. The re-frame that answers "has something
+   * fallen off the glass" passes false: nothing in the world moved, so there is
+   * nothing to reconsider, and it converges in one go.
+   */
+  function fitAll(animate = true, restir = true) {
     const b = contentBox()
     if (!b) return
-    // the re-centring target is read through the camera, so moving the camera
-    // gives the layout a new question to answer
-    stir()
+    if (restir) stir()
     const { x0, y0, x1, y1 } = b
     const top = 76
     const bottom = waterlineY() - 18
+    /*
+     * The air this has always claimed to leave, and did not.
+     *
+     * It framed the content box to the exact edge of the glass, which would be
+     * fine if the arrangement stopped when the camera did. It does not: framing
+     * stirs the layout, the springs spread everything a few more pixels, and
+     * what was flush against the edge is over it. Measured at 4 to 12 pixels of
+     * a drop hanging off the side of a settled sky, every time.
+     *
+     * Fourteen pixels a side is a little under one drop's own margin, and it is
+     * what the springs were seen to take back afterwards.
+     */
+    const air = 14
+    const fitW = Math.max(80, W - air * 2)
+    const fitH = Math.max(80, bottom - top - air * 2)
     // framing, never magnifying: a nearly empty sky used to zoom in past 1:1
     // and push what little was in it off the edges
-    const k = Math.max(MIN_K, Math.min(1, Math.min(W / Math.max(1, x1 - x0), (bottom - top) / Math.max(1, y1 - y0))))
+    const k = Math.max(MIN_K, Math.min(1, Math.min(fitW / Math.max(1, x1 - x0), fitH / Math.max(1, y1 - y0))))
     const target = {
       k,
       x: (W - (x1 - x0) * k) / 2 - x0 * k,
@@ -1785,7 +1823,12 @@ function mountSky(root: HTMLDivElement) {
     // The ceiling moves with the discs. Held at 17 while a pool could never be
     // wider than 126, a group of twenty now has room for a bigger disc and
     // would have gone on wearing the same small label in the middle of it.
-    tx.style.fontSize = Math.round(Math.max(10.5, Math.min(19, 6 + r * 0.105)) * 10) / 10 + 'px'
+    //
+    // Offered rather than set: `--fs` is what this size *wants* to be, and CSS
+    // holds it against the zoom the camera is at right now. Written straight to
+    // `font-size` it could not be — an inline size beats the stylesheet, and the
+    // zoom changes for minutes at a time without a drop ever being repainted.
+    tx.style.setProperty('--fs', Math.round(Math.max(10.5, Math.min(19, 6 + r * 0.105)) * 10) / 10 + 'px')
     tx.textContent = trim(label(t), r < 50 ? 40 : 92)
   }
   /** What is on stage: the roots, plus the group you are currently inside if
@@ -1870,7 +1913,11 @@ function mountSky(root: HTMLDivElement) {
           peek +
           (st ? `<div class="state ${todo || pb ? 'blue' : ''}"></div>` : '')
         const nameEl = el.querySelector('.t') as HTMLDivElement
-        nameEl.style.fontSize = Math.round(Math.max(12, Math.min(18, 7 + r * 0.1)) * 10) / 10 + 'px'
+        // Same floor against the camera as a drop's own words — a group is
+        // drawn in the open sky, and the open sky is where the camera stands
+        // back. Twelve world pixels at the furthest the camera goes is four on
+        // the glass, which is a shape rather than a name.
+        nameEl.style.setProperty('--fs', Math.round(Math.max(12, Math.min(18, 7 + r * 0.1)) * 10) / 10 + 'px')
         nameEl.textContent = label(tl.t)
         if (st) (el.querySelector('.state') as HTMLDivElement).textContent = st
         if (peek) (el.querySelector('.peek') as HTMLDivElement).textContent = '→ ' + trim(label(next), 34)
@@ -7670,6 +7717,26 @@ function mountSky(root: HTMLDivElement) {
    */
   let quiet = 0
   let settled = false
+  /**
+   * A thought arrived and the sky owes it a look at itself, once it holds still.
+   *
+   * `fitWhenSettled` is a timer, and a timer is the wrong instrument for this.
+   * It fires 850ms after the graph changed and frames the sky as it is at that
+   * instant — but a new drop lands and the springs go on spreading everything
+   * around it for a second or two afterwards, so the frame is aimed at an
+   * arrangement that no longer exists by the time the camera gets there.
+   * Measured: fourteen thoughts written one at a time, camera pulled all the way
+   * back to 0.59×, and a drop still sitting 41 pixels off the side of the glass.
+   *
+   * So this is asked for instead, and answered by the frame loop at the one
+   * moment it can be answered — when the arrangement has actually stopped.
+   *
+   * A count rather than a flag, because framing stirs the layout and the springs
+   * take a few more pixels afterwards — so one look is not always enough, and an
+   * unbounded "keep going until it fits" is a sky that never stops moving on a
+   * day when it cannot fit. Three, and then it lets it be.
+   */
+  let refitWhenStill = 0
   /** …something changed; work out the arrangement again. */
   function stir() {
     quiet = 0
@@ -7685,7 +7752,23 @@ function mountSky(root: HTMLDivElement) {
     if (dead) return
     t += 0.016
     stepHold()
-    const busy = drag || holding || pageFor
+    /*
+     * When the sky is allowed to arrange itself, and when it must hold still.
+     *
+     * A finger down, a page open — and going *inside* a group, which is the one
+     * that was missing. Everything under this guard is the layout rearranging
+     * the whole sky: the kin springs, the pass that holds bodies apart, the
+     * settle. None of it is what you are looking at once you have gone into one
+     * thing, and running it under you means the group you are standing in keeps
+     * moving. `frameOpen` aims the camera at that group once; the springs then
+     * walk it away from where the camera is pointing, by as much as the sky
+     * happens to be crowded — which is why it was intermittent.
+     *
+     * Going inside gets quieter, not stiller: everything in the `if (openPool)`
+     * block below is outside this guard and goes on running, so the ring still
+     * lays out and still makes room around itself. Only the sky behind it stops.
+     */
+    const busy = drag || holding || pageFor || openPool
     if (!busy) {
       /*
        * The sky breathes — three pixels, not a hundred.
@@ -7828,16 +7911,24 @@ function mountSky(root: HTMLDivElement) {
        * never did. Now the arrangement settles and the framing finishes
        * afterwards, on its own clock, stopping at the threshold below.
        */
-      if (view.tls.length && !openPool && !drag && !panning && !pinch && !camTarget) {
-        let cx = 0
-        let cy = 0
-        for (const tl of view.tls) {
-          const p = posOf(tl.t.id)
-          cx += p.x
-          cy += p.y
-        }
-        cx /= view.tls.length
-        cy /= view.tls.length
+      /*
+       * …and it aims at the middle of what is there, not at the average of it.
+       *
+       * The average is where the crowd is, and a crowd with one thing off on its
+       * own has an average nowhere near the middle of the whole. `fitAll` centres
+       * the bounding box, this centred the centroid, and for any arrangement that
+       * is not symmetrical those are different points — so the framing settled a
+       * sky and this then walked the camera away from it at 0.011 a frame, taking
+       * the loneliest drop off the edge on the way. Measured: a drop 23 pixels
+       * past the side of a sky that had just been framed to hold it.
+       *
+       * `contentBox` is the same box `fitAll` uses. Two things aiming at one
+       * point cannot fight.
+       */
+      const box = view.tls.length ? contentBox() : null
+      if (box && !openPool && !drag && !panning && !pinch && !camTarget) {
+        const cx = (box.x0 + box.x1) / 2
+        const cy = (box.y0 + box.y1) / 2
         const dx = (toWorldX(W / 2) - cx) * 0.011
         const dy = (toWorldY((76 + waterlineY() - 18) / 2) - cy) * 0.011
         // A quarter of a pixel is not a re-framing, it is a creep: measured,
@@ -7859,6 +7950,29 @@ function mountSky(root: HTMLDivElement) {
         if (moved < STILL) {
           if (++quiet >= STILL_FRAMES) settled = true
         } else quiet = 0
+      }
+      /*
+       * The arrangement has stopped. If it stopped with something off the edge,
+       * bring it back — see refitWhenStill for why this is not a timer.
+       *
+       * `canPan` is already the app's own answer to "is any of it off the glass
+       * right now", written for the drag handles. When the answer is no this
+       * does nothing at all, so writing a note about a corner of the sky you
+       * have deliberately panned to does not throw you back to the middle.
+       *
+       * It stops the moment nothing is off the glass, and in any case after
+       * three looks — `fitAll` stirs the layout, so each one costs a re-settle,
+       * and a sky too crowded to fit at `MIN_K` must be allowed to give up
+       * rather than pace.
+       */
+      if (settled && refitWhenStill > 0 && !camTarget && !panning && !pinch) {
+        if (canPan()) {
+          refitWhenStill--
+          // …without stirring: nothing in the world moved, so there is nothing
+          // for the layout to reconsider, and asking it to is what turned this
+          // into a chase. See fitAll.
+          fitAll(true, false)
+        } else refitWhenStill = 0
       }
       for (const tl of view.tls) {
         const p = posOf(tl.t.id)
@@ -8248,6 +8362,10 @@ function mountSky(root: HTMLDivElement) {
     paintAll()
     // a burst of new thinking should be shown to you, not hidden off-screen
     if (view.tls.length - lastCount >= 3) fitWhenSettled()
+    // …and one more thought should not push an old one off the edge — see
+    // refitWhenStill, which is the same job asked at the only moment it can be
+    // answered
+    else if (view.tls.length > lastCount) refitWhenStill = 3
     lastCount = view.tls.length
     tidyEl.classList.toggle('show', view.tls.filter((tl) => tl.kind === 'drop').length >= 6 && !S().offline)
     measureCorner()

@@ -61,9 +61,11 @@ const zoom = () =>
 describe('what you can see of your own thinking', () => {
   it('draws something legible at the size the sky actually opens at', async () => {
     /*
-     * The type on a drop is `max(10.5, min(19, 6 + r × 0.105))` in world units
-     * and the camera multiplies it, so legibility is a product of two numbers
-     * neither of which is bounded with the other in mind. This records both.
+     * The type on a drop asks for `max(10.5, min(19, 6 + r × 0.105))` in world
+     * units and the camera multiplies it, so legibility is a product — and what
+     * `drawn` reads is the computed size, which is that product already held
+     * against the floor in `.skyb .t`. Both halves are recorded, because the
+     * world size drifting up is how you would notice the floor doing work.
      */
     const k = await zoom()
     const all = await drawn()
@@ -122,12 +124,13 @@ describe('what you can see of your own thinking', () => {
     await backToSky(page)
   })
 
-  // FOUND, same root cause. Going two deep and then tapping open water does not
-  // always get you back out: with the ring running off the side of the glass
-  // there is not always any open water left to tap, so the way out of a
-  // sub-group can simply not be there. Of the four things this suite found,
-  // this is the one that would frighten me most as the person using it.
-  it.skip('goes into a group inside a group, and comes back out one level at a time', async () => {
+  // Held back once on a fear that turned out not to be true: that two deep,
+  // with the ring running off the side, there might be no open water left to
+  // tap and so no way back out. Of everything this suite looked for that was
+  // the one that would have frightened me most, and it does not happen — there
+  // is water at 30,170 on every opening measured. Live, because it is the check
+  // that would say so if it ever started to.
+  it('goes into a group inside a group, and comes back out one level at a time', async () => {
     /*
      * The case the real graph is full of and the journey never reaches: the
      * demo has a wall of references nested inside the campaign. Out of a
@@ -163,44 +166,87 @@ describe('what you can see of your own thinking', () => {
     await backToSky(page)
   })
 
-  it('stays legible as the sky fills up, or says where it stops', async () => {
+  it('stays legible and stays on the glass as the sky fills up', async () => {
     /*
-     * `radiusOf` shrinks a loose drop by `min(22, (loose − 5) × 2.5)` down to a
-     * floor of 36, and `fitAll` pulls the camera back to hold everything, down
-     * to 0.35×. Neither knows about the other. This walks the count up and
-     * records the size at each step, so the number at which the sky stops being
-     * readable is written down instead of guessed at.
+     * The week, walked one thought at a time, which is the way thinking actually
+     * arrives and the way nothing was ever measured.
+     *
+     * Two things are being squeezed at once. `radiusOf` shrinks a loose drop by
+     * `min(22, (loose − 5) × 2.5)` down to a floor of 36, and `fitAll` pulls the
+     * camera back, down to 0.35× — different units, no shared floor, which is
+     * how the type walked 9.3px down to 8.0px over eight thoughts and would have
+     * kept going. And `fitAll` only ever ran on a burst of three or more, so
+     * writing one at a time re-framed nothing: measured at eight, a group sat at
+     * x = 407 on a glass 393 wide, in a settled sky, with nothing said about it.
+     * You write something and something else silently leaves the screen, which
+     * is the exact opposite of what a sky is for.
+     *
+     * Both numbers are traced at every step, so the point at which the sky stops
+     * working is written down rather than guessed at.
+     *
+     * "Off the glass" is deliberately not "a pixel over the edge". A round body
+     * whose rim crosses the bezel by eight pixels is what every phone screen
+     * looks like and is entirely reachable; what the audit actually caught was a
+     * group at x = 407 on a glass 393 wide — its *middle* past the edge, which
+     * is a thought you can neither read nor tap. So the line is drawn where it
+     * means something: the centre has to be on the glass, and most of the body
+     * with it. The raw overhangs are printed either way, so the number is never
+     * hidden behind the threshold.
      */
     await backToSky(page)
     const trace: string[] = []
+    const over: string[] = []
+    const lost: string[] = []
     for (let i = 0; i < 8; i++) {
       await write(page, `Filler thought number ${i + 1} for the crowding measurement`)
       const k = await zoom()
       const all = await drawn()
       const smallest = Math.min(...all.map((b) => b.px * k))
+      const edges = await page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>('.skyb')]
+          .filter((e) => e.dataset.id && e.dataset.id !== '__invite' && !e.classList.contains('recede'))
+          .map((e) => {
+            const r = e.getBoundingClientRect()
+            const px = Math.round(Math.max(-r.left, -r.top, r.right - innerWidth, r.bottom - innerHeight))
+            const cx = r.x + r.width / 2
+            const cy = r.y + r.height / 2
+            return {
+              words: (e.querySelector('.t')?.textContent ?? '').slice(0, 22),
+              px,
+              // the two that mean you have lost it: no middle to aim at, or
+              // most of it gone
+              gone: cx < 0 || cx > innerWidth || cy < 0 || cy > innerHeight || px > Math.min(r.width, r.height) / 4,
+            }
+          })
+          .filter((x) => x.px > 0),
+      )
       trace.push(`${all.length}: ${smallest.toFixed(1)}px`)
+      if (edges.length) over.push(`at ${all.length}, ${edges.map((o) => `“${o.words}” ${o.px}px`).join(' and ')}`)
+      for (const e of edges.filter((x) => x.gone)) lost.push(`at ${all.length} thoughts, “${e.words}” ${e.px}px over`)
     }
     console.log(`  smallest text on screen as the sky fills — ${trace.join(', ')}`)
+    console.log(`  bodies crossing the edge — ${over.join('; ') || 'none, at any count'}`)
     const last = Number(trace[trace.length - 1].split(': ')[1].replace('px', ''))
     expect(last, `text has shrunk past reading: ${trace.join(', ')}`).toBeGreaterThanOrEqual(8)
+    expect(lost, `writing a thought pushed another off the screen: ${lost.join('; ')}`).toHaveLength(0)
   }, 180_000)
 
-  // FOUND, and not yet fixed. Measured over repeated openings: the group you
-  // have just gone into can itself end up off the glass — `[data-id="c1"] is
-  // off the glass at 408,468` on a screen 393 wide — and a member can land
-  // where no part of it is reachable. `frameOpen` sizes the ring from the group
-  // and clamps it to the *world*, not to the window, so on a phone a wide ring
-  // simply runs off the side.
-  //
-  // Skipped rather than deleted: the check is right, the app is wrong, and the
-  // day the ring is sized to the glass this is the thing that says so.
-  it.skip('keeps what is in an open group on the glass and reachable', async () => {
+  /*
+   * This once caught the group you had just gone into sitting at 408,468 on a
+   * screen 393 wide, and was read as the ring being sized to the world rather
+   * than the window. It is not that. The ring is the one thing that goes on
+   * being laid out while you stand inside a group; what was also running was
+   * the whole sky's layout, arranging itself under you and walking the group
+   * out from under the camera that had just been aimed at it — which is why it
+   * happened on some openings and not others. `busy` now counts being inside a
+   * group as a reason to hold still, and this is the check that watches it.
+   */
+  it('keeps what is in an open group on the glass and reachable', async () => {
     /*
-     * Going into a group lays its contents out on a ring around it, and the ring
-     * is sized from the group rather than from the screen — so on a phone a
-     * member can end up half over the left edge, or under a neighbour. Measured
-     * here rather than asserted from the source, because it depends on where the
-     * ring happens to land and varies between openings.
+     * Going into a group lays its contents out on a ring around it. Measured
+     * here rather than asserted from the source, because where the ring lands
+     * depends on where the drops were and varies between openings — which is
+     * exactly the shape of thing a source pin cannot hold.
      *
      * A member you cannot reach is a thought you cannot open, which is the whole
      * of what going into a group is for.
@@ -232,10 +278,10 @@ describe('what you can see of your own thinking', () => {
     await backToSky(page)
   }, 120_000)
 
-  // Same defect, measured for how often rather than whether — it stranded
-  // something on some openings and not others, which is the worst shape a bug
-  // can have.
-  it.skip('does that every time, not most times', async () => {
+  // The same thing, measured for how often rather than whether. An opening that
+  // works most times is the worst shape a defect can have, and it is the shape
+  // the one above had — so the check above is not enough on its own.
+  it('does that every time, not most times', async () => {
     /*
      * Where the ring lands is not the same twice — the drops start at random
      * places and the layout settles from there — so opening a group once and
@@ -268,23 +314,22 @@ describe('what you can see of your own thinking', () => {
     await backToSky(page)
   }, 180_000)
 
-  // FOUND, and not yet fixed. Framing fourteen bubbles put the smallest text at
-  // **7.4px** on the glass — under the eight this file treats as the floor for
-  // reading rather than recognising shapes. The type on a drop has a floor of
-  // 10.5px in world units and the camera has a floor of 0.35×, and neither was
-  // written knowing about the other, so their product is unbounded downward.
-  // Sixteen or twenty bubbles — an ordinary week — makes it worse.
-  it.skip('is still readable when it frames the whole sky', async () => {
+  it('is still readable when it frames the whole sky', async () => {
     /*
-     * The case the two numbers meet in.
+     * The case the two numbers meet in, and the one thing this suite found that
+     * was real.
      *
-     * The type on a drop has a floor of 10.5px *in world units*, and the camera
-     * has a floor of `MIN_K = 0.35` — and neither was written knowing about the
-     * other, so the size on the glass is a product nobody has bounded. Framing
-     * everything is one double-tap on open water and is exactly what you do
-     * when you want to see what you have, which is the whole of principle one.
+     * The type on a drop was floored at 10.5px *in world units* and the camera
+     * at `MIN_K = 0.35`, neither written knowing about the other, so the size on
+     * the glass was a product nobody had bounded: framing fourteen bubbles put
+     * the smallest words at 8.0–8.2px and still falling, and an ordinary week is
+     * more than fourteen. `.skyb .t` now takes `max(--fs, 9px / --k)` — the
+     * world size normally, and never under nine on the glass however far the
+     * camera stands back.
      *
-     * Whatever this measures is the real answer to "can you read your sky".
+     * Framing everything is one double-tap on open water and is exactly what you
+     * do when you want to see what you have, which is the whole of principle
+     * one. Whatever this measures is the real answer to "can you read your sky".
      */
     await backToSky(page)
     const water = await emptySky(page)

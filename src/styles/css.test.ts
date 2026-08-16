@@ -1387,8 +1387,17 @@ describe('the sky finishes settling, and then stops', () => {
      */
     const at = page.indexOf('The constellation comes back into frame')
     expect(at).toBeGreaterThan(-1)
-    const body = page.slice(at, at + 2600)
-    expect(body).toMatch(/if \(view\.tls\.length && !openPool && !drag && !panning && !pinch && !camTarget\)/)
+    const body = page.slice(at, at + 3600)
+    /*
+     * …and it aims at the same point `fitAll` does: the middle of the content
+     * box, not the average of the drops. Those are different points on any
+     * arrangement that is not symmetrical, and two framings aiming at different
+     * points is a fight — one that the every-frame one wins, by walking the
+     * loneliest drop off the edge of a sky that had just been framed to hold it.
+     */
+    expect(body).toMatch(/const box = view\.tls\.length \? contentBox\(\) : null/)
+    expect(body).toMatch(/if \(box && !openPool && !drag && !panning && !pinch && !camTarget\)/)
+    expect(body).toMatch(/const cx = \(box\.x0 \+ box\.x1\) \/ 2/)
     expect(body).toMatch(/cam\.x \+= dx \* cam\.k/)
     expect(body.slice(0, body.indexOf('applyCam()'))).not.toMatch(/moved \+=/)
   })
@@ -1406,9 +1415,16 @@ describe('the sky finishes settling, and then stops', () => {
   })
 
   it('leaves the breath alone, because a still sky still breathes', () => {
-    // breath is an offset, never a position — settling must not freeze it
+    /*
+     * Breath is an offset, never a position — settling must not freeze it.
+     *
+     * Aimed at the two fields rather than the two letters. It used to be
+     * `/bx|by/` over a slice of source that was all code, and the first line of
+     * prose to appear in that slice failed it on the English word "by", which is
+     * a pin firing on something it was never about.
+     */
     const fn = page.slice(page.indexOf('let quiet = 0'), page.indexOf('function step()'))
-    expect(fn).not.toMatch(/bx|by/)
+    expect(fn).not.toMatch(/\b(bx|by)\s*[=.]|\.\s*(bx|by)\b/)
   })
 })
 

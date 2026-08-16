@@ -20,7 +20,6 @@ import {
   open,
   openGroup,
   openMember,
-  pageReady,
   primaryVerb,
   rows,
   runVerb,
@@ -43,9 +42,21 @@ beforeAll(async () => {
   app = await open(site.url)
   page = app.page
   ;[group] = await groups(page)
-  // a plan first — the steps this is about do not exist until ⚡ has run
+  /*
+   * A plan first — the steps everything below is about do not exist until ⚡ has
+   * run. And it is checked here rather than left to be discovered, because a ⚡
+   * that quietly did not happen surfaces four checks later as "no step matching
+   * /wax-letter copy/", which reads like the app losing work and is nothing of
+   * the kind. Where the setup failed is worth one assertion.
+   */
   await openGroup(page, group)
+  expect(await primaryVerb(page), 'the group does not offer to make the steps').toMatch(/make the steps/i)
   await runVerb(page)
+  await openGroup(page, group)
+  const made = (await rows(page)).map((r) => r.title)
+  expect(made.some((t) => /wax-letter copy/i.test(t)), `⚡ wrote no plan — the group holds: ${made.join(' | ')}`).toBe(
+    true,
+  )
   await backToSky(page)
 }, 240_000)
 
@@ -54,8 +65,16 @@ afterAll(async () => {
   await site?.close()
 })
 
-/** Stand in front of one step of the plan, on its own page. */
+/**
+ * Stand in front of one step of the plan, on its own page.
+ *
+ * From the sky every time, and it makes sure it is in the sky first — running a
+ * verb leaves you wherever the app decided to put you, and `openGroup` taps
+ * where a group *would* be. Without this it opened whatever page was already up
+ * and read that one's rows, which fails looking like the step has vanished.
+ */
 async function openStep(match: RegExp): Promise<Row> {
+  await backToSky(page)
   await openGroup(page, group)
   const step = (await rows(page)).find((r) => match.test(r.title))
   expect(step, `no step matching ${match}`).toBeTruthy()
@@ -65,18 +84,14 @@ async function openStep(match: RegExp): Promise<Row> {
   return step as Row
 }
 
-// Every check in here is blocked on the same defect the visualize suite
-// measured: standing inside a group, a member can land somewhere no finger can
-// reach, so there is no reliable way to open one and ask what it offers. The
-// checks are right and were watched working on the openings where the ring
-// behaved; they are skipped until the ring is sized to the screen rather than
-// to the world.
-//
-// What did run, and passes: the group runs out of open work and the app offers
-// to finish it (“nothing left in “References” · finish it”), and with the engine
-// unreachable it says so rather than failing quietly.
+// These three were held back once, on a belief that turned out to be wrong:
+// that standing inside a group could strand a member somewhere no finger could
+// reach, leaving no reliable way to open one and ask what it offers. Run
+// properly they say otherwise — the ring puts everything in reach. The one real
+// failure among them was the last check's own assumption that running a verb
+// leaves you standing on the page. It does not, and should not.
 describe('the app doing a piece of the work', () => {
-  it.skip('offers to write the step, in the words of what it will do', async () => {
+  it('offers to write the step, in the words of what it will do', async () => {
     /*
      * `rain` said of this one that it could write a first version, and of the
      * expired-film shoot that it could not — one is words and the other is a
@@ -87,7 +102,7 @@ describe('the app doing a piece of the work', () => {
     expect(verb, `the step offers “${verb}”`).toMatch(/do it/i)
   }, 120_000)
 
-  it.skip('does not offer to do a thing that has to be gone and done', async () => {
+  it('does not offer to do a thing that has to be gone and done', async () => {
     // the half of the judgement that matters more: an app offering to shoot a
     // roll of film for you is an app you stop believing
     await backToSky(page)
@@ -96,13 +111,18 @@ describe('the app doing a piece of the work', () => {
     expect(verb, `it offered “${verb}” for going and shooting a roll of film`).not.toMatch(/do it/i)
   }, 120_000)
 
-  it.skip('writes the thing, says something while it does, and hands it back', async () => {
+  it('writes the thing, says something while it does, and hands it back', async () => {
     /*
-     * The whole of principle three in one check, and done without leaving the
-     * page. Everything before this is the app arranging your thinking; this is
-     * the only moment it hands back something that did not exist before, and
-     * walking away and back to look for it is how a check ends up measuring its
-     * own navigation instead.
+     * The whole of principle three in one check. Everything before this is the
+     * app arranging your thinking; this is the only moment it hands back
+     * something that did not exist before.
+     *
+     * Tapping the verb closes the page, on purpose — the work takes a while,
+     * and the app would rather put you back in the sky to watch it happen than
+     * sit you in front of a spinner. So coming back to the step afterwards is
+     * not the check being careless about where it is; it is the walk a person
+     * makes. This was written the other way and failed against an empty verb,
+     * which is the app behaving correctly and the check being wrong about it.
      */
     await backToSky(page)
     await openStep(/wax-letter copy/i)
@@ -112,10 +132,13 @@ describe('the app doing a piece of the work', () => {
     console.log(`  while doing the work it said: ${heard.map((h) => `“${h}”`).join(', ') || '(nothing)'}`)
     expect(heard.length, 'it did the work in total silence').toBeGreaterThan(0)
 
-    // …and the verb becomes the one for reading what came back, on the same page
-    await pageReady(page).catch(() => undefined)
+    // …and coming back to the step, the verb it offers is now the one for
+    // reading what it wrote. `made` is keyed on the stamp a draft leaves rather
+    // than on there being a brief at all, so this is the step having been
+    // written, not merely asked about.
+    await openStep(/wax-letter copy/i)
     const after = await primaryVerb(page)
-    expect(after, `after doing it the page offers “${after}”`).toMatch(/read it/i)
+    expect(after, `after doing it the step offers “${after}”`).toMatch(/read it/i)
 
     // which opens it, with the words in it — a page that opens and paints
     // nothing is the failure a source pin cannot see

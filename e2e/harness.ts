@@ -131,6 +131,15 @@ export async function bubbles(page: Page): Promise<Record<string, [number, numbe
   })
 }
 
+/** Where the camera is standing: the field's own transform, as three numbers. */
+const camera = (page: Page): Promise<[number, number, number]> =>
+  page.evaluate(() => {
+    const f = document.querySelector('[data-sky="field"]')
+    if (!f) return [0, 0, 1] as [number, number, number]
+    const m = new DOMMatrix(getComputedStyle(f).transform)
+    return [m.e, m.f, m.a] as [number, number, number]
+  })
+
 /**
  * Wait until the sky stops moving, rather than waiting a while and hoping.
  *
@@ -138,14 +147,26 @@ export async function bubbles(page: Page): Promise<Record<string, [number, numbe
  * Every throwaway probe slept for a guessed number of milliseconds, which is
  * how a suite becomes flaky on a slow machine and slow on a fast one. This
  * watches instead, and gives up loudly.
+ *
+ * Two things move, and it has to be both. The bodies move in the world, and the
+ * camera moves over it — `fitAll` and `frameOpen` ease their target in at 0.14
+ * a frame, which takes about a second and which `bubbles` cannot see at all,
+ * because it reads the field's own space on purpose so that a body's position is
+ * not confused with the glass sliding under it. Right for a position and wrong
+ * for "has it stopped": a check that waits only for the bodies taps at whatever
+ * the camera happened to be showing on the way past, and a group two hundred
+ * pixels from where it is about to come to rest reads exactly like a group that
+ * is off the glass. Which is what it read as.
  */
 export async function settled(page: Page, quietMs = 500, timeoutMs = 15_000): Promise<void> {
   const started = Date.now()
   let last = await bubbles(page)
+  let lastCam = await camera(page)
   let quietSince = Date.now()
   for (;;) {
     await page.waitForTimeout(120)
     const now = await bubbles(page)
+    const cam = await camera(page)
     // the breath alone is a couple of pixels and never stops, so "still" has to
     // mean still enough rather than identical
     const moved = Object.keys(now).some((id) => {
@@ -153,8 +174,13 @@ export async function settled(page: Page, quietMs = 500, timeoutMs = 15_000): Pr
       const b = now[id]
       return !a || Math.hypot(a[0] - b[0], a[1] - b[1]) > 3
     })
+    // …and the camera has its own threshold, because the last of an easing
+    // never quite arrives: two pixels of pan, or a hundredth of zoom
+    const panned =
+      Math.hypot(cam[0] - lastCam[0], cam[1] - lastCam[1]) > 2 || Math.abs(cam[2] - lastCam[2]) > 0.01
     last = now
-    if (moved) quietSince = Date.now()
+    lastCam = cam
+    if (moved || panned) quietSince = Date.now()
     else if (Date.now() - quietSince >= quietMs) return
     if (Date.now() - started > timeoutMs) throw new Error('the sky never settled')
   }
@@ -335,20 +361,49 @@ export async function openGroup(page: Page, id: string): Promise<void> {
   await pageReady(page)
 }
 
-/** Back out to open water, from wherever you are. */
+/**
+ * Back out to open water, from wherever you are.
+ *
+ * The two halves are a page to close and however many groups deep you have
+ * gone, and both of them have a beat that has to be waited out rather than
+ * assumed. `.on` comes off when the page *starts* leaving and it goes on
+ * covering the glass for the better part of a second afterwards — during which
+ * there is no open water to tap, because the page is over all of it. This used
+ * to work by accident: `settled` waited for a sky that was still arranging
+ * itself, which took long enough for the page to have gone. Now the sky holds
+ * still while you are inside a group, `settled` returns at once, and the
+ * accident is over — so the wait is written down.
+ *
+ * Getting that wrong is not loud. You are left standing inside the group with
+ * the page shut, the next tap opens that group instead of going into it, and
+ * everything after fails somewhere with no relation to the cause. Which is
+ * exactly what it did.
+ */
 export async function backToSky(page: Page): Promise<void> {
   if (await page.evaluate(() => !!document.querySelector('[data-sky="page"].on'))) {
     await tap(page, '[data-sky="pageX"]')
     await page.waitForFunction(() => !document.querySelector('[data-sky="page"].on'), null, { timeout: 8000 })
   }
+  // …and gone from the glass, not merely on its way — asked of the middle of
+  // the sky, which is the part a page covers first and gives up last
+  await page
+    .waitForFunction(() => !document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.closest('.sky-page'), null, {
+      timeout: 8000,
+    })
+    .catch(() => undefined)
   // out of however many groups deep you are — one tap on open water is one
   // level, which is the app's own rule
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 8; i++) {
     await settled(page)
-    if (!(await page.evaluate(() => document.querySelector('.skyb.recede')))) return
+    const deep = await page.evaluate(() => document.querySelectorAll('.skyb.recede').length)
+    if (!deep) return
     const water = await emptySky(page)
-    if (!water) return
+    if (!water) throw new Error(`no open water to tap, and still inside a group (${deep} bubbles stood back)`)
     await page.mouse.click(water[0], water[1])
+    // one level actually went away, rather than one click having been sent
+    await page
+      .waitForFunction((was) => document.querySelectorAll('.skyb.recede').length !== was, deep, { timeout: 6000 })
+      .catch(() => undefined)
   }
 }
 
@@ -398,6 +453,13 @@ export async function primaryVerb(page: Page): Promise<string> {
  * The demo answers from a canned output after a believable pause, so this is a
  * real round trip through the same code the real one takes — the client, the
  * flow, the writes into the graph — with only the model's own answer stubbed.
+ *
+ * Waiting for it to *finish* is not enough on its own, because "not working" is
+ * also what it looks like before it has started. The page closes, the sky comes
+ * back, the flow takes a moment to get going — and a grace period long enough to
+ * cover that on a fast machine is not long enough on a loaded one. So it waits
+ * for the work to appear first and then for it to go, and a verb that never
+ * starts is reported as that rather than as an empty plan three checks later.
  */
 export async function runVerb(page: Page, timeoutMs = 30_000): Promise<string[]> {
   await tap(page, '.pans .acts [data-act="onwith"]')
@@ -410,11 +472,17 @@ export async function runVerb(page: Page, timeoutMs = 30_000): Promise<string[]>
    */
   const heard = new Set<string>()
   const started = Date.now()
+  const working = () => page.evaluate(() => !!document.querySelector('[data-sky="voiceWork"]:not([hidden])'))
+  let began = false
   for (;;) {
     const now = await said(page)
     if (now) heard.add(now)
-    const working = await page.evaluate(() => !!document.querySelector('[data-sky="voiceWork"]:not([hidden])'))
-    if (!working && Date.now() - started > 1500) break
+    const busy = await working()
+    if (busy) began = true
+    // Some verbs are instant and never raise the working flag at all — opening
+    // what has already been found, for one. Those are done when the app has had
+    // a fair chance to start and has not.
+    else if (began || Date.now() - started > 12_000) break
     if (Date.now() - started > timeoutMs) throw new Error('the work never finished')
     await page.waitForTimeout(200)
   }
@@ -501,7 +569,28 @@ export async function openMember(page: Page, group: string, id: string, tries = 
       // is where this is recorded as a fact about the app rather than worked
       // around in silence.
       if (tries > 0) return openMember(page, group, id, tries - 1)
-      throw new Error(`no part of ${id} could be tapped inside ${group}, over several openings`)
+      // …and when it never becomes reachable, say what was in the way. "No part
+      // of <uuid> could be tapped" sends whoever reads it back to the browser to
+      // find out whether it was off the edge, behind the card of something else,
+      // or simply not drawn — which is three different faults with one message.
+      const why = await page.evaluate((want) => {
+        const el = document.querySelector<HTMLElement>(`[data-id="${want}"]`)
+        if (!el) return 'it is not drawn at all'
+        const r = el.getBoundingClientRect()
+        const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)
+        const over = top?.closest<HTMLElement>('.skyb')
+        const off = Math.round(Math.max(-r.left, -r.top, r.right - innerWidth, r.bottom - innerHeight))
+        return (
+          `at ${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.width)}×${Math.round(r.height)} ` +
+          `on a ${innerWidth}×${innerHeight} glass, classes “${el.className}”` +
+          (off > 0 ? `, ${off}px past the edge` : '') +
+          `, and the middle of it belongs to ` +
+          (over
+            ? `“${(over.querySelector('.t')?.textContent ?? over.dataset.id ?? '').slice(0, 30)}”`
+            : `<${top?.tagName.toLowerCase() ?? 'nothing'} class="${top?.className ?? ''}">`)
+        )
+      }, id)
+      throw new Error(`no part of ${id} could be tapped inside ${group}, over several openings — ${why}`)
     }
     await page.mouse.click(spot[0], spot[1])
   }
