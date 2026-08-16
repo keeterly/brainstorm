@@ -189,11 +189,30 @@ export async function pageReady(page: Page, timeoutMs = 10_000): Promise<void> {
   }
 }
 
-/** Tap a thing the way a thumb would — at the middle of where it is drawn. */
+/**
+ * Tap a thing the way a thumb would — at the middle of where it is drawn.
+ *
+ * A real click at real coordinates, not `locator.click()`, because the point is
+ * to find out whether a finger could land there: a `locator.click` dispatches
+ * to the element whatever is on top of it, which is the failure this suite
+ * exists to catch.
+ *
+ * It does scroll first, though. A person scrolls to a row before tapping it, and
+ * `boundingBox` happily returns coordinates for something below the fold — so
+ * without this, tapping the tenth row of a list clicks on empty space, nothing
+ * happens, and the check reports a bug in the app. Which is exactly what it did.
+ */
 export async function tap(page: Page, selector: string): Promise<void> {
-  const box = await page.locator(selector).first().boundingBox()
+  const el = page.locator(selector).first()
+  await el.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => undefined)
+  const box = await el.boundingBox()
   if (!box) throw new Error(`nothing to tap at ${selector}`)
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+  const x = box.x + box.width / 2
+  const y = box.y + box.height / 2
+  if (y < 0 || y > PHONE.height || x < 0 || x > PHONE.width) {
+    throw new Error(`${selector} is off the glass at ${Math.round(x)},${Math.round(y)} — a finger could not reach it`)
+  }
+  await page.mouse.click(x, y)
 }
 
 /**
@@ -293,4 +312,204 @@ export async function write(page: Page, text: string): Promise<void> {
 /** What the app has just said, at the foot of the sky. */
 export async function said(page: Page): Promise<string> {
   return page.evaluate(() => document.querySelector('.sky-voice')?.textContent?.trim() ?? '')
+}
+
+/** Every group drawn in the sky right now, outermost first. */
+export async function groups(page: Page): Promise<string[]> {
+  return page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>('.skyb.pool')].map((e) => e.dataset.id ?? '').filter(Boolean),
+  )
+}
+
+/** Go inside a group — one tap, which is all a bubble answers to. */
+export async function goInside(page: Page, id: string): Promise<void> {
+  await settled(page)
+  await tap(page, `[data-id="${id}"]`)
+  await settled(page)
+}
+
+/** …and again, which opens it. */
+export async function openGroup(page: Page, id: string): Promise<void> {
+  await goInside(page, id)
+  await tap(page, `[data-id="${id}"]`)
+  await pageReady(page)
+}
+
+/** Back out to open water, from wherever you are. */
+export async function backToSky(page: Page): Promise<void> {
+  if (await page.evaluate(() => !!document.querySelector('[data-sky="page"].on'))) {
+    await tap(page, '[data-sky="pageX"]')
+    await page.waitForFunction(() => !document.querySelector('[data-sky="page"].on'), null, { timeout: 8000 })
+  }
+  // out of however many groups deep you are — one tap on open water is one
+  // level, which is the app's own rule
+  for (let i = 0; i < 6; i++) {
+    await settled(page)
+    if (!(await page.evaluate(() => document.querySelector('.skyb.recede')))) return
+    const water = await emptySky(page)
+    if (!water) return
+    await page.mouse.click(water[0], water[1])
+  }
+}
+
+export interface Row {
+  id: string
+  title: string
+  why: string
+  waits: string
+  effort: number
+  done: boolean
+  depth: number
+}
+
+/** The rows of an open group page, as they read. */
+export async function rows(page: Page): Promise<Row[]> {
+  return page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>('.pans .row')]
+      .filter((r) => !r.classList.contains('add'))
+      .map((r) => ({
+        id: r.dataset.id ?? '',
+        title: (r.querySelector('.t') as HTMLTextAreaElement | null)?.value ?? '',
+        why: r.querySelector('.why')?.textContent?.trim() ?? '',
+        waits: r.querySelector('.waits')?.textContent?.trim() ?? '',
+        // shown as dots rather than a number, which is the point of them
+        effort: (r.querySelector('.effort')?.textContent ?? '').length,
+        done: r.classList.contains('ticked'),
+        depth: Number(r.dataset.depth ?? 0),
+      })),
+  )
+}
+
+/** What the open group page calls the list — "the plan", or "what is inside". */
+export async function listHeading(page: Page): Promise<string> {
+  return page.evaluate(() => document.querySelector('.pans .lab.head span')?.textContent?.trim() ?? '')
+}
+
+/** The verb the page offers for getting on with this thing. */
+export async function primaryVerb(page: Page): Promise<string> {
+  return page.evaluate(
+    () => document.querySelector('.pans .acts [data-act="onwith"]')?.textContent?.trim() ?? '',
+  )
+}
+
+/**
+ * Run whatever the primary verb is, and wait for the app to come back.
+ *
+ * The demo answers from a canned output after a believable pause, so this is a
+ * real round trip through the same code the real one takes — the client, the
+ * flow, the writes into the graph — with only the model's own answer stubbed.
+ */
+export async function runVerb(page: Page, timeoutMs = 30_000): Promise<string[]> {
+  await tap(page, '.pans .acts [data-act="onwith"]')
+  /*
+   * …and collect what it says while it is at it.
+   *
+   * The pill holds a line for four seconds and then takes it away, so asking
+   * afterwards whether the app said anything reads an empty element and calls
+   * it silence. Whatever it said has to be caught while it is on screen.
+   */
+  const heard = new Set<string>()
+  const started = Date.now()
+  for (;;) {
+    const now = await said(page)
+    if (now) heard.add(now)
+    const working = await page.evaluate(() => !!document.querySelector('[data-sky="voiceWork"]:not([hidden])'))
+    if (!working && Date.now() - started > 1500) break
+    if (Date.now() - started > timeoutMs) throw new Error('the work never finished')
+    await page.waitForTimeout(200)
+  }
+  await settled(page)
+  return [...heard]
+}
+
+/**
+ * Tick a row by which thought it is, not by where it sits.
+ *
+ * `nth-of-type` counts siblings of the same tag and the rows share their parent
+ * with the heading and the reading line, so it does not mean "the nth row" —
+ * which is how a check ends up ticking something else and then reporting a bug
+ * in the app.
+ */
+export async function tickRow(page: Page, id: string): Promise<void> {
+  await tap(page, `.pans .row[data-id="${id}"] .tick`)
+  await page.waitForTimeout(1000)
+}
+
+/**
+ * Open one thing that lives inside a group.
+ *
+ * A member is not drawn in the sky until its group is open, and even then it
+ * arrives on a ring that takes a moment to lay out — so tapping where it is
+ * going to be lands on the group instead, and the page that opens is the wrong
+ * one. Everything after that fails somewhere unrelated.
+ *
+ * So: wait for it to be on the glass, tap it, and check what opened.
+ */
+export async function openMember(page: Page, group: string, id: string, tries = 3): Promise<void> {
+  await backToSky(page)
+  await goInside(page, group)
+  await page.waitForFunction(
+    (want) => {
+      const el = document.querySelector<HTMLElement>(`[data-id="${want}"]`)
+      if (!el || el.classList.contains('recede')) return false
+      const r = el.getBoundingClientRect()
+      return r.width > 8 && r.right > 0 && r.left < innerWidth && r.bottom > 0 && r.top < innerHeight
+    },
+    id,
+    { timeout: 15_000 },
+  )
+  await settled(page)
+  /*
+   * …and it has to be reachable, not merely present. Members orbit the group on
+   * a ring, and a ring can put one over the group's own disc — so a tap at its
+   * centre opens the group instead, the page that comes up is the wrong one, and
+   * the check that follows reports something absurd about the app. Retried while
+   * the ring settles, and if it never becomes reachable that is worth failing
+   * over: a member you cannot tap is a member you cannot open.
+   */
+  let reachable = false
+  for (let i = 0; i < 10 && !reachable; i++) {
+    reachable = await tappable(page, `[data-id="${id}"]`)
+    if (!reachable) await page.waitForTimeout(300)
+  }
+  if (reachable) {
+    await tap(page, `[data-id="${id}"]`)
+  } else {
+    /*
+     * Its middle is not free — it has drifted part-way off the glass or under a
+     * neighbour, which the ring does sometimes and which `visualize.spec`
+     * measures on purpose. A person would aim at the part they can see, so this
+     * does too rather than declaring the app broken.
+     */
+    const spot = await page.evaluate((want) => {
+      const el = document.querySelector<HTMLElement>(`[data-id="${want}"]`)
+      if (!el) return null
+      const r = el.getBoundingClientRect()
+      for (let a = 0; a < 12; a++) {
+        const t = (a / 12) * Math.PI * 2
+        const x = r.x + r.width / 2 + Math.cos(t) * r.width * 0.3
+        const y = r.y + r.height / 2 + Math.sin(t) * r.height * 0.3
+        if (x < 2 || y < 2 || x > innerWidth - 2 || y > innerHeight - 2) continue
+        const top = document.elementFromPoint(x, y)
+        if (top && (top === el || el.contains(top))) return [x, y] as [number, number]
+      }
+      return null
+    }, id)
+    if (!spot) {
+      // Going out and back in re-lays the ring, and where it lands is not the
+      // same twice — see the reachability measurement in visualize.spec, which
+      // is where this is recorded as a fact about the app rather than worked
+      // around in silence.
+      if (tries > 0) return openMember(page, group, id, tries - 1)
+      throw new Error(`no part of ${id} could be tapped inside ${group}, over several openings`)
+    }
+    await page.mouse.click(spot[0], spot[1])
+  }
+  await pageReady(page)
+  // and the page that opened is the one that was asked for — `.on` cannot tell
+  // a page that has just arrived from one that was already up
+  const heading = await page.evaluate(() => document.querySelector('[data-sky="pageQ"]')?.textContent?.trim() ?? '')
+  if (!/this thought|this group/i.test(heading)) {
+    throw new Error(`tapping ${id} opened a page headed “${heading}”`)
+  }
 }

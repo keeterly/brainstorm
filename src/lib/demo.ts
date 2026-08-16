@@ -254,6 +254,55 @@ export const DEMO_OUTPUT: Record<string, unknown> = {
   // The one act nothing else in this market performs: an opinion about the
   // references you gathered. Every moodboard tool will hold them beautifully;
   // none of them will tell you what is not on the wall.
+  /*
+   * The one path in the whole app that produces a finished thing, and the demo
+   * could not show it.
+   *
+   * `draft` was not canned, so "do it" — the verb the app exists for — was a
+   * button that failed in the only build anybody can run without a key. The
+   * demo showed the app planning beautifully and doing nothing, which is the
+   * exact criticism the third principle is meant to answer.
+   */
+  draft: {
+    title: 'Wax-letter copy — six buyers',
+    body:
+      '**Six letters, not a mailout.** Each one names the buyer and the one piece ' +
+      'you want them to see first.\n\n' +
+      '- **Ana, Dover Street** — open on the expired-film shots; she bought the ' +
+      'hand-finished pieces last season and this is the same argument in a new form.\n' +
+      '- **Marguerite, Ssense** — lead with the linen, and say the run is small ' +
+      'because the mill is small. She asks about provenance every time.\n' +
+      '- **Theo, Nomad** — one line about the pop-up, one about the drop date. He ' +
+      'does not read past three sentences and has never needed to.\n\n' +
+      'Same close on all six: the date, and an invitation to see it in the room ' +
+      'before it goes anywhere else.',
+    check: [
+      { what: 'The three remaining buyers are not named yet', why: 'the list only had three on it' },
+      { what: 'The drop date', why: 'written as “September” and the letters want a day' },
+    ],
+    assumed: ['That the pop-up is happening before the drop, not after'],
+    blocked: [],
+    learned: ['Writes to buyers individually rather than in a list'],
+    sources: [],
+    done: false,
+  },
+  /*
+   * …and the thing that runs on every capture.
+   *
+   * `classifyQuiet` fires this the moment anything is written, so in a demo
+   * with nothing canned every single capture made a request that could not
+   * succeed. It is applied narrowly on purpose — the summary and the date, never
+   * the title, because a thing you just wrote should not be renamed underneath
+   * you — so a canned answer here is safe as well as honest.
+   */
+  classify_thought: {
+    type: 'action',
+    confidence: 0.72,
+    title: 'A thought',
+    summary: '',
+    suggestedDue: null,
+    clarifyingQuestion: null,
+  },
   look: {
     read: 'Light doing the work the clothes are supposed to do',
     threads: [
