@@ -14,15 +14,32 @@ it left you in.
 
 ## How it plays
 
-Drag one drop into another and they blend: colours mix like paint, and the masses add up. Drag a
-drop into the core and it goes home — but only if it is *exactly* the core's colour. Three rules
-make that a puzzle rather than a chore:
+Drag one drop into another and they blend, the way a child mixes paint: **red + yellow = orange**,
+**yellow + blue = green**, **red + blue = violet**, all three = ink. And **red + red = red** — the
+same colour, twice the drop. Drag a drop into the core when it is the core's colour, and it goes
+home.
+
+Two numbers decide everything, and they pull in opposite directions:
 
 | | |
 | --- | --- |
-| **Blending is weighted** | Two parts red to one of yellow is not the same orange as one to one. Size is half the problem. |
-| **A drop can only hold so much** | Every sky has a limit. Past it, the skin would burst, and the merge is refused — so the drops have to be grouped, not just poured together. |
-| **Some drops are held** | A membrane lets nothing in, and only lets a drop out if it is small enough to fit the pore. Membranes nest, so a deep sky is several small problems in a fixed order. |
+| **The cap** — no drop may hold more than N | So you cannot pour the whole sky into one ball and hand it over. |
+| **The arrivals** — the core opens only K times | So you cannot hand it over one drop at a time either. |
+
+Between them sits the only question the game ever asks: *these two reds — one big one, or one each
+into two different blends?* Put them together and you have committed both to a single destination.
+Keep them apart and each can carry a different partner home. Which is right depends on how much the
+cap will let you carry and how many times the core will open, and getting it wrong is how a sky is
+lost.
+
+A third rule builds the walls:
+
+| | |
+| --- | --- |
+| **Some drops are held** | A membrane lets nothing in, and lets a drop out only if it is small enough for the pore. Membranes nest, so a deep sky is several small problems in a fixed order. |
+
+Colours only ever grow — nothing here takes a primary back out — so an orange that meets a blue is
+ink for good. That is the whole risk in the game, and it is legible at a glance.
 
 Nothing is ever lost: undo goes back a move, and when a sky has no way home left it says so rather
 than letting you play on into a wall. The hint is a real one — it is the next move on a genuinely
@@ -48,8 +65,8 @@ Everything the game *is* lives in four small files that never mention a pixel:
 
 | File | What |
 | --- | --- |
-| `src/game/color.ts` | Colour in RYB, so blue and yellow make green. A blend is the mass-weighted mean and nothing else — which makes it order-independent, and makes the puzzle plannable. |
-| `src/game/rules.ts` | Three moves, four refusals, one immutable state. Undo is the previous value. |
+| `src/game/color.ts` | A colour is the *set* of primaries in it, so blending is set union: commutative, associative, idempotent, and nameable. Seven colours, no decimals. |
+| `src/game/rules.ts` | Three moves, five refusals, one immutable state. Undo is the previous value. |
 | `src/game/levels.ts` | Ten skies, written as recipes. |
 | `src/game/solve.ts` | Plays the real game breadth-first. Proves levels winnable, computes par, powers the hint and the "no way home" warning. |
 
@@ -61,7 +78,7 @@ understands ends in one of those three moves being offered upward, and it draws 
 ```bash
 npm install
 npm run dev        # http://localhost:5174
-npm test           # rules, colour, levels, layout — 73 tests
+npm test           # rules, colour, levels, layout — 80 tests
 npm run build      # typecheck + production build to dist/
 ```
 
@@ -75,11 +92,15 @@ node tools/icons.mjs # redraw the app icons out of the game's own materials
 
 ### Tests worth knowing about
 
-- **Every level balances, is winnable, and its par is real.** The whole sky's mass-weighted mean has
-  to equal the core's colour, the solver has to find a line, that line is replayed through the rules,
-  and par is what it found. No hand-written par can drift.
-- **No level has a spare drop.** Remove any one and it becomes unwinnable — so nothing in a sky is
-  decoration.
+- **Every level adds up, is winnable, and its par is real.** Between them the drops must carry every
+  primary the core is made of and none it is not; the solver has to find a line; that line is
+  replayed through the rules; and par is what it found. No hand-written par can drift.
+- **The arrivals are exact.** `total ≤ cap × arrivals`, or the sky cannot be emptied — and
+  `total > cap × (arrivals − 1)`, or it could have been done in fewer, which would make the number a
+  suggestion rather than a rule.
+- **Every level can be lost inside two moves.** A sky with no wrong answer is not a puzzle, so the
+  suite plays each one and checks there is a way to ruin it. (Level 1 is exempt: it is the tutorial
+  and has exactly one line through it.)
 - **Layout is finite on four sizes of glass.** A NaN radius does not throw; it silently piles every
   drop in the top-left corner and draws no skins at all. That bug happened, once.
 

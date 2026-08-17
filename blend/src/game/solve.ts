@@ -12,13 +12,15 @@ import { apply, initial, moves, won, type Level, type Move, type State } from '.
  * order things were poured in; the position is what a player can see.
  */
 export function key(s: State): string {
-  return s.drops
-    .map(
-      (d) =>
-        `${d.where ?? '~'}:${d.color.map((v) => v.toFixed(4)).join(',')}@${d.mass.toFixed(3)}`,
-    )
-    .sort()
-    .join('|')
+  return (
+    s.drops
+      .map((d) => `${d.where ?? '~'}:${d.color}@${d.mass.toFixed(3)}`)
+      .sort()
+      .join('|') +
+    // …and how many times the core will still open, which two otherwise
+    // identical skies can disagree about
+    `#${s.takes}`
+  )
 }
 
 export interface Found {

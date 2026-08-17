@@ -16,7 +16,7 @@ import {
 import { clearance, disc, oilPath, pull } from '@/world/shape'
 import { echoRing } from '@/world/echo'
 import { rippleAt, TOUCH, WAKE } from '@/world/ripple'
-import { tint } from '@/game/color'
+import { primaries, tint } from '@/game/color'
 import { dropOf, hue, refuse, type Level, type Move, type State } from '@/game/rules'
 import { dropR, layout, step, type Node, type Scene } from './field'
 
@@ -326,6 +326,14 @@ export function Board({ level, state, won, hint, onMove, onSay }: BoardProps) {
         style={{ '--tint': tint(hue(level.target)) } as CSSProperties}
       >
         <span className="mass">{state.core || ''}</span>
+        {/* what every arrival has to have in it, spelled out — an ink core
+            asks for three things and says so, rather than being a colour you
+            are left to reverse-engineer */}
+        <span className="pips">
+          {primaries(hue(level.target)).map((p) => (
+            <i key={p} style={{ '--pip': tint(p) } as CSSProperties} />
+          ))}
+        </span>
       </div>
 
       {state.drops.map((d) => (

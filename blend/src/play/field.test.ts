@@ -61,11 +61,25 @@ describe.each(GLASS)('on a $name', ({ w, h }) => {
 
 describe('a skin', () => {
   it('grows to hold what is in it', () => {
-    const level = LEVELS[5] // Two Rooms — two drops behind each skin
-    const scene = layout(initial(level), level, 390, 844)
-    const one = LEVELS[3] // Skin — one drop behind one skin
-    const lone = layout(initial(one), one, 390, 844)
-    expect(scene.rings[0].R).toBeGreaterThan(lone.rings[0].R)
+    // its own fixtures, so it measures the skin rather than whatever the
+    // levels happen to hold this week
+    const skin = (n: number, mass = 1) => ({
+      id: 0,
+      name: 'test',
+      note: '',
+      cap: 9,
+      takes: 1,
+      target: 'orange' as const,
+      membranes: [{ id: 'a', pore: 9 }],
+      drops: Array.from({ length: n }, () => ({ color: 'red' as const, mass, where: 'a' })),
+    })
+    const sizeOf = (level: ReturnType<typeof skin>) =>
+      layout(initial(level), level, 390, 844).rings[0].R
+
+    expect(sizeOf(skin(3))).toBeGreaterThan(sizeOf(skin(1)))
+    expect(sizeOf(skin(6))).toBeGreaterThan(sizeOf(skin(3)))
+    // …and by weight as well as by count, since a heavy drop is a big one
+    expect(sizeOf(skin(2, 4))).toBeGreaterThan(sizeOf(skin(2, 1)))
   })
 
   it('nests inside its parent, wholly', () => {

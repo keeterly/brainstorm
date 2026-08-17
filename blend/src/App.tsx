@@ -29,7 +29,7 @@ export default function App() {
   )
 
   const won = isWon(state)
-  const target = par(level)
+  const parMoves = par(level)
 
   const start = useCallback((n: number) => {
     setId(n)
@@ -95,12 +95,16 @@ export default function App() {
         <div className="who">
           <b>{level.name}</b>
           <span>
-            {level.id} of {LEVELS.length} · hold no more than {level.cap}
+            {level.id} of {LEVELS.length} · no drop over {level.cap}
           </span>
         </div>
-        <div className="count">
-          <b>{state.moves}</b>
-          <span>par {target}</span>
+        {/* The scarce thing, and so the big number: how many more drops the
+            core will take. The cap says a drop cannot be too big; this says
+            there cannot be too many of them. Everything else is arithmetic
+            between the two. */}
+        <div className={`count${state.takes === 0 && !won ? ' spent' : ''}`}>
+          <b>{state.takes}</b>
+          <span>{state.takes === 1 ? 'last arrival' : 'arrivals left'}</span>
         </div>
       </header>
 
@@ -125,9 +129,14 @@ export default function App() {
         <Card>
           <h1>Blend</h1>
           <p className="lede">
-            A sky full of colour, and one core in the middle of it. Drag a drop into another to
-            blend them; drag one into the core when it is finally the core's colour. Finish when
-            every drop has gone home and the sky is one colour.
+            A sky full of colour, and one core in the middle of it. Drag a drop into another and
+            they blend — red and yellow make orange, and two reds make a bigger red. Drag a drop
+            into the core when it is the core's colour.
+          </p>
+          <p className="lede">
+            Two numbers decide everything. <b>No drop may hold more than the cap</b>, so you cannot
+            pour the whole sky into one ball. <b>The core opens only so many times</b>, so you
+            cannot hand it over a drop at a time either. Which two go together is the whole game.
           </p>
           <button
             className="go"
@@ -164,7 +173,7 @@ export default function App() {
           <h2>One colour.</h2>
           <p className="lede">
             {level.name} in {state.moves} {state.moves === 1 ? 'move' : 'moves'}
-            {state.moves <= target ? ' — par.' : `, par ${target}.`}
+            {state.moves <= parMoves ? ' — par.' : `, par ${parMoves}.`}
           </p>
           <div className="row">
             {level.id < LEVELS.length ? (

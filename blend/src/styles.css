@@ -132,15 +132,17 @@ body {
   top: 0;
   border-radius: 50%;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 3px;
   will-change: transform;
   isolation: isolate;
   cursor: grab;
   backdrop-filter: blur(14px) saturate(165%) brightness(1.5);
   -webkit-backdrop-filter: blur(14px) saturate(165%) brightness(1.5);
   background:
-    linear-gradient(rgba(var(--tint), 0.52), rgba(var(--tint), 0.3) 48%, rgba(var(--tint), 0.44)),
+    linear-gradient(rgba(var(--tint), 0.78), rgba(var(--tint), 0.56) 48%, rgba(var(--tint), 0.7)),
     linear-gradient(
       rgba(255, 255, 255, 0.13),
       rgba(255, 255, 255, 0.045) 48%,
@@ -178,6 +180,18 @@ body {
     linear-gradient(#000 0 0);
   mask-composite: exclude;
   pointer-events: none;
+}
+.bub .pips {
+  display: flex;
+  gap: 4px;
+  pointer-events: none;
+}
+.bub .pips i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgb(var(--pip));
+  box-shadow: 0 0 7px rgba(var(--pip), 0.9), inset 0 0.5px 0 rgba(255, 255, 255, 0.6);
 }
 .bub .mass {
   font-family: var(--mono);
@@ -306,6 +320,10 @@ body {
 }
 .bar.top .count {
   text-align: right;
+}
+.bar.top .count.spent b,
+.bar.top .count.spent span {
+  color: #ffb1aa;
 }
 .bar.top .count b {
   display: block;

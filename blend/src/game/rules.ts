@@ -1,14 +1,26 @@
-// The rules, entire. Three moves, four refusals, and a state you can put back.
+// The rules, entire. Three moves, five refusals, and a state you can put back.
 //
 // Everything the game knows how to do is here, as pure functions over a plain
 // value. The board on screen is a picture of this; it never decides anything.
 // Which means the solver plays exactly the game the player plays, undo is one
 // value going back, and a level can be proved winnable before anyone ships it.
-import { blend, PIGMENT, same, type Pigment, type RYB } from './color'
+//
+// Two numbers do all the work, and they pull against each other:
+//
+//   **the cap** — no drop may hold more than this, so you cannot simply pour
+//   the whole sky into one ball and hand it over;
+//
+//   **the takes** — the core opens only so many times, so you cannot hand it
+//   over a drop at a time either.
+//
+// Between them sits the only question the game ever asks: these two drops of
+// the same colour — one big one, or two small ones going to two different
+// places? Neither number is interesting alone. Together they are the game.
+import { blend, HUE, same, type Hue, type HueName } from './color'
 
 export interface Drop {
   id: string
-  color: RYB
+  color: Hue
   mass: number
   /** the membrane it is inside, or null for open sky */
   where: string | null
@@ -34,10 +46,12 @@ export interface Level {
   note: string
   /** the most any one drop can hold before its skin gives out */
   cap: number
+  /** how many times the core will open */
+  takes: number
   /** the colour of the core, and so the colour every drop must arrive as */
-  target: Pigment | RYB
+  target: HueName | Hue
   membranes?: readonly { id: string; parent?: string; pore: number }[]
-  drops: readonly { color: Pigment | RYB; mass?: number; where?: string }[]
+  drops: readonly { color: HueName | Hue; mass?: number; where?: string }[]
 }
 
 export interface State {
@@ -45,6 +59,8 @@ export interface State {
   membranes: readonly Membrane[]
   /** what the core has taken in so far */
   core: number
+  /** how many times it will still open */
+  takes: number
   moves: number
 }
 
@@ -53,7 +69,7 @@ export type Move =
   | { kind: 'pass'; id: string }
   | { kind: 'join'; id: string }
 
-export const hue = (c: Pigment | RYB): RYB => (typeof c === 'string' ? PIGMENT[c] : c)
+export const hue = (c: HueName | Hue): Hue => (typeof c === 'string' ? HUE[c] : c)
 
 export function initial(level: Level): State {
   return {
@@ -69,6 +85,7 @@ export function initial(level: Level): State {
       pore: m.pore,
     })),
     core: 0,
+    takes: level.takes,
     moves: 0,
   }
 }
@@ -76,8 +93,7 @@ export function initial(level: Level): State {
 export const dropOf = (s: State, id: string) => s.drops.find((d) => d.id === id) ?? null
 
 /** Everything a level starts with, which is what the core must end up holding. */
-export const totalMass = (level: Level) =>
-  level.drops.reduce((n, d) => n + (d.mass ?? 1), 0)
+export const totalMass = (level: Level) => level.drops.reduce((n, d) => n + (d.mass ?? 1), 0)
 
 /**
  * Why a move cannot be made, in the words the drop itself would use — or null
@@ -89,7 +105,7 @@ export function refuse(s: State, level: Level, m: Move): string | null {
     const b = dropOf(s, m.into)
     if (!a || !b || a.id === b.id) return 'nothing to join'
     if (a.where !== b.where) return 'not through the skin'
-    if (a.mass + b.mass > level.cap + 1e-9) return `too much for one drop — ${level.cap} is the limit`
+    if (a.mass + b.mass > level.cap + 1e-9) return `too much for one drop — ${level.cap} is the most`
     return null
   }
   if (m.kind === 'pass') {
@@ -105,6 +121,7 @@ export function refuse(s: State, level: Level, m: Move): string | null {
   if (!d) return 'nothing there'
   if (d.where !== null) return 'still behind a skin'
   if (!same(d.color, hue(level.target))) return 'not the core’s colour'
+  if (s.takes <= 0) return 'the core will not open again'
   return null
 }
 
@@ -125,7 +142,7 @@ export function apply(s: State, level: Level, m: Move): State {
     const b = dropOf(s, m.into)!
     const merged: Drop = {
       id: b.id,
-      color: blend([a, b]),
+      color: blend(a.color, b.color),
       mass: a.mass + b.mass,
       where: b.where,
     }
@@ -146,6 +163,7 @@ export function apply(s: State, level: Level, m: Move): State {
     ...s,
     drops: s.drops.filter((x) => x.id !== d.id),
     core: s.core + d.mass,
+    takes: s.takes - 1,
     moves: s.moves + 1,
   }
 }
@@ -153,8 +171,7 @@ export function apply(s: State, level: Level, m: Move): State {
 /** A skin with nothing left inside it has nothing left to do. */
 function shed(drops: readonly Drop[], membranes: readonly Membrane[]): Membrane[] {
   const holds = (id: string): boolean =>
-    drops.some((d) => d.where === id) ||
-    membranes.some((m) => m.parent === id && holds(m.id))
+    drops.some((d) => d.where === id) || membranes.some((m) => m.parent === id && holds(m.id))
   return membranes.filter((m) => holds(m.id))
 }
 
