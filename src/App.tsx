@@ -1,11 +1,12 @@
 import { useEffect } from 'react'
-import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { AuthGate } from '@/features/auth/AuthGate'
 import { installWaterTouch } from '@/lib/touch-water'
 import { TabBar } from '@/components/TabBar'
 import { OfflineBanner } from '@/components/OfflineBanner'
 import { Atmosphere, WorldHem } from '@/world/Atmosphere'
 import SkyPage from '@/features/sky/SkyPage'
+import RoadmapPage from '@/features/roadmap/RoadmapPage'
 import MemoryPage from '@/features/memory/MemoryPage'
 import SettingsPage from '@/features/settings/SettingsPage'
 import Opening from '@/features/opening/Opening'
@@ -21,6 +22,26 @@ export default function App() {
   // were the one part of it that cut. Keyed on the path so each arrival is a
   // fresh element with an animation to run — see .view in global.css.
   const { pathname } = useLocation()
+  const navigate = useNavigate()
+  /*
+   * The sky asking to go somewhere.
+   *
+   * `SkyPage` is eight thousand lines of imperative closure with no router
+   * hooks in it — route data reaches it as raw `location.search`, and it leaves
+   * again by announcing. The "what to do next" bar at the foot of the sky is
+   * the roadmap speaking, so tapping it goes to the roadmap; this is the door.
+   *
+   * The same shape TabBar already uses in the other direction, where it fires
+   * `tab-again` and the sky listens.
+   */
+  useEffect(() => {
+    const go = (e: Event) => {
+      const to = (e as CustomEvent<string>).detail
+      if (typeof to === 'string' && to.startsWith('/')) navigate(to)
+    }
+    addEventListener('sky-goto', go)
+    return () => removeEventListener('sky-goto', go)
+  }, [navigate])
   return (
     <>
       {/* the world is painted before anything asks who you are, so launching
@@ -51,6 +72,10 @@ export default function App() {
                 for anything holding an old link — a bookmark, a cached PWA
                 start url — but nothing in the app points here. */}
             <Route path="/think" element={<Navigate to="/" replace />} />
+            {/* The other half of the app: the same graph, read against a week.
+                See RoadmapPage — it writes nothing, so it can never disagree
+                with the sky about what the work is. */}
+            <Route path="/roadmap" element={<RoadmapPage />} />
             <Route path="/memory" element={<MemoryPage />} />
             {/* The thought detail page is gone — see the registry. Old links
                 still arrive though: a notification, a bookmark, the ocean list

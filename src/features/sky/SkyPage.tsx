@@ -3,6 +3,7 @@
 // threads backed by relationships, the ocean backed by done, the high
 // clouds backed by snooze. No cards, no forms — hold the sky and write.
 import { useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { useGraph } from '@/store/graph'
 import { parseCapture } from '@/domain/capture'
 import { findThoughts } from '@/domain/find'
@@ -14,12 +15,12 @@ import { seaLineAt, waterlineY } from '@/world/water'
 import { evaporateAt } from '@/world/Atmosphere'
 import { KIN_EVIDENCE, KIN_POOL, KIN_THREAD, type Kinship, kinship } from '@/domain/kinship'
 import { humanDate, humanDue } from '@/domain/human-date'
-import { nextAction } from '@/domain/next-action'
 import { armUpright, stepUpright, worldTilt } from '@/world/upright'
 import { applyDeepen, deepenThought } from './deepenFlow'
 import { applyAnswer, answerThought } from './answerFlow'
 import { applyDraft, draftThought } from './draftFlow'
 import { rainThought } from './rainFlow'
+import { firstToday } from '@/features/roadmap/firstToday'
 import { curtainLifted, markSkyReady, whenCurtainLifts } from './ready'
 import { TINT_NAMES, tintOf, tintRGB, type TintName } from './tints'
 import { handOver, shareText, shareTitle } from './share'
@@ -107,6 +108,16 @@ export default function SkyPage() {
       <button className="sky-find" data-sky="find" aria-label="Find a thought">
         ⌕
       </button>
+      {/* What the water kept.
+          It used to be half the tab bar, standing beside the sky as though the
+          two were a choice you make. They are not: this is a thing you go and
+          read on purpose, once, and the bar is now the two places you actually
+          work. Beside Find because they are the same errand a day apart —
+          where did I put that, and what has it learned — and on the left
+          because the right corner is already spoken for and measured. */}
+      <Link className="sky-mem" to="/memory" aria-label="What the water keeps">
+        ◴
+      </Link>
       <button className="sky-rest" data-sky="rest" aria-label="Resting thoughts">
         ☁
       </button>
@@ -1021,6 +1032,41 @@ function mountSky(root: HTMLDivElement) {
     const k = cam.k
     camTarget = { k, x: W / 2 - p.x * k, y: (76 + (waterlineY() - 150)) / 2 - p.y * k }
   }
+  /**
+   * Is any of it actually off the glass?
+   *
+   * `canPan` answers a near-enough question and is the wrong instrument for
+   * this one. It was written for the drag handles, so it carries twelve pixels
+   * of slack on every edge and reads a `contentBox` that pads each body by
+   * another twelve — near enough for "is there anywhere to drag to", and it
+   * means a body can hang a finger's width off the side while it cheerfully
+   * reports that everything fits. Measured: a settled sky sitting four to eight
+   * pixels over, every time, with the re-framing satisfied.
+   *
+   * This asks the exact question, of each body, against the same top and bottom
+   * `fitAll` aims between — so when the re-framing stops, it stops because it is
+   * done.
+   *
+   * Of the drawn box rather than the position, because the two are not the same
+   * thing and it is the drawn one you can see hanging off the side. A body's
+   * position is where the layout put it; what is painted is that plus the
+   * breath, which is a couple of pixels and never stops, plus whatever lean it
+   * has toward a neighbour. Reading the position instead reported a sky that fit
+   * while four to eight pixels of it were over the edge on every measurement.
+   */
+  function spilled(): boolean {
+    const top = 76
+    const floor = waterlineY() - 18
+    for (const tl of view.tls) {
+      const el = els.get(tl.t.id)
+      if (!el) continue
+      const r = el.getBoundingClientRect()
+      if (r.width < 1) continue
+      if (r.left < 1 || r.right > W - 1 || r.top < top || r.bottom > floor) return true
+    }
+    return false
+  }
+
   /**
    * Frame everything, with a little air.
    *
@@ -2908,6 +2954,8 @@ function mountSky(root: HTMLDivElement) {
    * past, never a thing in the way.
    */
   let nextFor: string | null = null
+  /** whether the bar is quoting the roadmap, or falling back to the ladder */
+  let skyGoesToRoadmap = false
   function paintNext() {
     // …and it steps aside for the app's own voice, which stands in the same
     // place. Two things in one slot is a layout bug; the app suggesting
@@ -2919,16 +2967,27 @@ function mountSky(root: HTMLDivElement) {
     const hide =
       !!openPool || !!pageFor || voiceEl.classList.contains('show') || !!drag?.moved
     /*
-     * Worked out here, from the graph, and not asked of anybody.
+     * Worked out from the graph, and not asked of anybody — but no longer
+     * worked out *here*.
      *
-     * There used to be a second answer: the Current screen ran `prioritize`
-     * and stored its pick, and this honoured that over its own — two places
-     * naming a next thing, which is one more than there should ever be. The
-     * Current is gone and so is the override; `nextAction` has always been
-     * able to answer this on its own, without a call and without a wait.
+     * There used to be a second answer: the Current screen ran `prioritize` and
+     * stored its pick, and this honoured that over its own — two places naming
+     * a next thing, which is one more than there should ever be. The Current
+     * went, and this got its opinion back.
+     *
+     * Now there is a Roadmap, which is a third. Rather than let it be one, the
+     * bar gives the opinion up again: `firstToday` returns the first thing on
+     * today's roadmap, and falls back to `nextAction` only for a sky with no
+     * plans in it — which is a real state, and the one everybody starts in.
+     * One answer, shown in two places, is not the same as two answers.
      */
-    const n = hide ? null : nextAction(S().thoughts, S().relationships, todayISO())
+    const n = hide ? null : firstToday(S().thoughts, S().relationships, todayISO())
     nextFor = n?.thought.id ?? null
+    // …and when the answer came from the ladder rather than the roadmap, the
+    // roadmap has nothing to show and the bar goes to the thing itself, as it
+    // always did. `firstToday` says which outright rather than in its wording,
+    // so rephrasing a sentence cannot quietly move where a tap goes.
+    skyGoesToRoadmap = n?.from === 'roadmap'
     nextEl.classList.toggle('show', !!n)
     if (!n) return
     nextLb.textContent = trim(label(n.thought), 40)
@@ -2936,6 +2995,23 @@ function mountSky(root: HTMLDivElement) {
   }
   nextGo.addEventListener('click', () => {
     if (!nextFor) return
+    /*
+     * To the roadmap, not to the thing.
+     *
+     * The bar is the roadmap speaking from the other tab, so the honest place
+     * for it to lead is the day it came from — where the same step is at the
+     * top, with what follows it visible underneath. Going straight to the thing
+     * put you in front of one step with no sense of the shape of the day, which
+     * is the whole reason the second tab exists.
+     *
+     * Announced rather than navigated: this file is imperative and holds no
+     * router hooks. `App` listens and calls `navigate`, the same way TabBar
+     * already announces `tab-again` and this file listens for it.
+     */
+    if (skyGoesToRoadmap) {
+      dispatchEvent(new CustomEvent('sky-goto', { detail: '/roadmap' }))
+      return
+    }
     const tl = view.byId.get(nextFor)
     // it may be inside a pool: go to the pool, and the thing is in the ring
     const parent = view.parentOf.get(nextFor)
@@ -7966,13 +8042,19 @@ function mountSky(root: HTMLDivElement) {
        * rather than pace.
        */
       if (settled && refitWhenStill > 0 && !camTarget && !panning && !pinch) {
-        if (canPan()) {
+        if (spilled()) {
           refitWhenStill--
           // …without stirring: nothing in the world moved, so there is nothing
           // for the layout to reconsider, and asking it to is what turned this
           // into a chase. See fitAll.
           fitAll(true, false)
-        } else refitWhenStill = 0
+        }
+        // …and the budget is not spent by finding nothing wrong. The sky can
+        // settle in frame and drift out of it afterwards — a spring relaxing, a
+        // neighbour arriving — and zeroing this on the first quiet frame left
+        // nothing to correct that with. Measured before this: the re-framing ran
+        // zero times across eight captures. It is still bounded, at three
+        // corrections per thought you write.
       }
       for (const tl of view.tls) {
         const p = posOf(tl.t.id)

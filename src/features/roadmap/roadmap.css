@@ -1,0 +1,127 @@
+/* The roadmap borrows the app's materials rather than inventing any: the same
+   glass card, the same ink, the same accent the World Engine is rewriting all
+   day. What is new here is only rhythm — a day is a heading with work under it,
+   and the work has to be scannable at arm's length while you decide whether to
+   start. */
+
+.roadmap .rm-cap {
+  font-size: var(--fs-label);
+  margin: -4px 0 16px;
+}
+
+.roadmap .rm-h {
+  font-size: var(--fs-md);
+  margin-bottom: 4px;
+}
+.roadmap .rm-sub {
+  font-size: var(--fs-label);
+  margin-bottom: 8px;
+}
+
+.roadmap .rm-week {
+  margin-bottom: 16px;
+}
+
+.rm-day + .rm-day {
+  margin-top: 14px;
+}
+
+/* The date sits on the rule rather than above it, so a day reads as one block
+   and your eye can find Wednesday without counting. */
+.rm-date {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--fs-label);
+  font-weight: 600;
+  color: var(--ink-soft);
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--glass-line);
+}
+
+/* How full the day is. Quiet on purpose — it is a check on the app's own
+   arithmetic, not a target anybody should be hitting. */
+.rm-load {
+  font-weight: 400;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.rm-step {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  padding: 8px 10px;
+  margin: 0 -10px;
+  border-radius: var(--r-sm);
+  -webkit-tap-highlight-color: transparent;
+}
+.rm-step:active {
+  background: rgba(var(--accent-rgb), 0.08);
+}
+
+.rm-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.rm-title {
+  font-size: var(--fs-body);
+  color: var(--ink);
+  line-height: 1.35;
+}
+
+.rm-effort {
+  flex-shrink: 0;
+  letter-spacing: 1.5px;
+  color: var(--ink-faint);
+  font-size: 10px;
+}
+
+/* Which idea this came out of. A step with no home on a list of forty is a
+   chore; with its goal beside it, it is a piece of something you chose. */
+.rm-goal {
+  font-size: var(--fs-caption);
+  color: var(--ink-faint);
+  margin-top: 2px;
+}
+
+.rm-why {
+  font-size: var(--fs-label);
+  color: var(--ink-soft);
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+/* Waiting is dimmed rather than hidden: you still want to see it coming, and a
+   plan that hides what is blocked cannot tell you why nothing is happening. */
+.rm-step.waiting .rm-title {
+  color: var(--ink-soft);
+}
+.rm-waits {
+  font-size: var(--fs-caption);
+  color: var(--ink-faint);
+  margin-top: 3px;
+}
+
+.rm-due {
+  font-size: var(--fs-caption);
+  color: rgba(var(--accent-rgb), 0.75);
+  margin-top: 3px;
+}
+.rm-late {
+  font-size: var(--fs-caption);
+  color: var(--danger);
+  margin-top: 3px;
+}
+
+.roadmap .rm-later {
+  margin-bottom: 16px;
+}
+.roadmap .rm-later .rm-step {
+  opacity: 0.72;
+}

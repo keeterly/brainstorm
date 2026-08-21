@@ -407,6 +407,58 @@ export async function backToSky(page: Page): Promise<void> {
   }
 }
 
+/**
+ * Go to one of the two places, the way a thumb does.
+ *
+ * By the word on it rather than by position: which tab is where is exactly the
+ * kind of thing that gets rearranged, and a check that breaks when it does is a
+ * check about the layout rather than about the app.
+ */
+export async function goTab(page: Page, label: RegExp): Promise<void> {
+  const box = await page.evaluate((src) => {
+    const want = new RegExp(src.source, src.flags)
+    const el = [...document.querySelectorAll<HTMLElement>('.tab')].find((t) => want.test(t.textContent ?? ''))
+    if (!el) return null
+    const r = el.getBoundingClientRect()
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+  }, { source: label.source, flags: label.flags })
+  if (!box) throw new Error(`no tab matching ${label}`)
+  await page.mouse.click(box.x, box.y)
+  await page.waitForTimeout(900)
+}
+
+/** Every step drawn on the roadmap, in the order it is read. */
+export interface Slot {
+  day: string
+  title: string
+  goal: string
+  why: string
+  waits: string
+  effort: number
+  late: boolean
+}
+
+export async function slots(page: Page): Promise<Slot[]> {
+  return page.evaluate(() => {
+    const out: Slot[] = []
+    for (const day of document.querySelectorAll<HTMLElement>('.rm-day')) {
+      const date = day.querySelector('.rm-date')?.firstChild?.textContent?.trim() ?? ''
+      for (const s of day.querySelectorAll<HTMLElement>('.rm-step')) {
+        out.push({
+          day: date,
+          title: s.querySelector('.rm-title')?.textContent?.trim() ?? '',
+          goal: s.querySelector('.rm-goal')?.textContent?.trim() ?? '',
+          why: s.querySelector('.rm-why')?.textContent?.trim() ?? '',
+          waits: s.querySelector('.rm-waits')?.textContent?.trim() ?? '',
+          effort: (s.querySelector('.rm-effort')?.textContent ?? '').length,
+          late: !!s.querySelector('.rm-late'),
+        })
+      }
+    }
+    return out
+  }) as Promise<Slot[]>
+}
+
 export interface Row {
   id: string
   title: string

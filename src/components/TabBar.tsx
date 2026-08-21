@@ -24,9 +24,20 @@ import './tabbar.css'
  * never really its own: `domain/next-action.ts` works it out without asking
  * anybody, and the sky has shown it at the foot of the glass all along.
  */
+/*
+ * Still two, and now they are the two the app is actually about.
+ *
+ * Memory was never a third place to work — it is what the water kept, which you
+ * go and read on purpose, once. Standing it beside the sky as an equal implied
+ * a choice between them that nobody makes. It is an icon in the sky's own
+ * corner now, next to Find, which is where you are when you want it.
+ *
+ * What is here instead is the half that was missing: where ideas live, and how
+ * they get done.
+ */
 const TABS = [
-  { to: '/', label: 'Sky' },
-  { to: '/memory', label: 'Memory' },
+  { to: '/', label: 'Ideas' },
+  { to: '/roadmap', label: 'Roadmap' },
 ]
 
 const LAYERS = 4
@@ -171,12 +182,17 @@ export function TabBar() {
   )
 }
 
+/*
+ * Memory and the three screens behind it light no tab, deliberately.
+ *
+ * They used to keep Memory lit, which was right while it was a tab. It is not
+ * one now, and lighting `Ideas` while you are reading what the water kept would
+ * be the bar pointing at a room you are not in. Nothing lit is the honest
+ * answer: you are somewhere off to the side, and both ways back are one tap.
+ */
 function isOn(to: string, pathname: string) {
   if (to === '/') return pathname === '/'
-  return (
-    pathname.startsWith(to) ||
-    (to === '/memory' && ['/runs', '/import', '/settings'].some((p) => pathname.startsWith(p)))
-  )
+  return pathname.startsWith(to)
 }
 
 // hand-blown, not moulded: the capsule and the lens are each a little off true

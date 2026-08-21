@@ -632,6 +632,32 @@ body.sky-offering .sky-voice { bottom: calc(var(--water-line-up, 86px) + 106px);
   cursor: pointer;
 }
 
+/* What the water keeps, beside Find.
+   Same pill, same corner, one gap to the right — the two of them read as one
+   pair of small doors out of the sky rather than two unrelated controls. It is
+   a link, not a button, so it is the one piece of sky chrome that leaves. */
+.sky-mem {
+  position: fixed;
+  z-index: 6;
+  top: calc(var(--sat) + 14px);
+  left: 50px;
+  width: 30px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgba(15, 22, 32, 0.55);
+  border: 0.5px solid rgba(205, 228, 255, 0.18);
+  color: var(--ink-faint);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .sky-rest {
   position: fixed;
   z-index: 6;
