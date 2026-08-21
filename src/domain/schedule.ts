@@ -11,7 +11,7 @@
 // in here talks to the store, the network or the clock — `today` is passed in —
 // so all of it is testable against a graph somebody wrote by hand.
 import { planOrder, waitingOn } from './plan'
-import { addDays } from './prioritize-prepass'
+import { addDays, todayISO } from './prioritize-prepass'
 import type { Relationship, Thought } from './types'
 
 /**
@@ -103,8 +103,18 @@ export function weeklyCapacity(thoughts: Thought[], today: string): Capacity {
   let earliest: string | null = null
   for (const t of thoughts) {
     if (t.status !== 'done' || !t.completed_at) continue
-    const day = t.completed_at.slice(0, 10)
-    const w = weekOf(day)
+    /*
+     * The day it was where you were, not the day it was in London.
+     *
+     * `completed_at` is written as `new Date().toISOString()`, which is UTC, so
+     * its first ten characters are only your date if you happen to live on the
+     * meridian. In Los Angeles everything ticked after four in the afternoon
+     * carries tomorrow's date — most of a working evening — and a Sunday-night
+     * tick lands in a week that has not started yet, which is the one that
+     * actually skews the number. `todayISO` reads a Date's local fields, which
+     * is the whole of the fix.
+     */
+    const w = weekOf(todayISO(new Date(t.completed_at)))
     // the week in progress is not evidence about a whole week
     if (w >= thisWeek) continue
     per.set(w, (per.get(w) ?? 0) + effortOf(t))
@@ -112,12 +122,27 @@ export function weeklyCapacity(thoughts: Thought[], today: string): Capacity {
   }
   if (!earliest) return { effort: DEFAULT_WEEK, weeksSeen: 0, learned: false }
 
-  // every week from the first one you finished anything in, so a week off counts
-  // as the week off it was rather than vanishing from the record
+  /*
+   * The weeks you actually worked, not every week on the calendar.
+   *
+   * This used to include the empty ones, on the reasoning that a week off is a
+   * fact about you and should count. Measured, that reasoning is wrong in the
+   * one case it matters: finish forty points of work in a burst, take three
+   * weeks off, and the weeks are [40, 0, 0, 0] — whose median is nought, which
+   * the floor turns into **one**. The screen then says "about 1 a week", a day
+   * holds a fifth of that, and everything you own is pushed into "Not yet"
+   * until several more weeks have gone by. A fortnight off does not mean you
+   * can do nothing; it means you did nothing for a fortnight.
+   *
+   * So the estimate is what a working week of yours looks like. A real
+   * slowdown still shows: three quiet weeks at two points each is a median of
+   * two, because those weeks were worked.
+   */
   const weeks: number[] = []
   for (let w = addDays(thisWeek, -7 * WINDOW); w < thisWeek; w = addDays(w, 7)) {
     if (w < earliest) continue
-    weeks.push(per.get(w) ?? 0)
+    const n = per.get(w) ?? 0
+    if (n > 0) weeks.push(n)
   }
   if (weeks.length < TRUST_AFTER) return { effort: DEFAULT_WEEK, weeksSeen: weeks.length, learned: false }
 
@@ -233,8 +258,22 @@ export function placeWork(input: PlaceInput): Placement {
       put(p, wish)
       continue
     }
-    // rule 2 — a deadline, or a deadline already missed
-    if (t.due_date && t.due_date <= addDays(today, horizon)) {
+    /*
+     * Rule 2 — a deadline that has not passed yet.
+     *
+     * Something due Wednesday goes on Wednesday even if Wednesday is full: an
+     * overfull day you can see is a decision, and a deadline quietly pushed past
+     * is the app losing your work for you.
+     *
+     * Something already late has no such claim, and used to get one — every
+     * overdue step collapsed onto the first working day. Measured on a week
+     * where everything had slipped: sixty steps on today, a day load of 180
+     * against a target of 2, and the same page for a person who is one day
+     * behind as for a person who has lost a month. Being late is not a reason to
+     * be told to do it all this morning. They flow through rule 3 like anything
+     * else — first come, capacity respected — and each still says how late it is.
+     */
+    if (t.due_date && t.due_date >= today && t.due_date <= addDays(today, horizon)) {
       const want = t.due_date < floor ? floor : t.due_date
       p.day = want
       put(p, want)

@@ -8,6 +8,8 @@ import { dayOfWeek, effortOf, placeWork, weeklyCapacity, type Placed } from '@/d
 import { goalOf, pursued } from './gather'
 import { pins, pinTo } from './pursue'
 import { doThemAll, offerLine, shortlist, type BatchEvent } from './doAllFlow'
+import { askToOpen } from './handoff'
+import { complete } from '@/features/sky/groupFlow'
 import './roadmap.css'
 
 /*
@@ -271,7 +273,22 @@ function Week({
         <div className="rm-day" key={d.date}>
           <div className="rm-date">
             {humanDate(d.date, today)}
-            <span className="rm-load">{d.items.reduce((n, i) => n + effortOf(i.t), 0)}</span>
+            {/* How full the day is — and whether that number was measured.
+                `effortOf` gives anything nobody sized a middling 2, so a day of
+                two guesses and a day of two weighed steps both read "4" and
+                nothing on the card says which. A tilde is the whole difference
+                between a measurement and an estimate. */}
+            <span
+              className="rm-load"
+              title={
+                d.items.some((i) => typeof i.t.effort !== 'number')
+                  ? 'roughly — some of these have never been sized'
+                  : 'how big this day is'
+              }
+            >
+              {d.items.some((i) => typeof i.t.effort !== 'number') ? '~' : ''}
+              {d.items.reduce((n, i) => n + effortOf(i.t), 0)}
+            </span>
           </div>
           {d.items.map((p) => (
             <Step
@@ -321,9 +338,25 @@ function Step({
   const open = moving === p.t.id
   return (
     <div className={`rm-step${p.blockers.length ? ' waiting' : ''}${p.pinned ? ' pinned' : ''}`}>
+      {/* The end of the loop, and the reason for all of it.
+          It was missing: this is the tab whose whole question is "what am I
+          doing today", and the only way to say you had done it was to remember
+          which group it lived in, go to the other tab, open that group, and
+          find the row. `complete` is the same call the group page makes, so a
+          thing ticked here is ticked everywhere, and undoable the same way. */}
+      <button
+        className="rm-tick"
+        aria-label={`Finished “${nameOf(p.t)}”`}
+        onClick={() => complete(p.t.id)}
+      >
+        <span aria-hidden="true" />
+      </button>
       {/* …and it is a way back to the thing itself. A plan you cannot open is a
-          list of sentences about work rather than the work. */}
-      <Link className="rm-body" to={`/?open=${p.t.id}`}>
+          list of sentences about work rather than the work — which is what this
+          was for two commits: a `to="/?open=<id>"` that the router stripped
+          before the sky could read it. It says which one out loud now, and goes
+          to the sky as an ordinary link. See handoff. */}
+      <Link className="rm-body" to="/" onClick={() => askToOpen(p.t.id)}>
         <div className="rm-line">
           <span className="rm-title">{nameOf(p.t)}</span>
           {r?.dots && (

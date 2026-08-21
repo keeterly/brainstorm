@@ -63,10 +63,30 @@ describe('what is on the roadmap', () => {
 
   it('keeps a step you typed yourself, which has no reason and no size', () => {
     // the absence is how you tell which are yours — it is still a thing you
-    // meant to do, and dropping it would be the roadmap hiding your own work
-    const ts = [th({ id: 'goal', type: 'goal' }), planned('written'), th({ id: 'mine' })]
+    // meant to do, and dropping it would be the roadmap hiding your own work.
+    // `addTo` makes these a `task` for exactly this reason.
+    const ts = [th({ id: 'goal', type: 'goal' }), planned('written'), th({ id: 'mine', type: 'task' })]
     const out = pursued(ts, [partOf('written', 'goal'), partOf('mine', 'goal')])
     expect(out[0].steps.map((s) => s.id).sort()).toEqual(['mine', 'written'])
+  })
+
+  it('does not schedule a thought the app itself says is not a next step', () => {
+    /*
+     * The app says it on every drop's own page — "a note · it will not come up
+     * as a next step" — and the roadmap used to schedule those anyway.
+     * Measured on the demo: Monday was an `idea` jotted down once, Tuesday was
+     * an open `question` whose own page offers to *answer* it, and the properly
+     * written steps sat behind them for the rest of the week.
+     */
+    const ts = [
+      th({ id: 'goal', type: 'goal' }),
+      planned('real'),
+      th({ id: 'slogan', type: 'idea' }),
+      th({ id: 'asking', type: 'question' }),
+      th({ id: 'jotted', type: 'note' }),
+    ]
+    const rels = ['real', 'slogan', 'asking', 'jotted'].map((id) => partOf(id, 'goal'))
+    expect(pursued(ts, rels)[0].steps.map((s) => s.id)).toEqual(['real'])
   })
 
   it('schedules the work inside a sub-group, not the sub-group itself', () => {

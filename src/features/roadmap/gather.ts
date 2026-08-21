@@ -65,21 +65,27 @@ export function pursued(thoughts: Thought[], rels: Relationship[]): Pursued[] {
 }
 
 /**
- * Is this a thing to do, or a thing to look at?
+ * Is this a thing to do?
  *
- * A moodboard lives inside the campaign it is for, and its photographs are
- * leaves of that group exactly like the steps are. They are not work. Measured
- * on the demo world before this existed: four reference photographs took the
- * whole of a week's capacity and pushed every real step past the weekend —
- * a roadmap that books four afternoons to look at pictures you have already
- * seen.
+ * The app already has an answer and says it out loud on every drop's own page:
+ * *"something to do · it can come up as your next step"* against *"a note · it
+ * will not come up as a next step"*, with a tap to change your mind. The rule
+ * behind that sentence is `action` or `task`, and `prioritizePrepass` uses the
+ * same one. So does this, now — because the alternative was the app contradicting
+ * itself between two tabs.
  *
- * Not by `type`: a photograph is a `note`, and so is a step you typed yourself,
- * so the type cannot tell them apart. The picture can. `reference` goes too —
- * a link you saved is material, not an afternoon.
+ * Measured before this: the roadmap's entire Monday was "Letters sealed with
+ * wax", an `idea` somebody jotted down once, and Tuesday was "What feeling
+ * should people leave with?", an open `question` whose own page offers to
+ * *answer* it. Three of the first four days were unprocessed notes, and the
+ * properly written steps sat behind them — while each of those notes' own pages
+ * said, in as many words, that it would not come up as a next step.
+ *
+ * This also settles the photographs, which was the first version of this
+ * function: a moodboard's pictures are `note`s and are not work either. Four of
+ * them once took a whole week's capacity.
  */
-const isWork = (t: Thought): boolean =>
-  t.type !== 'reference' && !(t.extra as Record<string, unknown> | null)?.img
+const isWork = (t: Thought): boolean => t.type === 'action' || t.type === 'task'
 
 /** Everything under a group, however deep, cycle-safe. */
 function descend(root: string, rels: Relationship[], byId: Map<string, Thought>): Thought[] {

@@ -34,6 +34,8 @@ import { fullDepth, sizeUp, type Sizing } from './gaugeFlow'
 import { workFace, type Phase, type WorkState } from './working'
 import { isQuestion } from '@/domain/question'
 import { canAgentDo } from '@/domain/doable'
+import { takeWanted } from '@/features/roadmap/handoff'
+import { addDays, todayISO as localToday } from '@/domain/prioritize-prepass'
 import { effortDots, hasPlan, orderTree, waitingOn } from '@/domain/plan'
 import {
   addTo,
@@ -917,7 +919,20 @@ function mountSky(root: HTMLDivElement) {
     skyWord.classList.remove('on', 'ready')
   }
   const S = () => useGraph.getState()
-  const todayISO = () => new Date().toISOString().slice(0, 10)
+  /*
+   * What day it is where you are.
+   *
+   * This used to be `new Date().toISOString().slice(0, 10)`, which is what day
+   * it is in London. In Los Angeles that means the app believes it is tomorrow
+   * from five in the afternoon: a thing due tomorrow reads "due today", resting
+   * something until tomorrow rests it until the day after, and — since the
+   * roadmap had always used the domain's own local `todayISO` — the two tabs
+   * disagreed about which day it was for seven hours out of every twenty-four.
+   *
+   * `todayISO` from the prepass reads a Date's local fields, and is what every
+   * other date in the app is already measured against.
+   */
+  const todayISO = () => localToday()
   const ex = (t: Thought) => (t.extra ?? {}) as Record<string, unknown>
   const label = (t: Thought) => t.title || t.raw_content
   const answersOf = (t: Thought) => (ex(t).answers as string[] | undefined) ?? []
@@ -2481,7 +2496,8 @@ function mountSky(root: HTMLDivElement) {
     })
   }
   function restDrop(t: Thought) {
-    const until = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+    // …and tomorrow is the day after today where you are, for the same reason
+    const until = addDays(todayISO(), 1)
     /*
      * A group rests WITH what it holds. Snoozing only the goal left its
      * members parentless in the sky — "SS27 is resting" while all six of
@@ -8527,9 +8543,23 @@ function mountSky(root: HTMLDivElement) {
    */
   function openArrivedThought(): boolean {
     if (dead || pageFor) return false
-    const want = new URLSearchParams(location.search).get('open')
+    /*
+     * Two ways to be asked, and they are not the same kind of ask.
+     *
+     * `?open=` is how the world outside gets in — a push notification, a
+     * bookmark, a link somebody sent you — and it arrives on a cold load, where
+     * reading the address bar is exactly right.
+     *
+     * The roadmap is not the world outside. It is the next tab along in a
+     * running app, and the address bar between two tabs belongs to the router:
+     * measured, a step tapped there navigated to `/?open=<id>`, this remounted,
+     * and the query was gone before it got here. So that tab says what it wants
+     * out loud instead. See features/roadmap/handoff.
+     */
+    const spoken = takeWanted()
+    const want = spoken ?? new URLSearchParams(location.search).get('open')
     if (!want) return false
-    history.replaceState(null, '', location.pathname)
+    if (!spoken) history.replaceState(null, '', location.pathname)
     const tl = view.byId.get(want)
     if (!tl) return false
     focusOn(posOf(want))

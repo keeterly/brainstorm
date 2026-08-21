@@ -239,3 +239,38 @@
 @media (prefers-reduced-motion: reduce) {
   .rm-doing-line.busy { animation: none; }
 }
+
+/* Ticking it off, from the tab that asked you to do it.
+   The same disc the group page uses, at the same size a thumb needs — it sits
+   left of the words because that is where the eye starts, and because reaching
+   past the title to finish something is the wrong way round. */
+.rm-tick {
+  position: absolute;
+  left: 2px;
+  top: 7px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.rm-tick span {
+  display: block;
+  width: 19px;
+  height: 19px;
+  margin: 0 auto;
+  border-radius: 50%;
+  border: 1.5px solid var(--ink-faint);
+  transition: border-color 150ms ease, background 150ms ease;
+}
+.rm-tick:active span {
+  border-color: rgba(var(--accent-rgb), 0.9);
+  background: rgba(var(--accent-rgb), 0.22);
+}
+
+/* …and the words move over to make room for it. */
+.rm-step .rm-body {
+  padding-left: 34px;
+}

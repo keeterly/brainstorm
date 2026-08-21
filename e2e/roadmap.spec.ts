@@ -18,6 +18,7 @@ import {
   open,
   openGroup,
   openMember,
+  pageReady,
   primaryVerb,
   rows,
   runVerb,
@@ -157,14 +158,76 @@ describe('a week, out of the plans you already have', () => {
   })
 
   it('is a way back to the thing itself', async () => {
-    // a plan you cannot open is a list of sentences about work rather than work
-    await tap(page, '.rm-step')
-    await page.waitForTimeout(2500)
+    /*
+     * A plan you cannot open is a list of sentences about work rather than the
+     * work — and this check used to assert only that tapping a step landed you
+     * somewhere with bubbles in it, which is true of doing nothing at all. It
+     * passed for two commits while the link was dead: every step pointed at
+     * `/?open=<id>`, the router took the query before the sky could read it,
+     * and you arrived on the Ideas tab looking at the whole sky with no idea
+     * anything had failed. It asks for the page now.
+     */
+    const want = (await slots(page))[0]
+    await tap(page, '.rm-body')
+    const opened = await page
+      .waitForFunction(() => !!document.querySelector('[data-sky="page"].on'), null, { timeout: 12_000 })
+      .then(() => true)
+      .catch(() => false)
+    expect(opened, `tapping “${want.title}” never opened anything`).toBe(true)
+    const heading = await page.evaluate(
+      () => document.querySelector('[data-sky="pageQ"]')?.textContent?.trim() ?? '',
+    )
+    expect(heading, `it opened a page headed “${heading}”`).toMatch(/this thought|this group/i)
+    // …and it is the one you asked for, not merely a page
+    const shown = await page.evaluate(
+      () => (document.querySelector('[data-sky="pageT"]') as HTMLTextAreaElement | null)?.value ?? '',
+    )
+    console.log(`  tapped “${want.title}” → opened “${shown.slice(0, 40)}”`)
+    expect(shown.slice(0, 24), 'it opened a different thought').toBe(want.title.slice(0, 24))
+    // …and it has to have finished arriving before it can be closed: `.on`
+    // lands when the page starts opening, and tapping its × mid-flight misses
+    await pageReady(page).catch(() => undefined)
+    await backToSky(page)
+  }, 120_000)
+
+  it('schedules only things the app itself calls a next step', async () => {
+    /*
+     * Every drop's own page says which it is — "something to do · it can come up
+     * as your next step" against "a note · it will not come up as a next step" —
+     * and the roadmap used to schedule both. Measured on the demo before this:
+     * today was an `idea` somebody jotted down once, Tuesday was an open
+     * `question` whose own page offers to *answer* it, and the properly written
+     * steps sat behind them for the rest of the week.
+     */
+    await goTab(page, /roadmap/i)
+    await page.waitForTimeout(1200)
+    const on = await slots(page)
+    console.log(`  today: “${on.find((s) => /today/i.test(s.day))?.title ?? '(nothing)'}”`)
+    const notWork = on.filter((s) => /^photo$/i.test(s.title) || /\?$/.test(s.title))
     expect(
-      await page.evaluate(() => document.querySelectorAll('.skyb').length > 0),
-      'tapping a step did not land in the sky',
-    ).toBe(true)
-  })
+      notWork.map((s) => s.title),
+      'it scheduled something the app says is not a next step',
+    ).toHaveLength(0)
+  }, 120_000)
+
+  it('lets you tick it off without leaving the tab that asked you to do it', async () => {
+    /*
+     * The end of the loop, and it was not reachable from here. The only way to
+     * say you had done today's thing was to remember which group it lived in,
+     * cross to the other tab, open that group and find the row — on the tab
+     * whose entire question is "what am I doing today".
+     */
+    await goTab(page, /roadmap/i)
+    await page.waitForTimeout(1200)
+    const before = await slots(page)
+    expect(before.length, 'nothing to tick').toBeGreaterThan(0)
+    expect(await tappable(page, '.rm-tick'), 'the tick is not reachable').toBe(true)
+    await tap(page, '.rm-tick')
+    await page.waitForTimeout(1800)
+    const after = await slots(page)
+    console.log(`  ticked “${before[0].title}” — ${before.length} steps became ${after.length}`)
+    expect(after.length, 'ticking it off changed nothing').toBe(before.length - 1)
+  }, 120_000)
 })
 
 describe('the ones you actually chose', () => {
@@ -388,9 +451,13 @@ describe('and the sky agrees with it', () => {
       )
       return
     }
-    expect(bar, 'the sky and the roadmap name different things').toBe(
-      firstToday.title.slice(0, bar.length).replace(/…$/, ''),
-    )
+    // the sky clips a long name at forty and marks the clip; compare what it
+    // actually claims to be showing rather than a slice of the same length
+    const claimed = bar.replace(/…$/, '')
+    expect(
+      firstToday.title.startsWith(claimed) && claimed.length > 8,
+      `the sky says “${bar}”, the roadmap says “${firstToday.title}”`,
+    ).toBe(true)
   }, 120_000)
 
   it('walked both tabs without throwing anything', async () => {

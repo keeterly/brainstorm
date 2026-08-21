@@ -277,7 +277,17 @@ export function complete(id: string): Undone | null {
 export function addTo(groupId: string, text: string): Undone | null {
   const body = text.trim()
   if (!body || !S().thoughts.some((t) => t.id === groupId)) return null
-  const t = S().addThought({ raw_content: body, title: body })
+  /*
+   * A `task`, not a note.
+   *
+   * `addThought` defaults to `note`, and a note is the one thing this app says
+   * will never come up as your next step. Which made typing a row into a plan
+   * the one way to add work that the plan then refused to schedule, refused to
+   * recommend, and told you about only if you opened the row and read the line
+   * under its title. You typed it into a list of things to do; it is a thing to
+   * do.
+   */
+  const t = S().addThought({ raw_content: body, title: body, type: 'task' })
   S().addRelationship(t.id, groupId, 'part_of')
   return {
     note: `“${label(t)}” is in there now`,

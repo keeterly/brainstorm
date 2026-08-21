@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_WEEK, dayOfWeek, effortOf, placeWork, weekOf, weeklyCapacity, type Capacity } from './schedule'
+import { addDays } from './prioritize-prepass'
 import type { Relationship, Thought } from './types'
 
 let n = 0
@@ -83,10 +84,33 @@ describe('how much a week holds', () => {
     expect(weeklyCapacity(done, MON).effort).toBe(4)
   })
 
-  it('counts a week you took off as the week off it was', () => {
-    const done = [finished('a', '2026-02-09', 6), finished('b', '2026-02-23', 6)]
-    // 2026-02-16 is empty and sits between two working weeks
-    expect(weeklyCapacity(done, MON).effort).toBeLessThan(6)
+  it('is not erased by time off', () => {
+    /*
+     * It used to be. Empty weeks counted as evidence of zero capacity, so a
+     * burst of work followed by three quiet weeks read as [40, 0, 0, 0], whose
+     * median is nought and whose floor is **one** — "about 1 a week" on screen,
+     * a day holding a fifth of that, and everything you own pushed into "Not
+     * yet". A fortnight off does not mean you can do nothing.
+     *
+     * (An earlier version of this test asserted the opposite and passed for a
+     * reason that had nothing to do with weeks off: `effortOf` clamps a step to
+     * 5, so two sixes were already two fives. A test that agrees with the code
+     * by accident is worse than no test.)
+     */
+    const burst = Array.from({ length: 8 }, (_, i) => finished(`x${i}`, '2026-02-02', 5))
+    const after = weeklyCapacity(burst, MON)
+    expect(after.effort, 'three weeks off erased what one week proved').toBeGreaterThan(1)
+    // …and with only one week actually worked it says it is still guessing
+    expect(after.learned).toBe(false)
+  })
+
+  it('still comes down for a real slowdown, which is not the same thing', () => {
+    // three weeks worked, all of them quiet — that is a fact about the weeks,
+    // not a gap between them
+    const quiet = ['2026-02-09', '2026-02-16', '2026-02-23'].map((w, i) => finished(`q${i}`, w, 2))
+    const cap = weeklyCapacity(quiet, MON)
+    expect(cap.learned).toBe(true)
+    expect(cap.effort).toBe(2)
   })
 
   it('gives a hand-typed step a size rather than counting it as nothing', () => {
@@ -132,6 +156,27 @@ describe('putting the work on days', () => {
     ]
     const out = placeWork({ steps, rels: [], capacity: cap(2), today: MON })
     expect(out.days.find((d) => d.date === MON)?.items.some((i) => i.t.id === 'due')).toBe(true)
+  })
+
+  it('does not put a whole month of missed deadlines on one morning', () => {
+    /*
+     * A deadline that has not passed beats capacity, because an overfull day you
+     * can see is a decision. A deadline that has already gone has no such claim,
+     * and used to get one: every overdue step collapsed onto the first working
+     * day. Measured on a week where everything had slipped — sixty steps on
+     * today, a day load of 180 against a target of 2, and the same screen for
+     * somebody one day behind as for somebody who has lost a month.
+     */
+    const late = Array.from({ length: 30 }, (_, i) =>
+      step({ id: `late${i}`, effort: 2, due_date: addDays(MON, -(i + 1)) }),
+    )
+    const out = placeWork({ steps: late, rels: [], capacity: cap(10), today: MON })
+    const onToday = out.days.find((d) => d.date === MON)?.items.length ?? 0
+    expect(onToday, `${onToday} overdue things were put on one morning`).toBeLessThan(6)
+    // …and none of them is lost, and every one still says it is late
+    const all = out.days.flatMap((d) => d.items)
+    expect(all.length + out.later.length).toBe(30)
+    expect(all.every((p) => p.late)).toBe(true)
   })
 
   it('brings something already late to today, and says that it is', () => {
