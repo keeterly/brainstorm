@@ -21,6 +21,7 @@ import { applyAnswer, answerThought } from './answerFlow'
 import { applyDraft, draftThought } from './draftFlow'
 import { rainThought } from './rainFlow'
 import { firstToday } from '@/features/roadmap/firstToday'
+import { isPursuing, setPursuing } from '@/features/roadmap/pursue'
 import { curtainLifted, markSkyReady, whenCurtainLifts } from './ready'
 import { TINT_NAMES, tintOf, tintRGB, type TintName } from './tints'
 import { handOver, shareText, shareTitle } from './share'
@@ -31,7 +32,8 @@ import { closeGoal, evaporateGoal } from './finishFlow'
 import { emptiedGroup, wouldCircle } from '@/domain/finished'
 import { fullDepth, sizeUp, type Sizing } from './gaugeFlow'
 import { workFace, type Phase, type WorkState } from './working'
-import { isMakeable, isQuestion } from '@/domain/question'
+import { isQuestion } from '@/domain/question'
+import { canAgentDo } from '@/domain/doable'
 import { effortDots, hasPlan, orderTree, waitingOn } from '@/domain/plan'
 import {
   addTo,
@@ -3620,6 +3622,8 @@ function mountSky(root: HTMLDivElement) {
       const kin = kinOf(tl)
       // what "get on with it" means for this particular thing — see getOnWithIt
       const onWith = getOnWithIt(tl)
+      // whether this one is on the roadmap — see the pursue button below
+      const doing = isPursuing(tl.t)
       /*
        * What the app decided this is, and one tap to disagree.
        *
@@ -3767,6 +3771,22 @@ function mountSky(root: HTMLDivElement) {
         `<button class="ctl d go" data-act="onwith"${onWith.dim ? ' disabled' : ''}>${esc(sentence(onWith.lb))}</button>` +
         `<button class="ctl d" data-act="ask">Ask about this</button>` +
         `<button class="ctl d" data-act="say">Add what you know</button>` +
+        /*
+         * …and whether you are actually going to do it.
+         *
+         * The one thing the roadmap needs that the graph could not already
+         * answer. A group having a plan means somebody asked what it would take;
+         * it does not mean you have decided to spend a week on it, and half the
+         * value of the second tab is that what is on it is what you chose.
+         *
+         * Only on a group, because a single step is not a thing you take up —
+         * it is part of something you already did.
+         */
+        (tl.kind === 'pool'
+          ? `<button class="ctl d${doing ? ' on' : ''}" data-act="pursue">${
+              doing ? 'Stop working on this' : 'I am working on this'
+            }</button>`
+          : '') +
         `</div>` +
         `<div class="danger">` +
         (hasBrief ? `<button class="ctl d" data-act="brief">Read what it brought back</button>` : '') +
@@ -3824,6 +3844,16 @@ function mountSky(root: HTMLDivElement) {
         e.stopPropagation()
         closePage(true)
         onWith.run()
+      })
+      pageA.querySelector('[data-act="pursue"]')?.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const u = setPursuing(tl.t.id, !isPursuing(tl.t))
+        if (!u) return
+        haptics.grab()
+        landUndo(u)
+        // repainted in place rather than closed: taking something up is not a
+        // reason to lose your place in the list you were reading
+        openPage('open', tl, ox, oy)
       })
       pageA.querySelector('[data-act="ask"]')?.addEventListener('click', (e) => {
         e.stopPropagation()
@@ -5801,13 +5831,11 @@ function mountSky(root: HTMLDivElement) {
      * The fallback is the same list, unchanged, for the two cases with no
      * answer: a step you typed yourself, and every step written before this.
      */
-    const said = ex(tl.t).canDraft
-    const makeable = typeof said === 'boolean' ? said : isMakeable(label(tl.t))
-    const doable =
-      tl.kind === 'drop' &&
-      !tl.members.length &&
-      makeable &&
-      !!S().relationships.find((r) => r.type === 'part_of' && r.from_id === tl.t.id)
+    // …and the rule itself lives in `domain/doable` now, because the roadmap
+    // asks it too — of a whole week at once, to say how much of it the agent
+    // could take off your hands. Two copies of this would mean the app offering
+    // to write something on one screen and refusing to on the other.
+    const doable = tl.kind === 'drop' && !tl.members.length && canAgentDo(tl.t, S().relationships, label)
     // …and once it has been made, the thing to do with it is read it. Keyed on
     // the stamp the draft leaves rather than on there being a brief at all: a
     // question you asked *about* this step also leaves one, and that is not the

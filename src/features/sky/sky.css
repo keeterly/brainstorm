@@ -1842,6 +1842,21 @@ body.sky-dragging .sky-undo.show {
 }
 .sky-page .pans .ctl:active::before { opacity: 0; }
 
+/* A control that is currently true.
+   The pursue toggle is the first of these on this page: every other button
+   here does a thing and returns to rest, and this one holds a state. Lit in the
+   accent rather than filled like :active, because :active means "your finger is
+   on it right now" and these two must not read the same. The rim goes, so the
+   colour is the whole signal. */
+.sky-page .pans .ctl.on {
+  background: rgba(var(--accent-rgb), 0.16);
+  color: var(--paper-ink, #3d4b5c);
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--accent-rgb), 0.42),
+    0 3px 10px rgba(var(--ctl-ink), 0.09);
+}
+.sky-page .pans .ctl.on::before { opacity: 0; }
+
 /* Being asked, rather than asking.
    The same page and the same box; what changes is who is waiting on whom. Your
    own reply is a sentence at most — the readings below do the rest — so the

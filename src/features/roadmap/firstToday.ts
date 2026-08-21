@@ -15,6 +15,7 @@ import { nextAction } from '@/domain/next-action'
 import { placeWork, weeklyCapacity } from '@/domain/schedule'
 import type { Relationship, Thought } from '@/domain/types'
 import { pursued } from './gather'
+import { pins } from './pursue'
 
 export interface Suggestion {
   thought: Thought
@@ -37,11 +38,21 @@ export function firstToday(
 ): Suggestion | null {
   const steps = pursued(thoughts, rels).flatMap((g) => g.steps)
   if (steps.length) {
+    /*
+     * …with the days you moved things to.
+     *
+     * Left out, this computed a different week from the one the roadmap draws:
+     * the roadmap honoured a pin and the sky did not, so a step moved to
+     * Thursday went on being announced as the first thing today. Two answers to
+     * one question, which is the whole thing the bar gave up its own opinion to
+     * avoid — caught by the check that reads both.
+     */
     const placement = placeWork({
       steps,
       rels,
       capacity: weeklyCapacity(thoughts, today),
       today,
+      pinned: pins(thoughts),
     })
     const first = placement.days[0]
     // …only if the first day with anything on it is actually today. A bar that

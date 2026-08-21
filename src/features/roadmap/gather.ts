@@ -7,12 +7,15 @@
 // within a week. See the note over `roadmaps` in `store/graph.ts`.
 import { hasPlan } from '@/domain/plan'
 import type { Relationship, Thought } from '@/domain/types'
+import { isPursuing } from './pursue'
 
 /** A group whose contents the agent has actually planned. */
 export interface Pursued {
   goal: Thought
   /** the leaves — the things you would tick, not the groups holding them */
   steps: Thought[]
+  /** you said you were doing this one, rather than it merely having a plan */
+  chosen: boolean
 }
 
 const kidsOf = (id: string, rels: Relationship[]) =>
@@ -43,9 +46,22 @@ export function pursued(thoughts: Thought[], rels: Relationship[]): Pursued[] {
     const steps = inside
       .filter((m) => !kidsOf(m.id, rels).some((k) => byId.get(k)?.status === 'open'))
       .filter(isWork)
-    if (steps.length) out.push({ goal: t, steps })
+    if (steps.length) out.push({ goal: t, steps, chosen: isPursuing(t) })
   }
-  return out
+  /*
+   * What you said you were doing, if you have said.
+   *
+   * A group is on the roadmap because you decided to do it, not because it
+   * happens to have been planned — half the value of a second tab is that the
+   * things on it are the things you actually chose.
+   *
+   * But an empty screen is a worse teacher than a full one. Until anything has
+   * been taken up, this shows everything with a plan in it and the page says so:
+   * here is what you could be doing, mark the ones you are. The moment you mark
+   * one, it narrows to what you marked.
+   */
+  const chosen = out.filter((g) => g.chosen)
+  return chosen.length ? chosen : out
 }
 
 /**

@@ -1962,7 +1962,11 @@ describe('one tap, and where it lands is what it means', () => {
   it('runs what the discs ran, from the page', () => {
     const at = page.indexOf(`pageA.querySelector('[data-act="onwith"]')`)
     expect(at).toBeGreaterThan(-1)
-    const body = page.slice(at, at + 900)
+    // A window rather than a count of lines: the acts row has since grown a
+    // fourth button — whether you are working on this one — and a slice sized
+    // to exactly the three it had failed on the day a fourth arrived, which is
+    // a pin firing on its own arithmetic rather than on the thing it guards.
+    const body = page.slice(at, at + 1800)
     expect(body).toMatch(/onWith\.run\(\)/)
     expect(body).toMatch(/openPage\('ask', tl,/)
     expect(body).toMatch(/openPage\('say', tl,/)
@@ -2160,15 +2164,18 @@ describe('what the app can do for you, decided by the thing that wrote it', () =
   })
 
   it('prefers it to guessing, and still guesses when there is nothing to prefer', () => {
-    // a step you typed yourself never went past a model, and neither did any
-    // step written before this
-    const at = page.indexOf('const said = ex(tl.t).canDraft')
-    expect(at).toBeGreaterThan(-1)
-    expect(page.slice(at, at + 200)).toMatch(
-      /const makeable = typeof said === 'boolean' \? said : isMakeable\(label\(tl\.t\)\)/,
-    )
-    // the verb list is not lengthened — a longer list of verbs is the same
-    // brittle thing further along
+    /*
+     * The rule moved out of the sky and into `domain/doable`, because the
+     * roadmap asks it too — of a whole week at once, to say how much of it the
+     * agent could take on. It is a real function with its own tests now
+     * (`doable.test.ts`), so this guards the two things a unit test cannot: that
+     * it still prefers the model's own answer, and that the verb list behind the
+     * fallback is not quietly being lengthened. A longer list of verbs is the
+     * same brittle thing further along.
+     */
+    const d = readFileSync(join('src/domain', 'doable.ts'), 'utf8')
+    expect(d).toMatch(/const said = ex\(t\)\.canDraft/)
+    expect(d).toMatch(/typeof said === 'boolean' \? said : isMakeable\(nameOf\(t\)\)/)
     const q = readFileSync(join('src/domain', 'question.ts'), 'utf8')
     expect(q).toMatch(/const MAKEABLE = \[/)
     expect(q.slice(q.indexOf('const MAKEABLE = ['), q.indexOf('const MAKEABLE = [') + 400)).toMatch(/'draft',/)
@@ -2177,10 +2184,27 @@ describe('what the app can do for you, decided by the thing that wrote it', () =
   it('still needs the other three things to be true', () => {
     // a leaf, under something, and a drop — the model saying it could write a
     // thing is not a reason to offer to write a goal
-    const at = page.indexOf('const doable =')
-    const body = page.slice(at, at + 260)
-    expect(body).toMatch(/tl\.kind === 'drop'/)
-    expect(body).toMatch(/!tl\.members\.length/)
-    expect(body).toMatch(/r\.type === 'part_of' && r\.from_id === tl\.t\.id/)
+    const d = readFileSync(join('src/domain', 'doable.ts'), 'utf8')
+    expect(d, 'a thing with work under it is a goal, and goals get planned').toMatch(
+      /r\.type === 'part_of' && r\.to_id === t\.id/,
+    )
+    expect(d, 'a leaf at the top of the sky is a loose idea').toMatch(
+      /r\.type === 'part_of' && r\.from_id === t\.id/,
+    )
+  })
+
+  it('is asked once, in one place, by both surfaces', () => {
+    /*
+     * The reason it moved. If the sky and the roadmap each carried their own
+     * copy, the app could offer to write something on one screen and refuse to
+     * on the other — and neither would be wrong about itself.
+     */
+    expect(page, 'the sky reimplements the rule instead of asking for it').toMatch(
+      /canAgentDo\(tl\.t, S\(\)\.relationships, label\)/,
+    )
+    const batch = readFileSync(join('src/features/roadmap', 'doAllFlow.ts'), 'utf8')
+    expect(batch, 'the batch reimplements the rule instead of asking for it').toMatch(
+      /canAgentDo\(t, rels, nameOf\)/,
+    )
   })
 })

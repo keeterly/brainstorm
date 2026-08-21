@@ -4,6 +4,11 @@
    and the work has to be scannable at arm's length while you decide whether to
    start. */
 
+.roadmap .rm-all {
+  font-size: var(--fs-label);
+  margin: -4px 0 10px;
+}
+
 .roadmap .rm-cap {
   font-size: var(--fs-label);
   margin: -4px 0 16px;
@@ -50,16 +55,78 @@
 }
 
 .rm-step {
-  display: block;
-  text-decoration: none;
-  color: inherit;
+  position: relative;
   padding: 8px 10px;
   margin: 0 -10px;
   border-radius: var(--r-sm);
+}
+
+/* The way into the thing. It takes the whole row except the handle's corner,
+   so the easy tap is the common one. */
+.rm-body {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  padding-right: 26px;
   -webkit-tap-highlight-color: transparent;
 }
-.rm-step:active {
-  background: rgba(var(--accent-rgb), 0.08);
+.rm-body:active {
+  opacity: 0.6;
+}
+
+/* Moving it. Quiet until you look for it, and filled once the day is yours
+   rather than the app's — the difference between a suggestion and a decision. */
+.rm-move {
+  position: absolute;
+  top: 6px;
+  right: 2px;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  background: none;
+  color: var(--ink-faint);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.rm-step.pinned .rm-move {
+  color: rgba(var(--accent-rgb), 0.8);
+}
+
+/* A fortnight of working days, scrolling sideways. Sideways because a grid of
+   dates is a calendar, and a calendar is a second thing to learn. */
+.rm-days {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  padding-bottom: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.rm-days::-webkit-scrollbar {
+  display: none;
+}
+.rm-chip {
+  flex: 0 0 auto;
+  border: 0.5px solid var(--glass-line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink-soft);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: var(--fs-caption);
+  font-family: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.rm-chip.on {
+  background: rgba(var(--accent-rgb), 0.18);
+  border-color: rgba(var(--accent-rgb), 0.4);
+  color: var(--ink);
+}
+.rm-chip.loose {
+  color: var(--ink-faint);
 }
 
 .rm-line {
@@ -124,4 +191,51 @@
 }
 .roadmap .rm-later .rm-step {
   opacity: 0.72;
+}
+
+/* The agent offering to do a piece of the week.
+   It sits above the days because it is about all of them, and it is the one
+   card here that acts rather than reports — so it is allowed a little more
+   presence than the rest, and not a lot more. */
+.roadmap .rm-doing {
+  margin-bottom: 16px;
+  border-color: rgba(var(--accent-rgb), 0.22);
+}
+
+.rm-doing-line {
+  font-size: var(--fs-body);
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+/* While it works. The same breathing the sky uses when it is thinking, because
+   it is the same agent doing the same kind of work. */
+.rm-doing-line.busy {
+  color: rgba(var(--accent-rgb), 0.9);
+  animation: rm-breathe 2.4s ease-in-out infinite;
+}
+@keyframes rm-breathe {
+  0%, 100% { opacity: 0.62; }
+  50% { opacity: 1; }
+}
+
+.roadmap .rm-doing .rm-sub {
+  margin-top: 6px;
+  margin-bottom: 0;
+}
+
+.rm-go {
+  margin-top: 12px;
+}
+
+/* The promise underneath the button, in the smallest type on the page: it
+   outlives the app being closed, and it does not tick anything off for you. */
+.rm-fine {
+  font-size: var(--fs-caption);
+  margin-top: 8px;
+  line-height: 1.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rm-doing-line.busy { animation: none; }
 }

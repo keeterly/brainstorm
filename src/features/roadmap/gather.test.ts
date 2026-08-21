@@ -95,6 +95,30 @@ describe('what is on the roadmap', () => {
     expect(Array.isArray(out)).toBe(true)
   })
 
+  it('narrows to what you said you were doing, once you have said', () => {
+    /*
+     * Half the point of a second tab is that the things on it are the things you
+     * chose, rather than everything that happens to have been planned.
+     */
+    const ts = [
+      th({ id: 'doing', type: 'goal', extra: { pursuing_since: '2026-03-01T09:00:00.000Z' } }),
+      planned('a'),
+      th({ id: 'idle', type: 'goal' }),
+      planned('b'),
+    ]
+    const out = pursued(ts, [partOf('a', 'doing'), partOf('b', 'idle')])
+    expect(out.map((g) => g.goal.id)).toEqual(['doing'])
+  })
+
+  it('shows everything planned until you have chosen anything at all', () => {
+    // an empty screen is a worse teacher than a full one — the page says what
+    // it is showing and what to do about it
+    const ts = [th({ id: 'g1', type: 'goal' }), planned('a'), th({ id: 'g2', type: 'goal' }), planned('b')]
+    const out = pursued(ts, [partOf('a', 'g1'), partOf('b', 'g2')])
+    expect(out).toHaveLength(2)
+    expect(out.every((g) => !g.chosen)).toBe(true)
+  })
+
   it('says which idea a step came out of', () => {
     const ts = [th({ id: 'goal', type: 'goal' }), th({ id: 'sub', type: 'goal' }), planned('leaf')]
     const rels = [partOf('sub', 'goal'), partOf('leaf', 'sub')]
