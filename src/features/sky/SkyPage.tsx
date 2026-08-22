@@ -216,16 +216,24 @@ export default function SkyPage() {
             <button className="tool" data-sky="pageSend" aria-label="Send this">
               <Ico d="M12 16.4V4.2M7.6 8.6 12 4.2l4.4 4.4M4.6 14.6v3.4a1.8 1.8 0 0 0 1.8 1.8h11.2a1.8 1.8 0 0 0 1.8-1.8v-3.4" />
             </button>
-            {/* A crescent moon, not a cloud. This wore a cloud while "make
-                the steps" wears a storm cloud, and a playtester rested her
-                whole campaign believing she was asking for steps — a
-                destructive-adjacent verb must not share a glyph family with
-                a generative one. Sleep looks like sleep. */}
-            <button className="tool" data-sky="pageLater" aria-label="Let it rest until tomorrow">
-              <Ico d="M19.2 14.6A7.6 7.6 0 0 1 9.4 4.8a7.6 7.6 0 1 0 9.8 9.8Z" />
-            </button>
             <span className="note" data-sky="pageN" />
           </div>
+          {/* A crescent moon, and now words to go with it.
+              It wore a cloud once, while "make the steps" wears a storm cloud,
+              and a playtester rested her whole campaign believing she was
+              asking for steps — a destructive-adjacent verb must not share a
+              glyph family with a generative one. Sleep looks like sleep.
+
+              But it was still a bare glyph in a row of four other bare glyphs,
+              and it is the only one here that acts on the whole household
+              rather than on the one thing you are looking at. It has the slot
+              the Done pill used to hold — which was free, because that pill
+              only ever closed a page the × already closes. Quiet, not black:
+              this is a thing you can do, not the thing to do. */}
+          <button className="later" data-sky="pageLater">
+            <Ico d="M19.2 14.6A7.6 7.6 0 0 1 9.4 4.8a7.6 7.6 0 1 0 9.8 9.8Z" />
+            <span>Rest until tomorrow</span>
+          </button>
           <button className="done" data-sky="pageD">
             Done
           </button>
@@ -3389,8 +3397,26 @@ function mountSky(root: HTMLDivElement) {
     // …and the ask page, when it is the agent's turn. Set in the branch below,
     // cleared here so it cannot survive into a page that is not one.
     page.classList.remove('asked')
-    pageD.textContent =
-      mode === 'like'
+    /*
+     * Two controls, one action, and the loud one was the empty one.
+     *
+     * On a group's page the black pill and the × in the corner ran the same
+     * code: closePage() tears down identically either way, every field having
+     * already committed on blur — the page says so itself a few lines down.
+     * All the commit flag reached was a second rename() that rename() itself
+     * no-ops. So the most emphasised control on the page did nothing that the
+     * close button an inch away did not, while a screen reader heard "Done,
+     * button" over a list of rows each of which announced "Done, checkbox".
+     *
+     * It is gone here, and only here. Every other mode's pill is a real word
+     * for a real difference — 'Keep it' writes a thought, 'Ask' sends one —
+     * and those stay.
+     */
+    const noDone = mode === 'open'
+    pageD.hidden = noDone
+    pageD.textContent = noDone
+      ? ''
+      : mode === 'like'
         ? 'Done looking'
         : mode === 'brief'
         ? 'Done reading'
@@ -3586,7 +3612,31 @@ function mountSky(root: HTMLDivElement) {
       // Nothing here has a Save. Every field commits when you leave it, because
       // the × sits an inch from the name box and a page that loses your typing
       // when you close it the obvious way is a page that does not work.
-      pageQ.textContent = tl.kind === 'pool' ? 'This group' : 'This thought'
+      /*
+       * Where you are, rather than what kind of thing you are looking at.
+       *
+       * This said "This group" — the same three words over every group in the
+       * app, on the one line whose job is to tell you which one you opened.
+       * The thing's own name is in the field below, but that field is an
+       * editable box with a "Name it" placeholder, so it reads as somewhere to
+       * type rather than as a title.
+       *
+       * The chain is already there: `view.parentOf` is live, and `clearAll`
+       * walks it every time you back out one level. Two ancestors is as far as
+       * it goes — a phone header is not a filesystem — and at the root there
+       * is nothing above you, so it falls back to what it always said.
+       */
+      const up: string[] = []
+      for (let a = view.parentOf.get(tl.t.id); a && up.length < 2; a = view.parentOf.get(a)) {
+        const at = view.byId.get(a)
+        if (!at) break
+        up.unshift(trim(label(at.t), 22))
+      }
+      pageQ.textContent = up.length
+        ? up.join(' › ') + ' ›'
+        : tl.kind === 'pool'
+          ? 'This group'
+          : 'This thought'
       pageT.value = label(tl.t)
       asking('Name it')
       nameFor = tl.t.id
@@ -3617,11 +3667,20 @@ function mountSky(root: HTMLDivElement) {
       const inside = branches.map((b) => b.t)
       // …but the tally counts what the group itself holds, so the words under
       // the name agree with the number on the bubble out in the sky
-      const held = () => membersOf(tl.t.id, true).length
-      const done = () => inside.filter((m) => S().thoughts.find((t) => t.id === m.id)?.status === 'done').length
+      const held = () => membersOf(tl.t.id, true)
+      /*
+       * Both halves of one sentence, counted the same way.
+       *
+       * They were not. `held` counts what the group directly holds — which is
+       * deliberate, so the words agree with the number on the bubble out in
+       * the sky — while `done` counted every descendant the list walks. On a
+       * plan two levels deep that is a footer reading "6 inside · 9 done",
+       * which is not a hard number to hit and is nonsense when you do.
+       */
+      const done = () => held().filter((m) => S().thoughts.find((t) => t.id === m.id)?.status === 'done').length
       const tally = () => {
         const d = done()
-        const n = held()
+        const n = held().length
         pageN.textContent = !n ? 'nothing inside it yet' : d ? `${n} inside · ${d} done` : `${n} inside`
       }
       tally()
@@ -3687,6 +3746,16 @@ function mountSky(root: HTMLDivElement) {
         readLine +
         (inside.length
           ? `<div class="lab head"><span>${planned ? 'the plan' : 'what is inside'}</span>` +
+            // Folding the finished work away entirely.
+            //
+            // Collapsing each done row to a line got most of the way there,
+            // but a plan you have half finished is still half a page of grey
+            // lines above the thing you were coming here to do. This is the
+            // rest of the way: one control, the count it hides, and the count
+            // it brings back. It only exists when there is something to hide,
+            // and the rows are hidden rather than dropped, so un-ticking and
+            // re-reading are both still one tap.
+            `<button class="ctl fin" hidden></button>` +
             `<button class="ctl sel">Select</button></div>` +
             branches
               .map(
@@ -3897,6 +3966,24 @@ function mountSky(root: HTMLDivElement) {
       // become squares, because a mode you cannot see is a trap.
       let picking = false
       const picked = new Set<string>()
+      /**
+       * What one round control on the left of a row is called, out loud.
+       *
+       * Three states, because the control genuinely has three meanings and the
+       * page has always relied on you being able to see which. A blind user
+       * could not, and heard "Done" for all of them.
+       */
+      const nameTick = (el: HTMLButtonElement) => {
+        const n = el.dataset.name ?? 'this'
+        el.setAttribute(
+          'aria-label',
+          picking
+            ? `Choose “${n}”`
+            : el.closest('.row')?.classList.contains('ticked')
+              ? `Finished “${n}” — tap to reopen it`
+              : `Finish “${n}”`,
+        )
+      }
       const selBtn = pageA.querySelector('.sel') as HTMLButtonElement | null
       const pickedBar = pageA.querySelector('.picked') as HTMLDivElement
       const groupBtn = pickedBar.querySelector('.go') as HTMLButtonElement
@@ -3913,7 +4000,40 @@ function mountSky(root: HTMLDivElement) {
         // picks, which is exactly what cancelling means, and the short word
         // keeps the header a header rather than a slab.
         if (selBtn) selBtn.textContent = picking ? 'Cancel' : 'Select'
+        for (const t of [...pageA.querySelectorAll('.tick')]) nameTick(t as HTMLButtonElement)
+        refreshFin()
       }
+      /*
+       * How many are finished, and whether you are looking at them.
+       *
+       * Recomputed rather than remembered: rows are ticked and un-ticked under
+       * this, and a count held in a variable would be wrong by one from the
+       * first tap. Hidden outright when nothing is finished — a control
+       * offering to hide nought rows is noise.
+       *
+       * While `picking` is on it stands down: choosing rows you cannot see is
+       * how you put away something you did not mean to.
+       */
+      const finBtn = pageA.querySelector('.ctl.fin') as HTMLButtonElement | null
+      let hidingDone = false
+      const refreshFin = () => {
+        if (!finBtn) return
+        const n = [...pageA.querySelectorAll('.row.ticked')].length
+        finBtn.hidden = !n || picking
+        if (picking) hidingDone = false
+        pageA.classList.toggle('nodone', hidingDone && !picking)
+        finBtn.textContent = hidingDone ? `show ${n} done` : `hide ${n} done`
+        finBtn.setAttribute('aria-pressed', String(hidingDone))
+      }
+      finBtn?.addEventListener('click', (e) => {
+        e.stopPropagation()
+        hidingDone = !hidingDone
+        refreshFin()
+      })
+      // …and its first count is taken after the rows are drawn, not here: the
+      // .ticked class each row starts with is applied down in the wiring loop,
+      // so asking now would always answer nought and the control would never
+      // appear on a page that opened with finished work already in it.
       selBtn?.addEventListener('click', (e) => {
         e.stopPropagation()
         picking = !picking
@@ -3960,10 +4080,14 @@ function mountSky(root: HTMLDivElement) {
             if (full) openPhoto(full, label(m))
           })
         }
-        // as tall as what it holds, measured rather than guessed
+        // As tall as what it holds, measured rather than guessed — unless it is
+        // finished, in which case it is one line and the stylesheet says how
+        // tall that is. Written this way rather than with an !important in the
+        // CSS: the inline height set here is what a rule would have to fight,
+        // and a fight is harder to read than a condition.
         const fit = () => {
           field.style.height = 'auto'
-          field.style.height = field.scrollHeight + 'px'
+          field.style.height = row.classList.contains('ticked') ? '' : field.scrollHeight + 'px'
         }
         field.addEventListener('input', fit)
         requestAnimationFrame(fit)
@@ -3991,6 +4115,16 @@ function mountSky(root: HTMLDivElement) {
           effortEl.textContent = dots
           effortEl.setAttribute('aria-label', `${dots.length} of 5 for size`)
           effortEl.title = 'how big a piece of work this is'
+        } else if (planned) {
+          // Nobody sized this one, and the roadmap counts it as two anyway.
+          // It used to show nothing at all here, which read as "this is free"
+          // — and made the day totals over on the other tab impossible to
+          // reconcile against the rows they were totals of. Hollow marks: the
+          // same two, drawn as the guess they are.
+          effortEl.textContent = '◦◦'
+          effortEl.classList.add('guessed')
+          effortEl.setAttribute('aria-label', 'never sized — counted as 2')
+          effortEl.title = 'nobody has sized this; the week counts it as 2'
         } else effortEl.remove()
 
         // Named, not merely marked. "Waiting" tells you to skip it; the name
@@ -4034,6 +4168,21 @@ function mountSky(root: HTMLDivElement) {
           }
         })
         const tick = row.querySelector('.tick') as HTMLButtonElement
+        /*
+         * What a screen reader hears when it lands on this.
+         *
+         * It was the bare word "Done", on every row, on a page that also had a
+         * button called "Done" at the bottom — so a list of nine steps
+         * announced ten identical controls with two unrelated meanings between
+         * them. The bottom one is gone now; this one says which thing it
+         * finishes, exactly as the roadmap's tick already does.
+         *
+         * The title is kept on the element because the same control means
+         * "choose this one" while `picking` is on, and refreshPicked has to be
+         * able to rename every tick without knowing what any row holds.
+         */
+        tick.dataset.name = trim(label(m), 40)
+        nameTick(tick)
         tick.addEventListener('click', (e) => {
           e.stopPropagation()
           if (picking) {
@@ -4051,7 +4200,12 @@ function mountSky(root: HTMLDivElement) {
           const nowDone = S().thoughts.find((t) => t.id === m.id)?.status === 'done'
           tick.setAttribute('aria-checked', String(nowDone))
           row.classList.toggle('ticked', nowDone)
+          nameTick(tick)
+          // one line, or back to its full height — measured after the class
+          // flips, because that is what the measurement now depends on
+          fit()
           settle(row as HTMLDivElement, nowDone)
+          refreshFin()
           tally()
           // whatever was waiting on this one is not waiting any more
           refreshWaits()
@@ -4103,6 +4257,7 @@ function mountSky(root: HTMLDivElement) {
         }
       }
       refreshWaits()
+      refreshFin()
 
       // Something new, straight in. Closing the page, finding the sky, holding
       // it, writing and dragging the result back is five moves for one thought.
@@ -4459,6 +4614,17 @@ function mountSky(root: HTMLDivElement) {
     // page have nothing yet; a brief is the whole point of this button.
     pageSend.classList.toggle('show', mode === 'brief' && !!tl && !!briefOf(tl.t.id))
     pageLater.classList.toggle('show', mode === 'open')
+    /*
+     * Which page this is, and what it is about, in the DOM.
+     *
+     * `.on` cannot tell a page that has just arrived from one that was already
+     * up, so the checks used to read the heading and look for the words "this
+     * group" — which worked only for as long as the heading was a constant.
+     * It is a breadcrumb now. Identity belongs in an attribute rather than in
+     * a sentence meant for a person to read.
+     */
+    page.dataset.mode = mode
+    page.dataset.for = tl?.t.id ?? ''
     page.classList.add('show')
     // the strip of screen below the glass turns to paper with the page — see
     // .world-hem, which is document content and so is not covered by anything
@@ -4931,28 +5097,61 @@ function mountSky(root: HTMLDivElement) {
     const before = new Map(rows().map((r) => [r, r.offsetTop]))
 
     const all = rows()
-    // Sinking to the foot of the list is only the right answer for a row that
-    // stands on its own. A nested one belongs to a branch — sending it to the
-    // bottom would carry it out from under its own parent and leave any
-    // children of its own stranded behind it, at an indent that now means
-    // nothing. It strikes through where it is instead, and `branchesOf` puts it
-    // at the end of its own siblings the next time the page is drawn.
+    /*
+     * To the end of its own siblings, not to the end of the page.
+     *
+     * This used to give up entirely on anything nested — `depth > 0` returned,
+     * and so did a row with children — for a good reason: sending a nested row
+     * to the foot of the list carries it out from under its own parent and
+     * strands its children behind it, at an indent that now points at nothing.
+     *
+     * The reason was right and the conclusion was too strong. On a plan `rain`
+     * wrote — which is the only kind of list where any of this matters, because
+     * it is the only one with a why line under every row — almost every row is
+     * nested, so almost every finished row simply struck through where it was
+     * and the list you had to read to find your place was the whole list again.
+     *
+     * So it sinks *within its run*: the span of rows at its own depth under its
+     * own parent, bounded by the first row on either side that steps back out.
+     * Its own subtree travels with it. That is exactly the order `branchesOf`
+     * will draw the next time the page opens (see its per-level sort), so the
+     * animation and the redraw agree.
+     */
     const depth = Number(row.dataset.depth)
-    const next = all[all.indexOf(row) + 1]
-    const holdsSomething = !!next && Number(next.dataset.depth) > depth
-    if (depth > 0 || holdsSomething) return
-    if (done) {
-      // after everything, finished or not: the most recently done sits last
-      const last = all[all.length - 1]
-      if (last !== row) last.after(row)
-    } else {
-      // back up to just above the first finished row, which is where the
-      // unfinished work ends
-      const firstDone = all.find((r) => r !== row && r.classList.contains('ticked'))
-      if (firstDone) firstDone.before(row)
+    const i = all.indexOf(row)
+    if (i < 0) return
+    // the row and everything indented under it — they move as one, or the
+    // children are orphaned at an indent that means nothing
+    let end = i + 1
+    while (end < all.length && Number(all[end].dataset.depth) > depth) end++
+    const block = all.slice(i, end)
+    // …and the run it belongs to, walked out in both directions to the first
+    // row that is shallower than this one
+    let runStart = i
+    while (runStart > 0 && Number(all[runStart - 1].dataset.depth) >= depth) runStart--
+    let runEnd = end
+    while (runEnd < all.length && Number(all[runEnd].dataset.depth) >= depth) runEnd++
+    // whatever the block goes in front of; nothing means the end of the run
+    let anchor: HTMLDivElement | null = all[runEnd] ?? null
+    if (!done) {
+      // back up to just above the first finished sibling, which is where the
+      // unfinished work in this run ends
+      const firstDone = all
+        .slice(runStart, runEnd)
+        .find((r) => !block.includes(r) && Number(r.dataset.depth) === depth && r.classList.contains('ticked'))
+      if (firstDone) anchor = firstDone
+    }
+    if (anchor !== all[end] || !done) {
+      const frag = document.createDocumentFragment()
+      for (const b of block) frag.appendChild(b)
+      if (anchor) host.insertBefore(frag, anchor)
       else {
-        const last = all[all.length - 1]
-        if (last !== row) last.after(row)
+        // the end of the list, which is not the end of `host` — the add row and
+        // the action bars live down there too
+        const rest = rows()
+        const last = rest[rest.length - 1]
+        if (last) last.after(frag)
+        else host.prepend(frag)
       }
     }
     if (reduced) return

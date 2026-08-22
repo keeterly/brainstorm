@@ -32,6 +32,14 @@ export interface PlanRow {
   waits: string
   /** …which is the same fact, for anything that would rather have a boolean */
   blocked: boolean
+  /**
+   * Nobody sized this, and the schedule counted it as two regardless.
+   *
+   * `dots` is empty in this case, which made a day's total unverifiable against
+   * the rows it was a total of. Surfaces draw their own mark for it — see
+   * `.rm-effort.guessed` — rather than pretending two dots were measured.
+   */
+  guessed: boolean
 }
 
 /**
@@ -80,6 +88,17 @@ export function planRows(
     out.set(m.id, {
       why: planned ? whyLine(m) : '',
       dots: planned ? effortDots(m.effort) : '',
+      /*
+       * Whether anybody actually sized this.
+       *
+       * `effortDots` gives back nothing at all for a step with no effort on it,
+       * and `effortOf` counts it as two anyway. So a day of three unsized steps
+       * showed "~6" over three rows with no dots between them, and the number
+       * could not be checked against the thing it was a total of. It gets a
+       * mark of its own — two of them, which is what the arithmetic assumed —
+       * drawn differently, so the sum adds up and still says it is a guess.
+       */
+      guessed: planned && typeof m.effort !== 'number',
       waits: waitsLine(blockers),
       blocked: blockers.length > 0,
     })

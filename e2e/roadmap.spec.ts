@@ -174,10 +174,17 @@ describe('a week, out of the plans you already have', () => {
       .then(() => true)
       .catch(() => false)
     expect(opened, `tapping “${want.title}” never opened anything`).toBe(true)
-    const heading = await page.evaluate(
-      () => document.querySelector('[data-sky="pageQ"]')?.textContent?.trim() ?? '',
-    )
-    expect(heading, `it opened a page headed “${heading}”`).toMatch(/this thought|this group/i)
+    // Not the heading — that is a breadcrumb now, and a breadcrumb is a
+    // sentence for a person. The page says what it is and what it is about.
+    const on = await page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>('[data-sky="page"]')
+      return {
+        mode: el?.dataset.mode ?? '',
+        title: (document.querySelector('[data-sky="pageT"]') as HTMLTextAreaElement | null)?.value ?? '',
+      }
+    })
+    expect(on.mode, `it opened a “${on.mode}” page`).toBe('open')
+    expect(on.title, `it opened the page for the wrong thing`).toBe(want.title)
     // …and it is the one you asked for, not merely a page
     const shown = await page.evaluate(
       () => (document.querySelector('[data-sky="pageT"]') as HTMLTextAreaElement | null)?.value ?? '',
@@ -397,6 +404,65 @@ describe('the app doing a piece of the week', () => {
     const written = (await rows(page)).find((r) => /wax-letter copy/i.test(r.title))
     expect(written?.done, 'the agent ticked a step off by itself').toBe(false)
   }, 120_000)
+})
+
+describe('where to begin', () => {
+  it('puts one thing above the week, rather than opening on a list of forty', async () => {
+    await backToSky(page)
+    await goTab(page, /roadmap/i)
+    const start = await page.evaluate(() => ({
+      there: !!document.querySelector('.rm-start'),
+      title: document.querySelector('.rm-start-title')?.textContent?.trim() ?? '',
+      why: document.querySelector('.rm-start-why')?.textContent?.trim() ?? '',
+    }))
+    expect(start.there, 'the roadmap opened with no starting point on it').toBe(true)
+    expect(start.title, 'the starting point had no name').not.toBe('')
+    expect(start.why, '…and did not say why it was first').not.toBe('')
+    console.log(`  start here: “${start.title}” — ${start.why}`)
+  })
+
+  it('never says the week is empty while it is drawing days in it', async () => {
+    /*
+     * The Saturday bug, as an invariant that holds on any day of the week.
+     *
+     * The window was measured from `today` and `placeWork` never fills a rest
+     * day, so every Saturday and Sunday the tab opened on "This week — Nothing
+     * this week." with Monday's full day directly underneath it. Whatever day
+     * this suite happens to run on, these two cannot both be true.
+     */
+    await backToSky(page)
+    await goTab(page, /roadmap/i)
+    const week = await page.evaluate(() => {
+      const first = document.querySelector('.rm-week')
+      return {
+        heading: first?.querySelector('.rm-h')?.textContent?.trim() ?? '',
+        empty: first?.querySelector('.rm-sub')?.textContent?.trim() ?? '',
+        daysHere: first?.querySelectorAll('.rm-day').length ?? 0,
+        daysAnywhere: document.querySelectorAll('.rm-day').length,
+      }
+    })
+    console.log(`  “${week.heading}” — ${week.daysHere} of ${week.daysAnywhere} days`)
+    if (week.daysAnywhere > 0) {
+      expect(week.daysHere, `“${week.heading}” was empty with ${week.daysAnywhere} days on the page`).toBeGreaterThan(0)
+      expect(week.empty).not.toMatch(/nothing this week/i)
+    }
+  })
+
+  it('shows a mark for every step, so the day it is under can be added up', async () => {
+    /*
+     * A step nobody sized drew no dots at all and still counted as two, so
+     * "~6" could sit over three rows with nothing between them and there was
+     * no way to check the number against the thing it was a total of.
+     */
+    await backToSky(page)
+    await goTab(page, /roadmap/i)
+    const bad = await page.evaluate(() =>
+      [...document.querySelectorAll('.rm-step')]
+        .filter((s) => !s.querySelector('.rm-effort'))
+        .map((s) => s.querySelector('.rm-title')?.textContent?.trim() ?? '?'),
+    )
+    expect(bad, 'these steps show no size at all, but the day total counts them').toEqual([])
+  })
 })
 
 describe('and the sky agrees with it', () => {

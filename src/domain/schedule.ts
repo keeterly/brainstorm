@@ -68,11 +68,37 @@ export function weekOf(iso: string): string {
 
 const isRestDay = (iso: string) => RESTS_ON.has(dayOfWeek(iso))
 
-/** The next day anything is done on, today included. */
-function workDayOnOrAfter(iso: string): string {
+/**
+ * The next day anything is done on, today included.
+ *
+ * Exported because the roadmap has to anchor its week on the same day the
+ * placement does. It did not, and drew "This week — Nothing this week." over
+ * Monday's work every Saturday and Sunday: it measured the week from `today`,
+ * and nothing is ever placed on a rest day, so two sevenths of the time the
+ * question the tab exists to answer was answered with a blank.
+ */
+export function workDayOnOrAfter(iso: string): string {
   let d = iso
   for (let i = 0; i < 7 && isRestDay(d); i++) d = addDays(d, 1)
   return d
+}
+
+/**
+ * The stretch of days the roadmap calls "this week", and where it starts.
+ *
+ * Anchored on the next day work actually happens rather than on today. The
+ * page measured it from `today` and `placeWork` never fills a rest day, so on
+ * a Saturday or a Sunday the window could not contain anything by
+ * construction: the tab opened saying "This week — Nothing this week" with
+ * Monday's full day directly beneath it under "After that".
+ *
+ * `resting` is how the heading knows to call it the week ahead rather than
+ * this one, which on a Sunday it is.
+ */
+export function weekWindow(today: string): { from: string; weekEnd: string; resting: boolean } {
+  const from = workDayOnOrAfter(today)
+  // the Sunday that ends the week `from` falls in
+  return { from, weekEnd: addDays(from, (7 - dayOfWeek(from)) % 7), resting: from !== today }
 }
 
 export interface Capacity {

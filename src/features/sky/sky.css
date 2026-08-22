@@ -442,6 +442,7 @@ body.sky-held {
   display: none;
   flex-direction: column;
   transition: bottom 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* see the pen's hide rule: speaking used to cost you the only way to write */
   align-items: flex-start;
   gap: 3px;
   padding: 11px 15px 12px;
@@ -467,6 +468,9 @@ body.sky-held {
    sentence was printed underneath the offer and could not be read. The offer
    is the more useful of the two because you can act on it, so it keeps the
    spot and the voice steps up. */
+/* Standing over the pen rather than on top of it. 44 is where the pen is and
+   34 is how tall it is; the rest is air. */
+.sky-voice.show { bottom: calc(var(--water-line-up, 86px) + 90px); }
 body.sky-offering .sky-voice { bottom: calc(var(--water-line-up, 86px) + 106px); }
 /* what it is about, when it is about something in particular */
 .sky-voice .who {
@@ -674,6 +678,56 @@ body.sky-offering .sky-voice { bottom: calc(var(--water-line-up, 86px) + 106px);
 }
 .sky-rest.show { display: block; }
 
+/*
+ * Room for a thumb, without changing anything you can see.
+ *
+ * Every persistent control in the sky was painted at the size it looks and hit
+ * at the size it is painted: find and memory at 30×26, the rest pill and the
+ * tidy chip about 29 tall, the pen 34, and the undo — the one with a deadline
+ * on it — a bare <b> in a 12px line box, about 70×18. Apple's floor is 44, and
+ * these are all the app's *chrome*: the things you reach for while looking at
+ * something else.
+ *
+ * The pattern is the one already used on the group page's row controls (see
+ * `.pans .row .out`): a transparent pseudo-element centred on the control,
+ * grown to 44 in whichever direction falls short. Nothing moves, nothing gets
+ * bigger, and the miss becomes a hit.
+ */
+/* Only the undo needs this: it is a bare inline <b>, where every other control
+   here is already `position: fixed` and so is already a containing block. This
+   rule sat over all six for one draft, and `relative` beats `fixed` — it would
+   have unpinned find, memory and the rest pill from the corner of the screen. */
+.sky-undo b {
+  position: relative;
+}
+.sky-find::after,
+.sky-mem::after,
+.sky-rest::after,
+.sky-tidy::after,
+.sky-write::after,
+.sky-undo b::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
+  /* above the control's own rim, which is painted after it */
+  z-index: 1;
+}
+/*
+ * …except the undo, which is not allowed to grow past the bar it lives in.
+ *
+ * 44 here reached about two pixels above the pill's own top edge, and the undo
+ * bar is z-index 130 against the recommendation bar's 6 — so those two pixels
+ * landed on the pen and took its taps. An invisible box that undoes your last
+ * action when you reach for the pen is a far worse bug than a small target,
+ * and the journey check caught it. Capped at the bar's own height (11 + 18 +
+ * 11), which is a real 70×40 and cannot escape something you can see.
+ */
+.sky-undo b::after { height: 40px; }
+
 /* The one thing to do next. Quiet, permanent, and out of the way — a line to
    notice on your way past rather than a banner to dismiss. It sits low on the
    left, opposite the tidy button, so the sky itself stays the subject. */
@@ -764,7 +818,20 @@ body.sky-offering .sky-voice { bottom: calc(var(--water-line-up, 86px) + 106px);
   position: fixed;
   z-index: 130;
   left: 50%;
-  bottom: calc(var(--tabbar-h) + var(--sab) + 16px);
+  /*
+   * On the shelf above the pen, with the voice.
+   *
+   * It was measured off the tab bar — `--tabbar-h + --sab + 16` — which put it
+   * at 112 to 152 above the bottom edge, straight across the pen's 130 to 165.
+   * At z-index 130 against the pen's 6 it won, so for the nine seconds an undo
+   * is offered there was no way to write. Nobody had seen it, because until now
+   * the pen was already hidden whenever anything was speaking.
+   *
+   * Same anchor as the pen and the voice now, so the three of them stack by
+   * arithmetic rather than by coincidence: pen on the water line + 44, and
+   * everything transient on + 90 above it.
+   */
+  bottom: calc(var(--water-line-up, 86px) + 90px);
   transform: translateX(-50%) translateY(90px);
   display: flex;
   align-items: center;
@@ -1216,11 +1283,17 @@ body.sky-dragging .sky-undo.show {
 }
 /* Why this step, in the agent's own line for it. Quiet: it is the second thing
    you read on a row, never the first. */
+/* The reason under a step, told apart from the step.
+   These were the same colour token at the same weight, 1.5px apart in size,
+   separated only by an opacity — and the reason runs to two or three lines
+   where the name runs to one, so the explanation outweighed the thing it
+   explained. The name takes a weight and the reason takes the soft ink, which
+   is how `.waits` and `.effort` already differentiate themselves. */
 .sky-page .pans .row .why {
   font-size: 12px;
   line-height: 1.45;
-  color: var(--paper-ink, #3d4b5c);
-  opacity: 0.62;
+  color: var(--paper-soft, #5b6b7e);
+  opacity: 0.78;
   padding: 0 0 4px 6px;
   margin: -4px 0 0;
 }
@@ -1253,6 +1326,9 @@ body.sky-dragging .sky-undo.show {
   opacity: 0.34;
   white-space: nowrap;
 }
+/* …and the same mark the roadmap draws for a step nobody sized. Hollow rather
+   than filled, so a guess never reads as a measurement. */
+.sky-page .pans .row .effort.guessed { opacity: 0.26; font-size: 11px; }
 /* What the group turned out to be about — `rain`'s reading of it, written to
    the group's summary since the beginning and never once drawn. */
 .sky-page .pans .read {
@@ -1278,7 +1354,9 @@ body.sky-dragging .sky-undo.show {
   line-height: 1.45;
   color: var(--paper-ink, #3d4b5c);
   font-family: inherit;
-  font-weight: inherit;
+  /* …and it was `inherit`, so the row's name carried no more weight than the
+     sentence explaining it */
+  font-weight: 500;
   background: none;
   border: 0;
   border-radius: 7px;
@@ -2074,6 +2152,24 @@ body.sky-dragging .sky-undo.show {
   border-radius: 16px;
 }
 
+/* "hide 5 done".
+   Same micro-pill as Select, and quieter than it: Select changes what the page
+   is, this only changes how much of it you are looking at. Beside it rather
+   than in the footer, because the footer's tally is 11px of grey text that
+   nobody has ever tapped. */
+.sky-page .pans .lab.head .fin {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  padding: 0 10px;
+  min-height: 30px;
+  margin-right: 6px;
+  opacity: 0.72;
+}
+.sky-page .pans .lab.head .fin[aria-pressed='true'] { opacity: 1; }
+/* the fold itself */
+.sky-page .pans.nodone .row.ticked { display: none; }
+
 .sky-page .pans .lab.head .sel {
   font-size: 9.5px;
   font-weight: 600;
@@ -2134,10 +2230,9 @@ body.sky-dragging .sky-undo.show {
   opacity: 0;
   transition: opacity 140ms ease, transform 180ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
 }
-.sky-page .pans .row.ticked .tick::before {
-  background: var(--paper-ink, #3d4b5c);
-  border-color: var(--paper-ink, #3d4b5c);
-}
+/* The filled tick. It was set twice, ink here and --paper-soft twenty lines
+   down, and the second one won every time — so this said ink and painted grey.
+   One rule, and it is the grey one, because a finished row recedes. */
 .sky-page .pans .row.ticked .tick::after { opacity: 1; transform: rotate(-45deg) scale(1); }
 /* Struck through and stepped back — the whole row, not only its words. The
    tick, the text and the way out all belong to something finished, so they
@@ -2153,6 +2248,39 @@ body.sky-dragging .sky-undo.show {
 .sky-page .pans .row.ticked .tick::before {
   background: var(--paper-soft, #8fa3b6);
   border-color: var(--paper-soft, #8fa3b6);
+}
+
+/* Finished work, folded down to a line.
+   Struck through and dimmed was the whole of it before, and dimmed is not the
+   same as out of the way: a completed step kept its full-height field, its
+   whole untruncated why line and its dots, so on a plan of nine where five
+   were done the finished work took more of the page than the work that was
+   left. It is still here, still legible, still one tap from being open again —
+   it is just a line now, and the line it keeps is its name.
+
+   The reason it is safe to drop the why: the why explains what to do, and this
+   is a thing that has been done. Un-tick it and every word comes back. */
+.sky-page .pans .row.ticked .why,
+.sky-page .pans .row.ticked .effort,
+.sky-page .pans .row.ticked .waits {
+  display: none;
+}
+.sky-page .pans .row.ticked .t {
+  min-height: 0;
+  /* one line of 13.5px at 1.45, and the 10px of padding it sits in */
+  height: 40px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* …and while you are choosing rows rather than reading them, they are all the
+   same kind of thing again — a finished row you cannot see the name of is one
+   you cannot knowingly pick. */
+.sky-page .pans.picking .row.ticked .t {
+  white-space: normal;
+  text-overflow: clip;
 }
 /* the rows travel when one of them sinks; nothing else about them moves */
 .sky-page .pans .row { will-change: transform; }
@@ -2310,6 +2438,32 @@ body.sky-dragging .sky-undo.show {
 .sky-page .bot .done:active { transform: scale(0.96); }
 .sky-page .bot .done:disabled { opacity: 0.35; }
 
+/* Rest until tomorrow.
+   Same 46px of height as the pill it stands beside, so the bar has one
+   baseline, and none of its weight: an outline and the page's own ink. It puts
+   a whole household to sleep, which is worth a label and is not worth the
+   loudest control on the screen. Hidden unless openPage says otherwise. */
+.sky-page .bot .later {
+  display: none;
+  align-items: center;
+  gap: 7px;
+  min-height: 46px;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: none;
+  border: 0.5px solid rgba(19, 26, 36, 0.18);
+  color: var(--paper-soft, #5b6b7e);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.sky-page .bot .later.show { display: inline-flex; }
+.sky-page .bot .later svg { width: 17px; height: 17px; flex-shrink: 0; }
+.sky-page .bot .later:active { transform: scale(0.96); }
+
 /* the path — rain resolves into a quiet page */
 .sky-page.path .pans { max-height: none; flex: 1; padding-top: 6px; }
 .sky-page .step {
@@ -2413,12 +2567,28 @@ body.sky-resting .sky-tidy { right: calc(14px + var(--rest-w, 96px) + 8px); }
   cursor: pointer;
   transition: opacity 200ms ease, transform 200ms ease;
 }
-/* the slot belongs to whoever is speaking; the pen waits its turn */
+/*
+ * The pen waits its turn for a recommendation, and no longer for a sentence.
+ *
+ * It used to yield to the voice as well, and `paintNext` suppresses the
+ * recommendation bar on exactly the same condition — so while the app was
+ * speaking, *both* pens went: `.sky-write` to the rule below and `.sky-next
+ * .pen` with the bar that holds it. There was no visible way to write at all.
+ *
+ * That is not a rare state. Every cold start with anything in the sky says
+ * something, for 4.2 seconds, and `hold()` keeps the voice up for the whole of
+ * an agent run — the best part of a minute. Capture is the first thing this app
+ * is for, and for the best part of a minute there was nowhere to do it. Holding
+ * open water still opened the page, which is the gesture nobody guesses.
+ *
+ * So the voice takes the slot above instead of the slot itself, and the two
+ * stand one over the other. What is left here is the cases where writing is
+ * genuinely the wrong thing: a recommendation bar carrying its own pen, a drag
+ * in progress, and a page already open over the sky.
+ */
 .sky-next.show ~ .sky-write,
-.sky-voice.show ~ .sky-write,
 body.sky-dragging .sky-write,
-body.on-paper .sky-write,
-body.sky-offering .sky-write {
+body.on-paper .sky-write {
   opacity: 0;
   pointer-events: none;
   transform: translateX(-50%) translateY(8px);

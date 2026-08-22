@@ -198,6 +198,33 @@ export async function settled(page: Page, quietMs = 500, timeoutMs = 15_000): Pr
  */
 export async function pageReady(page: Page, timeoutMs = 10_000): Promise<void> {
   await page.waitForSelector('[data-sky="page"].on', { timeout: timeoutMs })
+  /*
+   * …and not while the drawer is teaching itself.
+   *
+   * The loop below calls the page settled once the rows have not moved for
+   * 400ms. `out-peek` — the once-per-session animation where the first row
+   * performs the swipe on itself — holds `--sw` at 0.92 from 34% to 62% of its
+   * 1600ms, which is 448ms of holding perfectly still, 162 pixels off the left
+   * edge of the glass. Longer than the window. So the loop reads the hold as
+   * stillness and hands back a row nobody could tap, and the check that asks
+   * whether the tick is reachable answers no — about the app, not about the
+   * animation.
+   *
+   * It passed for a long time on the timing happening to fall elsewhere. Ask
+   * the animations whether they have finished rather than inferring it from a
+   * clock that is shorter than one of them.
+   */
+  await page
+    .waitForFunction(
+      () =>
+        !document
+          .querySelector('.pans')
+          ?.getAnimations({ subtree: true })
+          .some((a) => a.playState === 'running'),
+      null,
+      { timeout: timeoutMs },
+    )
+    .catch(() => undefined)
   const where = () =>
     page.evaluate(() =>
       [...document.querySelectorAll('.pans .row')].map((r) => Math.round(r.getBoundingClientRect().x)).join(','),
@@ -649,8 +676,11 @@ export async function openMember(page: Page, group: string, id: string, tries = 
   await pageReady(page)
   // and the page that opened is the one that was asked for — `.on` cannot tell
   // a page that has just arrived from one that was already up
-  const heading = await page.evaluate(() => document.querySelector('[data-sky="pageQ"]')?.textContent?.trim() ?? '')
-  if (!/this thought|this group/i.test(heading)) {
-    throw new Error(`tapping ${id} opened a page headed “${heading}”`)
+  const on = await page.evaluate(() => {
+    const el = document.querySelector<HTMLElement>('[data-sky="page"]')
+    return { mode: el?.dataset.mode ?? '', for: el?.dataset.for ?? '' }
+  })
+  if (on.mode !== 'open' || on.for !== id) {
+    throw new Error(`tapping ${id} opened a ${on.mode || 'nothing'} page, for ${on.for || 'nothing'}`)
   }
 }

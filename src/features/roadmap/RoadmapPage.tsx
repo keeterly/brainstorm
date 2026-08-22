@@ -4,11 +4,19 @@ import { useGraph } from '@/store/graph'
 import { humanDate } from '@/domain/human-date'
 import { addDays, todayISO } from '@/domain/prioritize-prepass'
 import { nameOf, planRows } from '@/domain/row'
-import { dayOfWeek, effortOf, placeWork, weeklyCapacity, type Placed } from '@/domain/schedule'
+import {
+  dayOfWeek,
+  effortOf,
+  placeWork,
+  weeklyCapacity,
+  weekWindow,
+  type Placed,
+} from '@/domain/schedule'
 import { goalOf, pursued } from './gather'
 import { pins, pinTo } from './pursue'
 import { doThemAll, offerLine, shortlist, type BatchEvent } from './doAllFlow'
 import { askToOpen } from './handoff'
+import { firstToday } from './firstToday'
 import { complete } from '@/features/sky/groupFlow'
 import './roadmap.css'
 
@@ -57,13 +65,44 @@ export default function RoadmapPage() {
   }, [thoughts, relationships, today])
 
   const { placement, byId, rows, groups } = view
+  /*
+   * The one thing to start with, said before the week is.
+   *
+   * A correct list of forty steps is not an answer to "what am I doing today"
+   * — which is the question this tab exists for — and the app already works
+   * that answer out: `firstToday` is what the sky quotes at the foot of the
+   * glass. It was only ever shown there. Reading it here too is how both tabs
+   * name the same step rather than each having an opinion.
+   *
+   * Only when the roadmap is what answered. On a Saturday `firstToday` falls
+   * back to the ladder, which is the right answer for the sky — something you
+   * could pick up right now — and the wrong one for a plan whose first day is
+   * Monday. Then this takes the first thing the placement actually has.
+   */
+  const start = useMemo(() => {
+    const f = firstToday(thoughts, relationships, today)
+    if (f?.from === 'roadmap') return { t: f.thought, why: f.why }
+    const first = placement.days.find((d) => d.items.length)
+    if (!first) return null
+    return { t: first.items[0].t, why: `first up, ${humanDate(first.date, today)}` }
+  }, [thoughts, relationships, today, placement])
   // Whether this is what you chose or everything you could choose. Until you
   // have marked anything, `pursued` shows every group with a plan in it —
   // narrowing to nothing would look like work disappearing rather than like a
   // question being asked.
   const chosen = groups.some((g) => g.chosen)
   const { capacity } = placement
-  const weekEnd = weekEndFrom(today)
+  /*
+   * The week, measured from the next day work happens on.
+   *
+   * It used to be measured from `today`, and `placeWork` never fills a
+   * Saturday or a Sunday — so on either of them nothing could possibly land
+   * inside the window, and the tab opened on "This week / Nothing this week."
+   * with Monday's full day sitting directly underneath it, under "After that".
+   * Two sevenths of the time, the one question this page answers was answered
+   * with a blank over the answer.
+   */
+  const { weekEnd, resting } = weekWindow(today)
   const thisWeek = placement.days.filter((d) => d.date <= weekEnd)
   const after = placement.days.filter((d) => d.date > weekEnd)
 
@@ -117,14 +156,22 @@ export default function RoadmapPage() {
         setBatch={setBatch}
       />
 
+      {start && <Start t={start.t} why={start.why} />}
+
       <Week
-        title="This week"
+        title={resting ? 'The week ahead' : 'This week'}
         days={thisWeek}
         today={today}
         rows={rows}
         byId={byId}
         rels={relationships}
-        empty="Nothing this week."
+        /* …and when there really is nothing in the window, it says when there
+           will be, rather than stopping at the bad news. */
+        empty={
+          after.length
+            ? `Nothing until ${humanDate(after[0].date, today)}.`
+            : 'Nothing this week.'
+        }
         moving={moving}
         setMoving={setMoving}
       />
@@ -163,6 +210,26 @@ export default function RoadmapPage() {
         </section>
       )}
     </div>
+  )
+}
+
+/**
+ * Start here.
+ *
+ * Above the week rather than in it, because the week is a list and this is not
+ * — it is the one row you would read if you read nothing else, and putting it
+ * among forty others is how it stopped being that. It is a link to the thing
+ * itself, like every other step, so the next move after reading it is one tap.
+ */
+function Start({ t, why }: { t: import('@/domain/types').Thought; why: string }) {
+  return (
+    <section className="card rm-start">
+      <h2 className="rm-h">Start here</h2>
+      <Link className="rm-start-body" to="/" onClick={() => askToOpen(t.id)}>
+        <div className="rm-start-title">{nameOf(t)}</div>
+        <div className="muted rm-start-why">{why}</div>
+      </Link>
+    </section>
   )
 }
 
@@ -359,10 +426,20 @@ function Step({
       <Link className="rm-body" to="/" onClick={() => askToOpen(p.t.id)}>
         <div className="rm-line">
           <span className="rm-title">{nameOf(p.t)}</span>
-          {r?.dots && (
+          {r?.dots ? (
             <span className="rm-effort" aria-label={`${r.dots.length} of 5 for size`}>
               {r.dots}
             </span>
+          ) : (
+            r?.guessed && (
+              /* Two marks, because two is what the day's total counted it as.
+                 Hollow, because nobody measured it — the day above says "~" for
+                 the same reason, and now the two agree well enough that the
+                 number can be added up by eye. */
+              <span className="rm-effort guessed" aria-label="never sized — counted as 2">
+                ◦◦
+              </span>
+            )
           )}
         </div>
         {goal && <div className="rm-goal">{nameOf(goal)}</div>}
@@ -443,9 +520,4 @@ function Days({
       )}
     </div>
   )
-}
-
-/** The Sunday that ends the week a day is in. */
-function weekEndFrom(iso: string): string {
-  return addDays(iso, (7 - dayOfWeek(iso)) % 7)
 }

@@ -1015,20 +1015,104 @@ describe('writing is no longer a secret', () => {
     expect(sky).toMatch(/\.sky-write \{/)
   })
 
-  it('steps aside for a drag, a page and the offer bar', () => {
-    const rule = sky.slice(sky.indexOf('body.sky-dragging .sky-write'))
-    expect(rule.slice(0, 220)).toMatch(/body\.on-paper \.sky-write/)
-    expect(rule.slice(0, 220)).toMatch(/body\.sky-offering \.sky-write/)
+  it('steps aside for a drag and a page, and for nothing else', () => {
+    const rule = sky.slice(sky.indexOf('.sky-next.show ~ .sky-write'))
+    const sel = rule.slice(0, rule.indexOf('{'))
+    expect(sel).toMatch(/body\.sky-dragging \.sky-write/)
+    expect(sel).toMatch(/body\.on-paper \.sky-write/)
     expect(rule.slice(0, 320)).toMatch(/pointer-events: none/)
+  })
+
+  it('does not disappear because the app is talking', () => {
+    /*
+     * There was no visible way to write at all while the app spoke.
+     *
+     * `.sky-voice.show ~ .sky-write` hid the pill, and `paintNext` suppresses
+     * the recommendation bar — which carries the other pen — on the very same
+     * condition. Both went together. Not a corner: every cold start with
+     * anything in the sky speaks for 4.2 seconds, and `hold()` keeps the voice
+     * up for the length of an agent run.
+     *
+     * Neither the voice nor an offer may appear in the hide rule again.
+     */
+    const rule = sky.slice(sky.indexOf('.sky-next.show ~ .sky-write'))
+    const sel = rule.slice(0, rule.indexOf('{'))
+    expect(sel, 'the pen hides while the app is speaking again').not.toMatch(/sky-voice/)
+    expect(sel, 'the pen hides while something is offered again').not.toMatch(/sky-offering/)
+    // it takes the slot above instead, so the two stand one over the other
+    expect(sky).toMatch(/\.sky-voice\.show \{ bottom: calc\(var\(--water-line-up, 86px\) \+ 90px\); \}/)
   })
 
   it('shares the one slot instead of crowding it', () => {
     // two objects in the bottom band collided on a real phone into one
-    // cramped mass — the pen rides the recommendation bar when it is up,
-    // and the bare pill yields to either speaker
+    // cramped mass — the pen rides the recommendation bar when it is up
     expect(page).toMatch(/data-sky="nextPen"/)
     expect(sky).toMatch(/\.sky-next\.show ~ \.sky-write/)
-    expect(sky).toMatch(/\.sky-voice\.show ~ \.sky-write/)
+  })
+
+  it('gives every control in the sky a thumb-sized hit area', () => {
+    // painted at the size they look, hit at the size they are painted: find and
+    // memory 30x26, rest and tidy about 29 tall, and undo a bare <b> at 70x18
+    const rule = sky.slice(sky.indexOf('.sky-find::after'))
+    const sel = rule.slice(0, rule.indexOf('{'))
+    for (const c of ['.sky-mem::after', '.sky-rest::after', '.sky-tidy::after', '.sky-write::after', '.sky-undo b::after'])
+      expect(sel, `${c} is missing from the hit-area rule`).toContain(c)
+    expect(rule.slice(0, 400)).toMatch(/width: max\(100%, 44px\)/)
+    expect(rule.slice(0, 400)).toMatch(/height: max\(100%, 44px\)/)
+    /*
+     * …and it does not unpin them doing it.
+     *
+     * The first draft put `position: relative` over all six, to give the
+     * pseudo-element something to be absolute inside. Five of them are already
+     * `position: fixed`, three are declared *above* that rule, and `relative`
+     * would have won — find, memory and the rest pill would have come loose
+     * from the corner of the screen and scrolled away with the page. Fixed is
+     * already a containing block; only the bare <b> in the undo bar needs it.
+     */
+    const rel = sky.slice(sky.indexOf('.sky-undo b {'))
+    expect(rel.slice(0, 60)).toMatch(/position: relative/)
+    for (const c of ['.sky-find', '.sky-mem', '.sky-rest', '.sky-tidy', '.sky-write']) {
+      const own = sky.slice(sky.indexOf(`\n${c} {`))
+      expect(own.slice(0, 200), `${c} lost its fixed position`).toMatch(/position: fixed/)
+    }
+    expect(sky, 'the six-selector position rule is back').not.toMatch(/\.sky-write,\n\.sky-undo b \{\n {2}position: relative/)
+    /*
+     * …and the undo's is capped to the bar it lives in.
+     *
+     * 44 reached about two pixels past the pill's own top edge, and the undo
+     * bar is z-index 130 against the recommendation bar's 6 — so those two
+     * pixels landed on the pen and took its taps. An invisible box that undoes
+     * your last action when you reach for the pen is worse than a small target.
+     */
+    expect(sky).toMatch(/\.sky-undo b::after \{ height: 40px; \}/)
+  })
+
+  it('does not stand the undo bar on top of the pen', () => {
+    /*
+     * The undo bar was measured off the tab bar and the pen off the water line,
+     * so nothing kept them apart: 112–152 above the bottom edge against the
+     * pen's 130–165, at z-index 130 against 6. For the nine seconds an undo was
+     * offered there was no way to write — invisible, because until the pen
+     * stopped hiding during the voice nobody could get into the state.
+     *
+     * One anchor for all three now, so they stack by arithmetic.
+     */
+    const undo = sky.slice(sky.indexOf('.sky-undo {'))
+    expect(undo.slice(0, 900)).toMatch(/bottom: calc\(var\(--water-line-up, 86px\) \+ 90px\);/)
+    expect(undo.slice(0, 900), 'measured off the tab bar again').not.toMatch(/bottom: calc\(var\(--tabbar-h\)/)
+    // the pen keeps the shelf below
+    expect(sky.slice(sky.indexOf('.sky-write {'), sky.indexOf('.sky-write {') + 300)).toMatch(
+      /bottom: calc\(var\(--water-line-up, 86px\) \+ 44px\);/,
+    )
+  })
+
+  it('tells a step apart from the reason it is there', () => {
+    // same colour token, same weight, 1.5px apart — and the reason runs to two
+    // or three lines where the name runs to one
+    const t = sky.slice(sky.indexOf('.sky-page .pans .row .t {'))
+    expect(t.slice(0, 500)).toMatch(/font-weight: 500;/)
+    const why = sky.slice(sky.indexOf('.sky-page .pans .row .why {'))
+    expect(why.slice(0, 200)).toMatch(/color: var\(--paper-soft/)
   })
 
   it('writes into the group you are standing in, like the hold', () => {
@@ -1169,8 +1253,102 @@ describe('reversal is bulletproof', () => {
     expect(page).toMatch(/if \(nameFor && e\.key === 'Enter'\)/)
   })
 
-  it('rest wears a moon, not the steps cloud', () => {
-    expect(page).toMatch(/aria-label="Let it rest until tomorrow"/)
+  it('rest wears a moon, and says so in words', () => {
+    // The glyph stays — sleep must not share a family with the storm cloud
+    // that means "make the steps" — but it is no longer the whole of the
+    // label. It puts a whole household to sleep, so it is the one control down
+    // there that gets read rather than guessed at.
+    const btn = page.slice(page.indexOf('data-sky="pageLater"'))
+    expect(btn.slice(0, 400)).toMatch(/<span>Rest until tomorrow<\/span>/)
+    // the crescent, not a cloud
+    expect(btn.slice(0, 400)).toMatch(/M19\.2 14\.6A7\.6 7\.6 0 0 1 9\.4 4\.8/)
+    // and it is not an icon in the tools row any more
+    expect(page).not.toMatch(/className="tool" data-sky="pageLater"/)
+  })
+
+  it('the group page has no Done pill, because the × already closes it', () => {
+    // Both ran closePage() and closePage() tears down identically either way;
+    // every field commits from `pending` before the flag is ever read. So the
+    // loudest control on the page did nothing the × an inch away did not, and
+    // a screen reader heard "Done" for it and for every row's tick.
+    expect(page).toMatch(/const noDone = mode === 'open'/)
+    expect(page).toMatch(/pageD\.hidden = noDone/)
+    // the modes whose pill is a real word keep it
+    for (const w of ['Done looking', 'Done reading', 'Keep it']) expect(page).toContain(w)
+  })
+
+  it('a row tick says which thing it finishes', () => {
+    expect(page).toMatch(/tick\.dataset\.name = trim\(label\(m\), 40\)/)
+    const fn = page.slice(page.indexOf('const nameTick ='))
+    const body = fn.slice(0, fn.indexOf('\n      }'))
+    expect(body).toMatch(/picking\s*\n?\s*\? `Choose/)
+    expect(body).toMatch(/Finished .\$\{n\}. — tap to reopen it/)
+    expect(body).toMatch(/Finish .\$\{n\}./)
+    // and it is renamed whenever the mode it depends on flips
+    expect(page).toMatch(/for \(const t of \[\.\.\.pageA\.querySelectorAll\('\.tick'\)\]\) nameTick/)
+  })
+
+  it('a finished row folds down to its name', () => {
+    // opacity and a strike-through was the whole of it, so five done steps out
+    // of nine took more of the page than the four that were left
+    expect(sky).toMatch(/\.row\.ticked \.why,\n\.sky-page \.pans \.row\.ticked \.effort,\n\.sky-page \.pans \.row\.ticked \.waits \{\n {2}display: none;/)
+    const t = sky.slice(sky.lastIndexOf('.sky-page .pans .row.ticked .t {'))
+    expect(t.slice(0, 300)).toMatch(/height: 40px/)
+    expect(t.slice(0, 300)).toMatch(/white-space: nowrap/)
+    // …and the field measures itself against that rather than against its text
+    expect(page).toMatch(/row\.classList\.contains\('ticked'\) \? '' : field\.scrollHeight/)
+    // choosing rows you cannot read is how you put away the wrong one
+    expect(sky).toMatch(/\.pans\.picking \.row\.ticked \.t \{\n {2}white-space: normal;/)
+  })
+
+  it('a finished row sinks among its own siblings, with its children', () => {
+    const fn = page.slice(page.indexOf('function settle('))
+    const body = fn.slice(0, fn.indexOf('\n  }\n'))
+    // it used to give up on anything nested at all, which on a rain-written
+    // plan is very nearly every row
+    expect(body).not.toMatch(/if \(depth > 0 \|\| holdsSomething\) return/)
+    // the subtree travels with it
+    expect(body).toMatch(/while \(end < all\.length && Number\(all\[end\]\.dataset\.depth\) > depth\) end\+\+/)
+    // …bounded by the first row on either side that steps back out
+    expect(body).toMatch(/while \(runStart > 0 && Number\(all\[runStart - 1\]\.dataset\.depth\) >= depth\) runStart--/)
+    expect(body).toMatch(/while \(runEnd < all\.length && Number\(all\[runEnd\]\.dataset\.depth\) >= depth\) runEnd\+\+/)
+    // and it is never appended to the host, where the add row and the action
+    // bars live
+    expect(body).not.toMatch(/host\.appendChild/)
+  })
+
+  it('the finished work can be folded away entirely', () => {
+    expect(page).toMatch(/<button class="ctl fin" hidden><\/button>/)
+    const fn = page.slice(page.indexOf('const refreshFin = () => {'))
+    const body = fn.slice(0, fn.indexOf('\n      }'))
+    // counted from the page rather than remembered, because rows are ticked
+    // and un-ticked underneath it
+    expect(body).toMatch(/pageA\.querySelectorAll\('\.row\.ticked'\)/)
+    // no control offering to hide nothing, and none of it while you are choosing
+    expect(body).toMatch(/finBtn\.hidden = !n \|\| picking/)
+    expect(body).toMatch(/if \(picking\) hidingDone = false/)
+    expect(sky).toMatch(/\.sky-page \.pans\.nodone \.row\.ticked \{ display: none; \}/)
+  })
+
+  it('the page says which page it is, and what it is about', () => {
+    // the checks used to read the heading and look for "this group" — which
+    // held only while the heading was a constant
+    expect(page).toMatch(/page\.dataset\.mode = mode/)
+    expect(page).toMatch(/page\.dataset\.for = tl\?\.t\.id \?\? ''/)
+  })
+
+  it('both halves of the tally count the same population', () => {
+    // "6 inside · 9 done" was reachable: held() walked direct members and
+    // done() walked every descendant the list draws.
+    expect(page).toMatch(/const held = \(\) => membersOf\(tl\.t\.id, true\)\n/)
+    expect(page).toMatch(/const done = \(\) => held\(\)\.filter/)
+  })
+
+  it('the page header says where you are, not what kind of thing this is', () => {
+    expect(page).toMatch(/for \(let a = view\.parentOf\.get\(tl\.t\.id\); a && up\.length < 2;/)
+    expect(page).toMatch(/up\.length\n?\s*\? up\.join\(' › '\)/)
+    // still falls back at the root, where there is nothing above you
+    expect(page).toMatch(/\? 'This group'\n\s*: 'This thought'/)
   })
 })
 
@@ -1893,8 +2071,16 @@ describe('a plan looks like a plan', () => {
      * already done.
      */
     expect(page).toMatch(/const refreshWaits = \(\) => \{/)
+    // The window is the tick handler itself, bounded by its own closing brace,
+    // rather than a character count — the count was 420 and the handler grew.
     const tick = page.indexOf('landUndo(complete(m.id))')
-    expect(page.slice(tick, tick + 420)).toMatch(/refreshWaits\(\)/)
+    const handler = page.slice(tick, page.indexOf('\n        })', tick))
+    expect(handler).toMatch(/refreshWaits\(\)/)
+    // and everything else the tick has to keep true, in the same breath
+    expect(handler).toMatch(/nameTick\(tick\)/)
+    expect(handler).toMatch(/\n {10}fit\(\)/)
+    expect(handler).toMatch(/refreshFin\(\)/)
+    expect(handler).toMatch(/tally\(\)/)
     // …which needs the line to still be there when it is empty
     expect(sky).toMatch(/\.waits:empty \{ display: none; \}/)
   })

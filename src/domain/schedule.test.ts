@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_WEEK, dayOfWeek, effortOf, placeWork, weekOf, weeklyCapacity, type Capacity } from './schedule'
+import { DEFAULT_WEEK, dayOfWeek, effortOf, placeWork, weekOf, weeklyCapacity, weekWindow, type Capacity } from './schedule'
 import { addDays } from './prioritize-prepass'
 import type { Relationship, Thought } from './types'
 
@@ -262,5 +262,55 @@ describe('putting the work on days', () => {
     const steps = [step({ id: 'a' }), step({ id: 'b' })]
     const out = placeWork({ steps, rels: [dep('a', 'b'), dep('b', 'a')], capacity: cap(8), today: MON })
     expect(out.days.flatMap((d) => d.items).length + out.later.length).toBe(2)
+  })
+})
+
+/*
+ * The week the roadmap draws, on each of the seven days you might open it.
+ *
+ * The bug this exists for: the window was measured from `today`, and nothing
+ * is ever placed on a Saturday or a Sunday — so two sevenths of the time the
+ * tab said "Nothing this week" over a full Monday sitting under "After that".
+ */
+describe('the week the roadmap calls this one', () => {
+  // 2026-08-17 is a Monday, so this walks Mon → Sun
+  const week = ['2026-08-17', '2026-08-18', '2026-08-19', '2026-08-20', '2026-08-21', '2026-08-22', '2026-08-23']
+
+  it('starts on today, every working day', () => {
+    for (const d of week.slice(0, 5)) {
+      const w = weekWindow(d)
+      expect(w.from, d).toBe(d)
+      expect(w.resting, d).toBe(false)
+      // …and always ends on the Sunday that closes that week
+      expect(w.weekEnd, d).toBe('2026-08-23')
+    }
+  })
+
+  it('rolls forward to Monday on a Saturday and a Sunday', () => {
+    for (const d of week.slice(5)) {
+      const w = weekWindow(d)
+      expect(w.from, d).toBe('2026-08-24')
+      expect(w.resting, d).toBe(true)
+      // the week *ahead*, not the two remaining hours of this one
+      expect(w.weekEnd, d).toBe('2026-08-30')
+    }
+  })
+
+  it('so a Saturday can see Monday, which is the whole point', () => {
+    // one step, nothing in its way: placeWork puts it on the next working day
+    const steps = [step({ id: 'a', effort: 2 })]
+    const sat = '2026-08-22'
+    const p = placeWork({ steps, rels: [], capacity: cap(8), today: sat, pinned: new Map() })
+    const day = p.days[0]
+    expect(day?.date, 'placed on the Monday').toBe('2026-08-24')
+
+    const { weekEnd } = weekWindow(sat)
+    const thisWeek = p.days.filter((d) => d.date <= weekEnd)
+    expect(thisWeek.length, 'and inside the window the page draws').toBeGreaterThan(0)
+
+    // …which it was not, before. Measured from `today` the window closes on
+    // the Sunday you are standing on, and Monday falls outside it.
+    const wrong = addDays(sat, (7 - dayOfWeek(sat)) % 7)
+    expect(p.days.filter((d) => d.date <= wrong)).toHaveLength(0)
   })
 })

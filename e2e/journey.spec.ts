@@ -103,7 +103,19 @@ describe('jot → group → open → tick', () => {
     await page.locator(tick).first().scrollIntoViewIfNeeded()
     await page.waitForTimeout(400)
     const before = await page.evaluate(() => document.querySelectorAll('.pans .row.ticked').length)
-    expect(await tappable(page, tick), 'the tick is not reachable').toBe(true)
+    const why = await page.evaluate((sel) => {
+      const el = document.querySelector(sel)
+      if (!el) return 'absent'
+      const r = el.getBoundingClientRect()
+      const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)
+      // where it is and what is over it — the two things that tell a control
+      // nobody can press apart from one that has not arrived yet
+      return (
+        `${Math.round(r.width)}x${Math.round(r.height)} at ${Math.round(r.x)},${Math.round(r.y)} ` +
+        `of ${innerWidth}x${innerHeight} under=${top ? top.tagName.toLowerCase() + '.' + top.className : 'nothing'}`
+      )
+    }, tick)
+    expect(await tappable(page, tick), `the tick is not reachable — ${why}`).toBe(true)
     await tap(page, tick)
     await page.waitForTimeout(900)
     const after = await page.evaluate(() => document.querySelectorAll('.pans .row.ticked').length)
@@ -132,27 +144,86 @@ describe('jot → group → open → tick', () => {
      * The failure a source pin cannot see: painted, sized, and underneath
      * something else.
      *
-     * Only the ones that are meant to be there the whole time. The pen yields
-     * its slot whenever the app is speaking or offering something — one voice
-     * in one place — so asserting it is always tappable would be asserting the
-     * opposite of the design.
+     * Only the ones that are meant to be there the whole time.
      */
     expect(await tappable(page, '[data-sky="find"]'), 'find is not reachable by a finger').toBe(true)
   })
+
+  const pens = ['[data-sky="write"]', '[data-sky="nextPen"]']
+  /** why, when the answer is none — every reason a pen can be unreachable */
+  const penState = async () =>
+    page.evaluate(() => {
+      const bits: string[] = []
+      bits.push(`body="${document.body.className}"`)
+      bits.push(`voice=${!!document.querySelector('.sky-voice.show')}`)
+      bits.push(`next=${!!document.querySelector('.sky-next.show')}`)
+      for (const sel of ['[data-sky="write"]', '[data-sky="nextPen"]']) {
+        const el = document.querySelector(sel)
+        if (!el) { bits.push(`${sel}: absent`); continue }
+        const r = el.getBoundingClientRect()
+        const cs = getComputedStyle(el)
+        const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)
+        bits.push(
+          `${sel}: ${Math.round(r.width)}x${Math.round(r.height)} at ${Math.round(r.x)},${Math.round(r.y)} ` +
+            `op=${cs.opacity} disp=${cs.display} pe=${cs.pointerEvents} under=${top ? top.tagName.toLowerCase() + '.' + top.className : 'nothing'}`,
+        )
+      }
+      return bits.join(' | ')
+    })
+
+  const anyPen = async () =>
+    (await Promise.all(pens.map((p) => tappable(page, p)))).filter(Boolean).length
 
   it('always leaves one pen you can reach', async () => {
     /*
      * There are two, and only ever one of them at a time. The bar that says
      * what to do next carries a pen on its end; the bare pen stands in the same
-     * slot for a sky with nothing to say, and steps aside whenever the bar or
-     * the app's own voice is using it — one message in one place. Which of them
-     * is up is not the point. That neither of them is would mean no way to
-     * write without first finding open water, which is the gesture nobody
-     * guesses.
+     * slot for a sky with nothing to say. Which of them is up is not the point.
+     * That neither of them is would mean no way to write without first finding
+     * open water, which is the gesture nobody guesses.
      */
     await page.waitForFunction(() => !document.querySelector('.sky-voice.show'), null, { timeout: 15_000 })
-    const pens = ['[data-sky="write"]', '[data-sky="nextPen"]']
-    const reachable = await Promise.all(pens.map((p) => tappable(page, p)))
-    expect(reachable.filter(Boolean).length, `neither pen is reachable (${pens.join(', ')})`).toBeGreaterThan(0)
+    expect(await anyPen(), `neither pen is reachable — ${await penState()}`).toBeGreaterThan(0)
+  })
+
+  it('…including while the app is talking, which is when it never was', async () => {
+    /*
+     * The check above waited for the voice to go away before it measured, and
+     * so never saw the one state worth checking. Both pens hid on the same
+     * condition — `.sky-voice.show ~ .sky-write` in the stylesheet, and the
+     * same test inside `paintNext` for the bar that carries the other one — so
+     * for as long as the app was speaking there was no visible way to write at
+     * all. Every cold start speaks for 4.2 seconds; an agent run holds the
+     * voice for the best part of a minute.
+     *
+     * So this one measures *during*. It makes the app speak by reloading, which
+     * is the same 4.2 seconds a real cold start gets.
+     */
+    /*
+     * Put the app into that exact state rather than waiting to catch it in it.
+     *
+     * A reload does reach it — the cold-start `say()` fires on mount — but the
+     * boot splash covers the glass for most of the 4.2 seconds the voice is up,
+     * and measuring through the splash says "nothing is reachable" about every
+     * control in the app rather than about the pen. Waiting the splash out
+     * often misses the voice entirely.
+     *
+     * These are the two classes the runtime sets, and nothing else changes:
+     * `say()` shows the voice, and `paintNext` hides the recommendation bar on
+     * the same condition — which is the whole of the bug, since the bar is
+     * where the other pen lives.
+     */
+    await page.evaluate(() => {
+      document.querySelector('.sky-next')?.classList.remove('show')
+      const v = document.querySelector('.sky-voice')
+      v?.classList.add('show')
+      const lb = v?.querySelector('[data-sky="voiceLb"]')
+      if (lb) lb.textContent = 'welcome back'
+    })
+    await page.waitForTimeout(400)
+    const said = await page.evaluate(() => document.querySelector('.sky-voice')?.textContent?.trim() ?? '')
+    const n = await anyPen()
+    console.log(`  while it says “${said}” — ${n} of ${pens.length} pens reachable`)
+    expect(n, `no way to write while the app is saying “${said}” — ${await penState()}`).toBeGreaterThan(0)
   })
 })

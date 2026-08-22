@@ -148,6 +148,38 @@
   color: var(--ink-faint);
   font-size: 10px;
 }
+/* Two hollow ones, for a step nobody sized. The schedule counts it as two
+   either way; this is the day's total showing its working. Fainter still than
+   a measured dot, so a glance can tell a fact from an assumption. */
+.rm-effort.guessed {
+  opacity: 0.55;
+  font-size: 11px;
+}
+
+/* Start here.
+   The one row above the week. It gets the accent the rest of the page does not
+   — this page is a list, and the whole complaint about lists is that they do
+   not tell you where to begin. */
+.roadmap .rm-start {
+  margin-bottom: 16px;
+  border-left: 2px solid rgba(var(--accent-rgb), 0.55);
+}
+.roadmap .rm-start-body {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  /* the whole card is the target, and it is well over 44 */
+  padding: 2px 0;
+}
+.roadmap .rm-start-title {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  line-height: 1.35;
+}
+.roadmap .rm-start-why {
+  font-size: var(--fs-label);
+  margin-top: 3px;
+}
 
 /* Which idea this came out of. A step with no home on a list of forty is a
    chore; with its goal beside it, it is a piece of something you chose. */
