@@ -13,6 +13,24 @@
   font-size: var(--fs-label);
   margin: -4px 0 16px;
 }
+/* The judgement, then the arithmetic it came from. Two lines rather than two
+   sentences, so the eye takes the first and can stop there. */
+.roadmap .rm-load-word {
+  display: block;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+.roadmap .rm-cap-src {
+  display: block;
+  font-size: var(--fs-label);
+  opacity: 0.78;
+}
+/* …and the filter's second half is a way out of it, not a sentence about it */
+.roadmap .rm-pick {
+  color: rgba(var(--accent-rgb), 0.9);
+  text-decoration: none;
+  border-bottom: 0.5px solid rgba(var(--accent-rgb), 0.4);
+}
 
 .roadmap .rm-h {
   font-size: var(--fs-md);

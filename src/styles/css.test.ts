@@ -1087,6 +1087,66 @@ describe('writing is no longer a secret', () => {
     expect(sky).toMatch(/\.sky-undo b::after \{ height: 40px; \}/)
   })
 
+  it('the group you are inside says how to get further in', () => {
+    /*
+     * A tap on a group goes inside it; a tap on the one you are already inside
+     * opens its plan. Two things from one gesture, and the second was knowledge
+     * you had to already have — the open group's line was empty.
+     */
+    expect(page).toMatch(/const st = open\n {10}\? 'open plan →'/)
+    expect(page).toMatch(/class="state \$\{open \? 'way' : todo \|\| pb \? 'blue' : ''\}"/)
+    expect(sky).toMatch(/\.skyb \.state\.way \{/)
+  })
+
+  it('the pen says which group it is about to write into', () => {
+    // the destination chip on the page it opens is right and one screen late
+    expect(page).toMatch(/const into = openPool \? view\.byId\.get\(openPool\) : null/)
+    expect(page).toMatch(/writeEl\.textContent = into \? '✎ add to this group' : '✎ write'/)
+    // …and a screen reader gets the group's name, which the glyph cannot carry
+    expect(page).toMatch(/Add a thought to .\$\{trim\(label\(into\.t\), 34\)\}. — hold to speak/)
+  })
+
+  it('the crowded sky is an offer, not a caption', () => {
+    // 57 characters at 13.5px in a pill 92% of the screen wide, twice the area
+    // of the tab bar, and pointer-events: none — the one thing telling you to
+    // act was the one thing you could not tap
+    expect(page).not.toMatch(/a lot up here — ✦ tidy puts together what belongs together/)
+    expect(page).toMatch(/offerAction\('the sky is getting crowded', 'tidy it'/)
+    // and it does not offer a control that is not on screen
+    expect(page).toMatch(/n >= 8 && tidyEl\.classList\.contains\('show'\)/)
+  })
+
+  it('the roadmap leads with the judgement, not the arithmetic', () => {
+    const rm = readFileSync(join('src/features/roadmap', 'RoadmapPage.tsx'), 'utf8')
+    /*
+     * "about 45 a week" is true and is in a unit nobody thinks in — effort
+     * points, one to five a step, invented here. And the filter line was three
+     * sentences describing how the app works, at the top of the screen you came
+     * to for an answer.
+     */
+    expect(rm).not.toMatch(/Everything you have planned\. Open one in the sky/)
+    expect(rm).toMatch(/Showing every planned project/)
+    expect(rm).toMatch(/choose active ones/)
+    // the words first, the number still underneath them
+    const fn = rm.slice(rm.indexOf('function loadWord('))
+    const body = fn.slice(0, fn.indexOf('\n}'))
+    expect(body).toMatch(/if \(!booked\) return 'Nothing booked in'/)
+    expect(body).toMatch(/share >= 0\.95\) return 'A full week'/)
+    // placeWork pushes what will not fit into `later`, so the schedule cannot
+    // reach over-capacity and the words must not claim it can
+    expect(body, 'claims a state placeWork cannot produce').not.toMatch(/over/i)
+    expect(rm).toMatch(/<span className="rm-load-word">\{loadWord\(booked, capacity\.effort\)\}<\/span>/)
+    expect(rm).toMatch(/about \$\{capacity\.effort\} a week — read off the last/)
+  })
+
+  it('the resting pill uses a word with one meaning', () => {
+    // "put away" is coined; the status it counts is `archived`, and the switch
+    // it sits in is already a strict three-way — only the wording was vague
+    expect(page).toMatch(/`☁ \$\{aside\} archived`/)
+    expect(page).toMatch(/`☁ \$\{resting\} resting`/)
+    expect(page).toMatch(/`☁ \$\{resting \+ aside\} aside`/)
+  })
+
   it('does not stand the undo bar on top of the pen', () => {
     /*
      * The undo bar was measured off the tab bar and the pen off the water line,

@@ -105,6 +105,8 @@ export default function RoadmapPage() {
   const { weekEnd, resting } = weekWindow(today)
   const thisWeek = placement.days.filter((d) => d.date <= weekEnd)
   const after = placement.days.filter((d) => d.date > weekEnd)
+  // what the window above actually holds, against what a week of you holds
+  const booked = thisWeek.reduce((n, d) => n + d.items.reduce((m, i) => m + effortOf(i.t), 0), 0)
 
   if (!groups.length) {
     return (
@@ -128,20 +130,35 @@ export default function RoadmapPage() {
     <div className="page roadmap">
       <h1 className="page-title">What you are doing</h1>
 
+      {/* The filter you are looking through, as a thing you can do something
+          about. It used to open with three sentences about how the app works —
+          everything planned, open one in the sky, say you are working on it,
+          and this narrows — at the top of the screen you came to for an answer.
+          The fact is the same; the second half of it is a link now instead of
+          an instruction. */}
       {!chosen && (
         <p className="muted rm-all">
-          Everything you have planned. Open one in the sky and say you are working on
-          it, and this narrows to the ones you chose.
+          Showing every planned project ·{' '}
+          <Link className="rm-pick" to="/">
+            choose active ones
+          </Link>
         </p>
       )}
 
-      {/* The week's size, said out loud and sourced. A number the app made up
-          about how much you can do is worth nothing unless you can see where
-          it came from and how sure of it the app is. */}
+      {/* How full the week is, and then where that came from.
+          It led with "about 45 a week", which is true and is in a unit nobody
+          thinks in — effort points, one to five a step, invented here. The
+          judgement is what you actually want off this line, so the judgement
+          goes first and the arithmetic stays underneath it, because a number
+          the app made up about how much you can do is worth nothing unless you
+          can see where it came from and how sure of it the app is. */}
       <p className="muted rm-cap">
-        {capacity.learned
-          ? `about ${capacity.effort} a week — read off the last ${capacity.weeksSeen} weeks of what you finished`
-          : `about ${capacity.effort} a week to start with, until it has watched you finish a couple`}
+        <span className="rm-load-word">{loadWord(booked, capacity.effort)}</span>
+        <span className="rm-cap-src">
+          {capacity.learned
+            ? `about ${capacity.effort} a week — read off the last ${capacity.weeksSeen} weeks of what you finished`
+            : `about ${capacity.effort} a week to start with, until it has watched you finish a couple`}
+        </span>
       </p>
 
       {/* …over everything with a day on it, not only this week.
@@ -211,6 +228,28 @@ export default function RoadmapPage() {
       )}
     </div>
   )
+}
+
+/**
+ * How full the week is, in words.
+ *
+ * `placeWork` already refuses to overfill a week — it pushes what will not fit
+ * into `later` — so "over capacity" is not a state this can reach from the
+ * schedule alone. What it can say is how much of the room you have is spoken
+ * for, which is the thing you are deciding against when you look at the page.
+ *
+ * The thresholds are quarters of a week, and deliberately coarse: this is a
+ * judgement to glance at, and a number that moves between "about right" and
+ * "a full week" over one three-point step would be the arithmetic leaking back
+ * out through the words.
+ */
+function loadWord(booked: number, week: number): string {
+  if (!booked) return 'Nothing booked in'
+  const share = booked / Math.max(1, week)
+  if (share >= 0.95) return 'A full week'
+  if (share >= 0.6) return 'A busy week'
+  if (share >= 0.25) return 'About right'
+  return 'A light week'
 }
 
 /**

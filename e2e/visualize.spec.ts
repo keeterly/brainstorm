@@ -11,7 +11,19 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { fileURLToPath } from 'node:url'
 import type { Page } from 'playwright'
-import { backToSky, bubbles, emptySky, goInside, groups, open, serve, settled, write } from './harness'
+import {
+  backToSky,
+  bubbles,
+  emptySky,
+  goInside,
+  groups,
+  open,
+  pageReady,
+  serve,
+  settled,
+  tap,
+  write,
+} from './harness'
 
 const BUILD = fileURLToPath(new URL('./.build', import.meta.url))
 
@@ -164,6 +176,63 @@ describe('what you can see of your own thinking', () => {
     }, g)
     expect(named, 'nothing on screen says which group you are inside').toBeTruthy()
     await backToSky(page)
+  })
+
+  it('says how to get further in, and getting there works', async () => {
+    /*
+     * A tap on a group goes inside it, and a tap on the one you are standing
+     * inside opens its plan. Two different things from the same gesture, and
+     * nothing on screen said the second one existed — you had to already know.
+     *
+     * Not just that the words are there: that a tap where the words are lands
+     * on the plan for that group. `page.dataset.for` is how that is checked
+     * rather than by reading the heading, which is a breadcrumb written for a
+     * person.
+     */
+    const [g] = await groups(page)
+    await goInside(page, g)
+    const way = await page.evaluate((id) => {
+      const el = document.querySelector<HTMLElement>(`[data-id="${id}"]`)
+      const st = el?.querySelector('.state')
+      if (!el || !st) return null
+      const r = st.getBoundingClientRect()
+      return r.width > 1 && r.right > 0 && r.left < innerWidth ? (st.textContent ?? '').trim() : null
+    }, g)
+    expect(way, 'the group you are inside says nothing about opening it').toBeTruthy()
+    console.log(`  standing inside, it says: “${way}”`)
+
+    await tap(page, `[data-id="${g}"]`)
+    await pageReady(page)
+    const on = await page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>('[data-sky="page"]')
+      return { mode: el?.dataset.mode ?? '', for: el?.dataset.for ?? '' }
+    })
+    expect(on.mode, `tapping where it says “${way}” opened a “${on.mode}” page`).toBe('open')
+    expect(on.for, 'it opened the plan for something else').toBe(g)
+    await backToSky(page)
+  })
+
+  it('the pen says which group it is about to write into', async () => {
+    // Writing while a group is open writes into that group. The page that
+    // opens says so; the pen said "✎ write" either way, so you only found out
+    // after committing to write.
+    const loose = await page.evaluate(
+      () => document.querySelector('[data-sky="write"]')?.textContent?.trim() ?? '',
+    )
+    const [g] = await groups(page)
+    await goInside(page, g)
+    const inside = await page.evaluate(
+      () => document.querySelector('[data-sky="write"]')?.textContent?.trim() ?? '',
+    )
+    console.log(`  open sky: “${loose}” · inside a group: “${inside}”`)
+    expect(inside, 'the pen reads the same inside a group as in open sky').not.toBe(loose)
+    expect(inside.toLowerCase()).toContain('group')
+    await backToSky(page)
+    // …and it goes back to saying the plain thing when you come out
+    const out = await page.evaluate(
+      () => document.querySelector('[data-sky="write"]')?.textContent?.trim() ?? '',
+    )
+    expect(out, 'the pen still claims a group after leaving one').toBe(loose)
   })
 
   it('stays legible and stays on the glass as the sky fills up', async () => {

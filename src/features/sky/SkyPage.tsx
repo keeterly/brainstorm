@@ -1945,6 +1945,28 @@ function mountSky(root: HTMLDivElement) {
     // holding the stage is not on it, nothing is holding the stage
     if (openPool && !stage.some((tl) => tl.t.id === openPool)) openPool = null
 
+    /*
+     * What the pen is about to do, before you press it.
+     *
+     * Writing while a group is open writes into that group — a standing rule,
+     * and the right one. The page you land on says so, in the chip that reads
+     * "→ into “SS27 production”", tappable to swap for loose sky. That chip
+     * exists because two playtesters wrote a week of thoughts into a seeded
+     * group they had forgotten was open, and only found out at the toast.
+     *
+     * It is still one screen late. The chip tells you after you have committed
+     * to writing; the pen said "✎ write" either way. Now the pen says it too,
+     * so the honest moment is before the page rather than on it.
+     */
+    const into = openPool ? view.byId.get(openPool) : null
+    writeEl.textContent = into ? '✎ add to this group' : '✎ write'
+    writeEl.setAttribute(
+      'aria-label',
+      into
+        ? `Add a thought to “${trim(label(into.t), 34)}” — hold to speak`
+        : 'Write a thought — hold to speak',
+    )
+
     const alive = new Set<string>()
     for (const tl of stage) {
       alive.add(tl.t.id)
@@ -1969,8 +1991,24 @@ function mountSky(root: HTMLDivElement) {
         // rained has things to do in it, and that is the more useful of the
         // two facts — the brief is one moon away and never goes anywhere,
         // whereas "3 to do" is the whole visible answer to having just rained.
+        /*
+         * …and when you are standing inside it, the way further in.
+         *
+         * A tap on a group goes inside it and a tap on the one you are already
+         * inside opens its plan — two different things from the same gesture,
+         * and the second was knowledge you had to already have. The open
+         * group's line was empty, which is the whole of the room this needs:
+         * it is a label on the thing you are going to tap anyway, not a second
+         * target inside a circle that drifts.
+         *
+         * A reader who has been told this stops needing it, and it costs one
+         * line of the quietest text on the glass. Left permanent rather than
+         * taught once and retired: the sky is not a place you are in often
+         * enough for a lesson to stick, and a group you open twice a season is
+         * exactly the one you will have forgotten.
+         */
         const st = open
-          ? ''
+          ? 'open plan →'
           : todo
             ? `${todo} to do · ${tl.members.length} inside`
             : pb
@@ -1982,7 +2020,7 @@ function mountSky(root: HTMLDivElement) {
           `<div class="t" style="font-weight:600"></div>` +
           (pb ? `<div class="mark" aria-hidden="true"></div>` : '') +
           peek +
-          (st ? `<div class="state ${todo || pb ? 'blue' : ''}"></div>` : '')
+          (st ? `<div class="state ${open ? 'way' : todo || pb ? 'blue' : ''}"></div>` : '')
         const nameEl = el.querySelector('.t') as HTMLDivElement
         // Same floor against the camera as a drop's own words — a group is
         // drawn in the open sky, and the open sky is where the camera stands
@@ -2118,7 +2156,7 @@ function mountSky(root: HTMLDivElement) {
       resting && aside
         ? `☁ ${resting + aside} aside`
         : aside
-          ? `☁ ${aside} put away`
+          ? `☁ ${aside} archived`
           : `☁ ${resting} resting`
     restEl.classList.toggle('show', resting + aside > 0)
     // The tidy pill stands beside it rather than across the screen from it,
@@ -8700,14 +8738,30 @@ function mountSky(root: HTMLDivElement) {
   // "hold a drop to gather it" taught a gesture that no longer exists — the
   // hold on a bubble went when a bubble was cut back to one tap, and gathering
   // is the ✦ tidy control, which is on screen from six loose thoughts up.
-  if (n > 0)
-    say(
-      view.tls.some((tl) => tl.kind === 'drop' && isRipe(tl.t))
-        ? 'something is ready for its steps'
-        : n >= 8
-          ? 'a lot up here — ✦ tidy puts together what belongs together'
-          : 'welcome back',
-    )
+  if (n > 0) {
+    if (view.tls.some((tl) => tl.kind === 'drop' && isRipe(tl.t))) say('something is ready for its steps')
+    else if (n >= 8 && tidyEl.classList.contains('show')) {
+      /*
+       * A suggestion you can take, rather than a caption on the weather.
+       *
+       * This was said: "a lot up here — ✦ tidy puts together what belongs
+       * together". Fifty-seven characters at 13.5px is two lines in a pill 92%
+       * of the screen wide — about twice the area of the tab bar, the
+       * brightest surface in the app, and `pointer-events: none`, so the one
+       * thing on screen telling you to do something was the one thing you
+       * could not tap. It named a control by its glyph and left you to go and
+       * find it.
+       *
+       * The offer bar already does exactly this — a sentence and a verb, on
+       * something you press — and it is what every other suggestion in the app
+       * uses. Twelve seconds, because it is worth reading and is not urgent.
+       */
+      offerAction('the sky is getting crowded', 'tidy it', () => {
+        hideUndo()
+        tidyEl.click()
+      }, 12_000)
+    } else say('welcome back')
+  }
   /**
    * A notification was tapped, and it was about one particular thing.
    *
