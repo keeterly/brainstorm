@@ -28,26 +28,48 @@ npm i -g netlify-cli
 netlify dev                # serves Vite + /api/ai with your .env
 ```
 
-Database: create a Supabase project, then apply `supabase/migrations/0001_init.sql`
-(SQL editor or `supabase db push`).
+Database: create a Supabase project, then apply **every** file in
+`supabase/migrations/` in order (`supabase db push`, or paste them into the SQL editor one
+after another). There are seven; `0001_init.sql` alone is not enough — `0007` in particular
+creates the function that backs the global spend cap.
 
 ## Scripts
 
 | Command | What |
 | --- | --- |
 | `npm run dev` | Vite dev server |
-| `npm test` | Vitest (domain logic, schemas, importer, `/api/ai` function) |
+| `npm test` | Vitest — domain logic, schemas, importer, `/api/ai`, and the source pins in `src/styles/css.test.ts` |
+| `npm run test:watch` | the same, watching |
+| `npm run test:e2e` | builds a demo bundle and drives it in real Chromium (Playwright). No API key or network needed. |
 | `npm run build` | Typecheck + production build to `dist/` |
-| `npm run lint` | ESLint |
+| `npm run lint` | ESLint over `src shared netlify e2e` |
+
+Two traps worth knowing before you touch anything: **`tsc --noEmit` compiles nothing here**
+(the root tsconfig is `"files": []` plus project references) — the real check is
+`npx tsc -b --force`. And **there is no prettier config**, so running `npx prettier --write`
+reformats whole files and breaks a few hundred source-pin assertions.
 
 ## Deploy (Netlify)
 
 1. Create a Netlify site from this repo (`netlify.toml` is preconfigured).
-2. Set environment variables: `ANTHROPIC_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
-   `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and optionally `ALLOWED_ORIGINS`.
-3. In Supabase Auth settings, add the site URL to allowed redirect URLs.
+2. Set environment variables. **Required:** `ANTHROPIC_API_KEY` (mark it secret),
+   `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
+3. **Set the spend controls before the URL leaves your hands.** All of them are optional and
+   all of them default to wide open: with none set, anybody who signs up may spend your API
+   budget, and there is no ceiling over the day. See `.env.example` for what each does —
+   `AI_ALLOWED_EMAILS`, `AI_OWNER_EMAILS`, `AI_GUEST_USD_CAP`, `AI_TOTAL_USD_CAP`.
+4. Optional, for push notifications — all four, or none: `VAPID_PUBLIC_KEY`,
+   `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, and the client-side `VITE_VAPID_PUBLIC_KEY`, which
+   must match the public one. Push is simply unavailable if they are unset.
+5. Optional: `ALLOWED_ORIGINS`, needed for `localhost` during development.
+6. In Supabase Auth settings, add the site URL to allowed redirect URLs, and turn on leaked
+   password protection while you are there.
 
 ## Docs
 
+- `docs/WORKING-DOC.md` — **start here.** The whole app in one document: what it is, how it
+  works, what is tested, and an explicit assessment of what is missing before it can ship.
 - `docs/architecture.md` — layers, data model, AI engine design
+- `docs/positioning.md` — where this sits against the market (July 2026)
 - `docs/import.md` — one-time import from VENIA OS Brainstorm
+- `docs/vision-v2.md` — the original design brief. Historical; kept for provenance.

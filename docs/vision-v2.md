@@ -1,7 +1,13 @@
 # Brainstorm — Vision v2.0: A Living Cognitive Operating System
 
-Master design brief (July 2026). Supersedes the aesthetic direction in earlier docs;
-the data/engine architecture in `architecture.md` remains the foundation.
+Master design brief (July 2026). **Historical — kept for provenance, not as a spec.**
+
+This is where the water world came from, and the aesthetic direction still holds. The
+*migration notes* at the end do not: they name `src/features/brain/`, a Capture→Collect
+rename, and the `prioritize` action, none of which exist any more. The app has two tabs now,
+Ideas and Roadmap, and several of the surfaces described below were built and then deleted.
+
+For what is actually true today, read `WORKING-DOC.md`; for the engine, `architecture.md`.
 
 ## Product definition
 

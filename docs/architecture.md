@@ -58,11 +58,15 @@ No CRDT, no realtime channels — one user on a few devices does not need them y
 - The provider is isolated behind `LLMProvider` (`netlify/functions/_lib/provider.ts`);
   swapping vendors means one new class.
 
-Actions: `classify_thought`, `prioritize`, `absorb`, `organize`, `name_pool`, `cluster`,
-`gauge`, `deepen`, `answer`, `draft`, `rain`, `evaporate`, `reshape`, `notice`, `remember`.
+Actions, fifteen (`shared/ai/registry.ts` is the list of record): `classify_thought`,
+`absorb`, `organize`, `name_pool`, `cluster`, `gauge`, `deepen`, `answer`, `draft`, `rain`,
+`evaporate`, `reshape`, `remember`, `look`, `find_like`.
 
 Six were retired together: `summarize`, `clarify_question`, `find_related`, `to_goal`,
-`make_mind_map` and `generate_roadmap`. Four served one screen — a thought detail page
+`make_mind_map` and `generate_roadmap`. Two more went later with the Current screen —
+`notice` and `prioritize`; see Prioritization below. Two were added: `look`, which reads
+*across* a wall of reference images, and `find_like`, which fetches more pictures like one
+you already have. Four served one screen — a thought detail page
 reachable from a single link, behind a fold, in a list of finished work — and the sky had
 already replaced each of them: `to_goal` happens by dragging things together, `find_related`
 is the kinship threading, `clarify_question` is the ask moon, and `generate_roadmap` is
@@ -91,7 +95,7 @@ API key, nothing about how the user thinks leaving the stack.
 
 **Extract → reconcile.** One door: `learn()` in `src/ai/memoryFlow.ts`. Everything that
 might teach the app something — a capture, a pasted bio, the `learned` list off a `deepen`,
-`answer`, `draft` or `notice` run — goes through it. It recalls what is already believed
+`answer`, `draft` or `rain` run — goes through it. It recalls what is already believed
 nearby and hands both to the `remember` action, which returns one op per decision:
 `add` · `update` (same belief, better stated — in place, keeping the id, the strength and
 the trail) · `archive` (directly contradicted; archived, never deleted) · `noop` (already
@@ -129,12 +133,43 @@ opens.
 
 ## Prioritization
 
-Two layers. A deterministic, unit-tested pre-pass (`src/domain/prioritize-prepass.ts`):
-unmet `depends_on`/`blocks` ⇒ waiting, future snooze hidden, overdue ⇒ now, manual buckets
-win. Then the `prioritize` action refines buckets and picks ONE recommended action with a
-plain-language "why", denormalized into `profiles.settings` so Home/Focus render instantly.
-Autonomy is user-controlled: *suggest only* shows a proposal card; *organize automatically*
-applies it.
+**No model is involved, and there is no second opinion.** There used to be: a `prioritize`
+action refined buckets, picked one recommended action, and denormalized it into
+`profiles.settings` so a Home and a Focus screen could render it instantly. All three of
+those things are gone — the screens with the Current, the action with them, and the
+denormalized field with the `bucket` column it fed.
+
+What is left is deterministic, unit-tested and offline:
+
+- `src/domain/prioritize-prepass.ts` — unmet `depends_on`/`blocks` ⇒ waiting, future snooze
+  hidden, sort by due date then age.
+- `src/domain/plan.ts` — `waitingOn`, `hasPlan`, `planOrder` (a stable, cycle-safe
+  topological sort), `orderTree`.
+- `src/domain/next-action.ts` — a six-rule ladder (overdue, due today, holding up the most
+  other work, due soonest, smallest, oldest) where the rule that fired *is* the reason
+  shown.
+
+## The roadmap
+
+The second tab, added August 2026 (`src/features/roadmap/`). It is a **view** of the same
+graph read against a week, and it writes no new kind of record — the mistake
+`generate_roadmap` made and the reason it was deleted.
+
+- `src/domain/schedule.ts` — `weeklyCapacity` learns how much a week holds from
+  `completed_at`, which every tick already writes: the median of the weeks you actually
+  worked, current week excluded, defaulting to 8 and saying so until it has seen two.
+  `placeWork` lays steps on days under three rules in priority order — nothing before what
+  it waits on; a deadline that has not passed beats capacity; otherwise plan order until the
+  day is full.
+- `src/features/roadmap/gather.ts` — what is on it: root goals you have marked
+  (`extra.pursuing_since`), leaves only, and only `action`/`task`, which is the same rule
+  every drop's own page states out loud.
+- `src/features/roadmap/doAllFlow.ts` — the batch. `canDraft`, the model's own judgement
+  written by `rain`, decides what the agent will offer to do; approved runs go serially
+  through `draft`, capped at six.
+
+The sky's "what to do next" bar quotes the roadmap rather than holding its own opinion, and
+falls back to `next-action.ts` only when there is no plan yet. One answer, shown twice.
 
 ## Failure posture
 
