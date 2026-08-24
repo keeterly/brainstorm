@@ -20,6 +20,7 @@ import {
   open,
   openGroup,
   openMember,
+  pageReady,
   primaryVerb,
   rows,
   runVerb,
@@ -324,6 +325,45 @@ describe('the brief is a map, not a wall', () => {
     console.log(`  tapping a step offers: “${opened.verb}”`)
     expect(opened.open, 'tapping a step on the map did nothing').toBe(true)
     expect(opened.verb, 'the step offers no way to get on with it').not.toBe('')
+
+    /*
+     * …and what you have finished leaves the map.
+     *
+     * It used to draw every descendant including the done ones, on the
+     * reasoning that a path half walked should show the half you walked. On a
+     * real plan of eighteen with ten done that came out as ten struck-through
+     * nodes stacked above the eight that remain — the picture of the work
+     * became a picture of the archive, which is the exact thing the group page
+     * was fixed for. The count of what is behind you lives there, on the
+     * "hide N done" control; the map is the road ahead.
+     */
+    const before = m.nodes
+    await openMember(page, group, (idea as Row).id)
+    const first = (await rows(page))[0]
+    expect(first, 'the worked-out step has no plan under it').toBeTruthy()
+    await tickRow(page, (first as Row).id)
+    // …from a freshly opened page. Ticking sinks the row and re-flows the list
+    // under it, and a tap aimed at where the brief button was before that is a
+    // tap on nothing — which reads as the map having vanished.
+    await openMember(page, group, (idea as Row).id)
+    await tap(page, '.pans [data-act="brief"]')
+    await pageReady(page)
+    await page.waitForTimeout(1200)
+    const state = await page.evaluate(() => {
+      const pg = document.querySelector('[data-sky="page"]') as HTMLElement | null
+      return {
+        nodes: document.querySelectorAll('.map .mnode').length,
+        mode: pg?.dataset.mode ?? '(none)',
+        on: pg?.classList.contains('on') ?? false,
+        rows: document.querySelectorAll('[data-sky="pageA"] .row').length,
+        ticked: document.querySelectorAll('[data-sky="pageA"] .row.ticked').length,
+        steps: document.querySelectorAll('[data-sky="pageA"] .step').length,
+      }
+    })
+    const after = state.nodes
+    console.log(`  ticked one — map went from ${before} to ${after} · ${JSON.stringify(state)}`)
+    expect(after, 'a finished step is still drawn on the map').toBe(before - 1)
+
     await backToSky(page)
   }, 240_000)
 })

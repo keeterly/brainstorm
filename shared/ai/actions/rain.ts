@@ -52,7 +52,10 @@ const Output = z.object({
     .array(
       z.object({
         tempId: z.string().min(1).max(24),
-        title: z.string().min(1).max(160),
+        // A name, not a sentence — see the prompt. 160 let the model write a
+        // paragraph here, and `trimToSchema` then cut it at a word boundary,
+        // which is why steps used to end "…and depend on the".
+        title: z.string().min(1).max(80),
         /** one line, in their language, for why this one and why now */
         why: z.string().max(200),
         effort: z.number().int().min(1).max(5),
@@ -95,7 +98,10 @@ export type RainOutput = z.infer<typeof Output>
 
 export const rain: ActionDef<RainInput, RainOutput> = {
   name: 'rain',
-  version: 1,
+  // 2: the step title became a name rather than a sentence — 80 chars, not
+  //    160. Only ever tightens a string, so an in-flight run landing under the
+  //    old contract is a long title in a UI that clamps, not a corruption.
+  version: 2,
   // Smart, because condensing ten half-thoughts into the four things that
   // actually follow from them is the hardest judgement in the app — and cheap
   // anyway with no search and a small output.
@@ -141,6 +147,7 @@ export const rain: ActionDef<RainInput, RainOutput> = {
         `steps: what genuinely follows, at most 7 and usually fewer. Each one an action they take, small enough ` +
         `to sit down and start, phrased in their vocabulary. Order only where it truly matters, via dependsOn on ` +
         `your own tempIds. Effort 1 (a few minutes) to 5 (a week of real work).\n` +
+        `  · The title is a *name*, not a sentence — under 80 characters, what you would write on a sticky note. "Pull the SS27 SKU list", not "Pull the final SS27 best-seller SKU list from the production and sample tracker". Everything past the first few words belongs in why, which is what why is for.\n` +
         `  · Nothing that restates an item above. Not reworded, not merged, not "decide about" one of them.\n` +
         `  · Nothing generic. "Show it to someone", "sit with it", "make a plan" apply to every group ever ` +
         `made and so belong to none of them. If a step would still make sense under a different group's name, ` +

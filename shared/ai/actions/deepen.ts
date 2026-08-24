@@ -56,7 +56,10 @@ const Output = z.object({
     .array(
       z.object({
         tempId: z.string().min(1).max(24),
-        title: z.string().min(1).max(160),
+        // A name, not a sentence — see the prompt. 160 let the model write a
+        // paragraph here, and `trimToSchema` then cut it at a word boundary,
+        // which is why steps used to end "…and depend on the".
+        title: z.string().min(1).max(80),
         why: z.string().max(200),
         effort: z.number().int().min(1).max(5),
         dependsOn: z.array(z.string().max(24)).max(6),
@@ -77,7 +80,10 @@ export type DeepenOutput = z.infer<typeof Output>
 
 export const deepen: ActionDef<DeepenInput, DeepenOutput> = {
   name: 'deepen',
-  version: 1,
+  // 2: the step title became a name rather than a sentence — 80 chars, not
+  //    160. Only ever tightens a string, so an in-flight run landing under the
+  //    old contract is a long title in a UI that clamps, not a corruption.
+  version: 2,
   modelTier: 'smart',
   maxTokens: 8000,
   // Four, not six. Measured at 51s end to end with six, and the last two
@@ -117,6 +123,7 @@ export const deepen: ActionDef<DeepenInput, DeepenOutput> = {
         `give the ten that come first and let the rest wait; an eleventh is not accepted. Each one small enough ` +
         `to sit down and do, phrased as an action they take. Use dependsOn with your own tempIds where order ` +
         `genuinely matters. Effort is 1 (a few minutes) to 5 (a week of real work).\n` +
+        `  · The title is a *name*, not a sentence — under 80 characters, what you would write on a sticky note. "Pull the SS27 SKU list", not "Pull the final SS27 best-seller SKU list from the production and sample tracker". Everything past the first few words belongs in why, which is what why is for.\n` +
         `**Nothing that is already inside it.** Anything listed above is on their map already, and a step that ` +
         `restates one — even reworded, even merged with another, even more precisely — arrives as a duplicate ` +
         `they then have to find and delete. Running this twice on one goal should add almost nothing the second ` +

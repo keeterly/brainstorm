@@ -1155,7 +1155,16 @@ describe('writing is no longer a secret', () => {
      * and this page re-parsed that string into numbered paragraphs — the app
      * built a graph, wrote sentences about it, and showed you the sentences.
      */
-    expect(page).toMatch(/const kids = branchesOf\(tl\.t\.id, true\)/)
+    expect(page).toMatch(/const walked = branchesOf\(tl\.t\.id, true\)/)
+    /*
+     * …and the map is what is left, not what is behind you.
+     *
+     * It drew every descendant including the finished ones. On a real plan of
+     * eighteen with ten done that is ten struck-through nodes stacked above
+     * the eight that remain — the picture of the work becomes a picture of the
+     * archive, which is exactly what the group page was fixed for.
+     */
+    expect(page).toMatch(/const kids = walked\.filter\(\(k\) => k\.status !== 'done'\)/)
     expect(page).toMatch(/const shape = briefMap\(/)
     // the map goes in where the numbered list was, and the list goes
     expect(page).toMatch(/if \(map\) \{\n\s*if \(n === 1\) out\.push\(map\)\n\s*continue/)
@@ -1401,9 +1410,38 @@ describe('reversal is bulletproof', () => {
     expect(t.slice(0, 300)).toMatch(/height: 40px/)
     expect(t.slice(0, 300)).toMatch(/white-space: nowrap/)
     // …and the field measures itself against that rather than against its text
-    expect(page).toMatch(/row\.classList\.contains\('ticked'\) \? '' : field\.scrollHeight/)
+    const fit = page.slice(page.indexOf('const fit = () => {'))
+    const body = fit.slice(0, fit.indexOf('\n        }'))
+    expect(body).toMatch(/if \(row\.classList\.contains\('ticked'\)\) \{/)
+    expect(body).toMatch(/field\.style\.height = ''/)
     // choosing rows you cannot read is how you put away the wrong one
     expect(sky).toMatch(/\.pans\.picking \.row\.ticked \.t \{\n {2}white-space: normal;/)
+  })
+
+  it('a row is two lines until you touch it', () => {
+    /*
+     * Measured on real data: the average step title `rain` and `deepen` write
+     * is 89 characters and 110 of 148 are over 60 — a sentence where a name
+     * goes. The field grew to fit whatever it was given, so one row could be
+     * four lines of title over four lines of reason.
+     *
+     * Full height on focus, which is the same moment you are editing it, so
+     * there is no second gesture and no way to be stuck reading half a line.
+     */
+    const fit = page.slice(page.indexOf('const fit = () => {'))
+    const body = fit.slice(0, fit.indexOf('\n        }'))
+    expect(body).toMatch(/const cap = Math\.round\(line \* LINES \+ pad\)/)
+    expect(body).toMatch(/const mine = document\.activeElement === field/)
+    expect(body).toMatch(/mine \? full : Math\.min\(full, cap\)/)
+    expect(body).toMatch(/row\.classList\.toggle\('clipped', !mine && full > cap \+ 1\)/)
+    expect(page).toMatch(/field\.addEventListener\('focus', fit\)/)
+    expect(page).toMatch(/field\.addEventListener\('blur', fit\)/)
+    // a cut you can see is a cut
+    expect(sky).toMatch(/\.sky-page \.pans \.row\.clipped \.t \{/)
+    // …and the reason underneath is bounded too, opening with the title
+    const why = sky.slice(sky.indexOf('.sky-page .pans .row .why {'))
+    expect(why.slice(0, 600)).toMatch(/-webkit-line-clamp: 2/)
+    expect(sky).toMatch(/\.sky-page \.pans \.row:focus-within \.why \{ -webkit-line-clamp: unset; \}/)
   })
 
   it('a finished row sinks among its own siblings, with its children', () => {

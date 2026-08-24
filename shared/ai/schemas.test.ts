@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { zodToJsonSchema } from 'zod-to-json-schema'
 import { describe, expect, it } from 'vitest'
 import { ACTION_REGISTRY } from './registry'
 import { classifyThought } from './actions/classify-thought'
@@ -717,4 +720,38 @@ describe('rain — what falls out of a full cloud', () => {
     delete without.read
     expect(rain.outputSchema.safeParse(without).success).toBe(false)
   })
+})
+
+/*
+ * A step's title is a name.
+ *
+ * Measured against real data before this changed: the average title `rain` and
+ * `deepen` had written was 89 characters and 110 of 148 were over 60. The cap
+ * was 160, `trimToSchema` cut anything longer at a word boundary, and the
+ * result was steps that ended "…and depend on the" — a paragraph wearing a
+ * name's clothes, in a UI that draws it as a name.
+ */
+describe('steps are named, not described', () => {
+  for (const name of ['rain', 'deepen'] as const) {
+    it(`${name} caps the title at a name's length`, () => {
+      const def = ACTION_REGISTRY[name]
+      const shape = zodToJsonSchema(def.outputSchema, { $refStrategy: 'none' }) as Record<string, unknown>
+      const props = (shape.properties ?? {}) as Record<string, { items?: { properties?: Record<string, { maxLength?: number }> } }>
+      const title = props.steps?.items?.properties?.title
+      expect(title?.maxLength, `${name}.steps[].title`).toBeLessThanOrEqual(80)
+      // …and the reason still has room to say what the title stopped saying
+      const why = props.steps?.items?.properties?.why
+      expect(why?.maxLength ?? 0).toBeGreaterThan(120)
+    })
+
+    it(`${name} tells the model so`, () => {
+      // a cap alone just makes the model's sentence get cut shorter
+      const src = readFileSync(join('shared/ai/actions', `${name === 'rain' ? 'rain' : 'deepen'}.ts`), 'utf8')
+      expect(src).toMatch(/The title is a \*name\*, not a sentence/)
+    })
+
+    it(`${name} says its contract changed`, () => {
+      expect(ACTION_REGISTRY[name].version).toBeGreaterThanOrEqual(2)
+    })
+  }
 })

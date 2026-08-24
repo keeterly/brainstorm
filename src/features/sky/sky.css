@@ -1356,6 +1356,15 @@ body.sky-dragging .sky-undo.show {
 }
 /* Why this step, in the agent's own line for it. Quiet: it is the second thing
    you read on a row, never the first. */
+/* …and a cut you can see is a cut.
+   The field is capped at two lines closed (see fit) and this is how you know
+   there is more: the last line fades rather than stopping dead, which is the
+   difference between a title that was clipped and one that ends oddly. */
+.sky-page .pans .row.clipped .t {
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+}
+
 /* The reason under a step, told apart from the step.
    These were the same colour token at the same weight, 1.5px apart in size,
    separated only by an opacity — and the reason runs to two or three lines
@@ -1367,6 +1376,14 @@ body.sky-dragging .sky-undo.show {
   line-height: 1.45;
   color: var(--paper-soft, #5b6b7e);
   opacity: 0.78;
+  /* Two lines, like the title above it. `rain` writes up to 200 characters of
+     reason and the row was showing all of them, so the explanation of a step
+     took more of the page than the step. Opens with the title — touching one
+     is asking for the whole row. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   padding: 0 0 4px 6px;
   margin: -4px 0 0;
 }
@@ -2333,6 +2350,7 @@ body.sky-dragging .sky-undo.show {
 
    The reason it is safe to drop the why: the why explains what to do, and this
    is a thing that has been done. Un-tick it and every word comes back. */
+.sky-page .pans .row:focus-within .why { -webkit-line-clamp: unset; }
 .sky-page .pans .row.ticked .why,
 .sky-page .pans .row.ticked .effort,
 .sky-page .pans .row.ticked .waits {

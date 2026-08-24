@@ -3770,10 +3770,34 @@ function mountSky(root: HTMLDivElement) {
        * `branchesOf` with `withDone` so finished steps stay on the map. A path
        * you have walked half of should show you the half you walked.
        */
-      const kids = branchesOf(tl.t.id, true).map((b) => b.t)
+      /*
+       * The road ahead, not the one behind.
+       *
+       * This drew every descendant including the finished ones, on the
+       * reasoning that a path you have walked half of should show you the half
+       * you walked. Measured against a real plan that is wrong: eighteen steps
+       * with ten done came out as ten struck-through nodes stacked above the
+       * eight that are left, and the picture of the work became a picture of
+       * the archive. Exactly the thing the group page was fixed for, put back
+       * on the map.
+       *
+       * So the map is what is left. The count of what is behind you is on the
+       * group page, where "hide 10 done" already lives and where the finished
+       * rows are one line each — and the map's own job is the shape of what
+       * has not happened yet.
+       *
+       * `withDone` stays true on the walk only so the filter has something to
+       * filter — `branchesOf(id, false)` would drop a finished *parent* and
+       * take its unfinished children with it.
+       */
+      const walked = branchesOf(tl.t.id, true).map((b) => b.t)
+      const kids = walked.filter((k) => k.status !== 'done')
       const mrels = S().relationships
       const mrows = planRows(kids, mrels, true)
       const mBlocked = new Map(kids.map((k) => [k.id, mrows.get(k.id)?.blocked ?? false] as const))
+      // Only the open ones, which is all `waitingOn` would have counted anyway —
+      // it skips a blocker that is already done, so a step whose blocker is
+      // finished is correctly not waiting.
       const mDeps = waitingOn(new Map(kids.map((k) => [k.id, k] as const)), mrels)
       const shape = briefMap(
         kids.map((k) => k.id),
@@ -4432,11 +4456,41 @@ function mountSky(root: HTMLDivElement) {
         // tall that is. Written this way rather than with an !important in the
         // CSS: the inline height set here is what a rule would have to fight,
         // and a fight is harder to read than a condition.
+        /*
+         * Two lines, then it is your turn.
+         *
+         * Measured on real data: the average step title `rain` and `deepen`
+         * write is 89 characters and 110 of 148 are over 60 — the model puts a
+         * sentence where a name goes. This field grew to fit whatever it was
+         * given, so one row could be four lines of title over four lines of
+         * reason, and a plan of eighteen was a wall.
+         *
+         * Capped at two lines closed, full height the moment you touch it —
+         * which is also the moment you are editing it, so there is no second
+         * gesture to learn and no way to be stuck looking at half a sentence.
+         * `clipped` puts a fade on the ones with more to give, so a cut is
+         * visibly a cut rather than a title that happens to end oddly.
+         */
+        const LINES = 2
         const fit = () => {
           field.style.height = 'auto'
-          field.style.height = row.classList.contains('ticked') ? '' : field.scrollHeight + 'px'
+          if (row.classList.contains('ticked')) {
+            field.style.height = ''
+            row.classList.remove('clipped')
+            return
+          }
+          const cs = getComputedStyle(field)
+          const line = parseFloat(cs.lineHeight) || 20
+          const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)
+          const full = field.scrollHeight
+          const cap = Math.round(line * LINES + pad)
+          const mine = document.activeElement === field
+          field.style.height = (mine ? full : Math.min(full, cap)) + 'px'
+          row.classList.toggle('clipped', !mine && full > cap + 1)
         }
         field.addEventListener('input', fit)
+        field.addEventListener('focus', fit)
+        field.addEventListener('blur', fit)
         requestAnimationFrame(fit)
         const held = view.kidsOf.get(m.id)?.length ?? 0
         const heldEl = row.querySelector('.held') as HTMLElement
