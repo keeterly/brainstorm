@@ -150,6 +150,7 @@ describe('the steps, drawn', () => {
     done: false,
     blocked: false,
     waits: '',
+    act: '',
     ...p,
   })
 
@@ -199,6 +200,23 @@ describe('the steps, drawn', () => {
     ])
     expect(html).toContain('class="mnode done"')
     expect(html).toContain('class="mnode waiting"')
+  })
+
+  it('carries the verb on the node, so nothing has to repeat the steps', () => {
+    /*
+     * The brief drew the map and then drew "what to do about it" over the same
+     * step-children, so a plan of three said everything twice and the page came
+     * out longer than the numbered list it replaced — which was the complaint.
+     * The act rides the node; the list stands down.
+     */
+    const html = briefMapHtml([
+      row({ id: 'a', title: 'a', act: 'work it' }),
+      row({ id: 'b', title: 'b' }),
+    ])
+    expect(html.match(/class="go"/g)).toHaveLength(1)
+    expect(html).toContain('data-act="a"')
+    // …and the verb itself is text, set after the fact like every other word
+    expect(html).not.toContain('work it')
   })
 
   it('leaves out the effort slot when nobody sized it', () => {

@@ -1,7 +1,7 @@
 // agent_runs bookkeeping — all writes go through Supabase REST *as the user*
 // (their JWT is forwarded), so RLS applies and no service-role key exists here.
 import { DAILY_RUN_CAP, DAILY_USD_CAP, estimateUSD } from '../../../shared/ai/pricing'
-import { capForUser, onTheList, totalCap } from './who'
+import { capWithInvite, inviteFor, invitesRule, letIn, totalCap, type Invite } from './who'
 
 function rest(path: string): string {
   return `${process.env.SUPABASE_URL}/rest/v1/${path}`
@@ -157,8 +157,22 @@ export async function allowRun(
   searchMaxUses?: number,
   email: string | null = null,
 ): Promise<Gate> {
-  // Before anything is measured: signing in is not permission. See who.ts.
-  if (!onTheList(email)) {
+  /*
+   * Before anything is measured: signing in is not permission. See who.ts.
+   *
+   * Two ways in — the email list, and an invite somebody redeemed. The read
+   * fails *closed*: a guest list that cannot be checked is not a guest list,
+   * and this is the one moment it is worth the most.
+   */
+  let invite: Invite | null = null
+  if (invitesRule()) {
+    try {
+      invite = await inviteFor(userToken)
+    } catch {
+      return { ok: false, status: 503, error: 'Could not check the guest list. Try again in a moment.' }
+    }
+  }
+  if (!letIn(email, invite)) {
     return { ok: false, status: 403, error: 'This account is not on the list for AI actions.' }
   }
 
@@ -175,7 +189,7 @@ export async function allowRun(
     input.images,
   )
 
-  const mine = capForUser(email, DAILY_USD_CAP)
+  const mine = capWithInvite(email, invite, DAILY_USD_CAP)
   if (spend.usd + cost > mine) {
     return {
       ok: false,

@@ -79,3 +79,89 @@ export function totalCap(v = process.env.AI_TOTAL_USD_CAP): number | null {
   const n = Number(v)
   return Number.isFinite(n) && n > 0 ? n : null
 }
+
+/**
+ * The invite this person redeemed, if they redeemed one.
+ *
+ * The guest list used to be `AI_ALLOWED_EMAILS` and nothing else, which works
+ * and costs a redeploy per tester — you cannot add somebody from a phone while
+ * they are standing in front of you. An invite is a row instead: minting one is
+ * a row, revoking one is a row, and the cap that came with it rides along.
+ *
+ * Read with the *user's own* token. They may select the invite they redeemed
+ * and nothing else (see migration 0008), so this cannot be used to enumerate
+ * anybody else's, and — the part that matters — they cannot UPDATE it. A cap
+ * you can raise yourself is not a cap, which is exactly why this does not live
+ * on `profiles`, where the owner has `for all`.
+ */
+export interface Invite {
+  code: string
+  usd_cap: number | null
+  expires_at: string | null
+}
+
+export async function inviteFor(userToken: string): Promise<Invite | null> {
+  const url =
+    `${process.env.SUPABASE_URL}/rest/v1/invites` +
+    `?select=code,usd_cap,expires_at&used_by=not.is.null&limit=1`
+  const r = await fetch(url, {
+    headers: {
+      apikey: process.env.SUPABASE_ANON_KEY || '',
+      Authorization: `Bearer ${userToken}`,
+    },
+  })
+  // Throw rather than return null: "no invite" and "could not ask" are
+  // different answers, and the gate has to fail closed on the second one.
+  if (!r.ok) throw new Error(`invite read failed (${r.status})`)
+  const rows = (await r.json()) as Invite[]
+  const hit = rows[0]
+  if (!hit) return null
+  // an invite that has run out is not an invite
+  if (hit.expires_at && new Date(hit.expires_at).getTime() <= Date.now()) return null
+  return hit
+}
+
+/**
+ * Whether invites are the guest list on this deployment.
+ *
+ * Off unless asked for, like everything else in here. With it off, nothing
+ * about this deployment changes: the email list is the whole answer and a
+ * deployment with one user still needs no configuration at all.
+ */
+export function invitesRule(v = process.env.AI_INVITES): boolean {
+  return String(v ?? '').trim() === '1'
+}
+
+/**
+ * May this person use the AI at all, once invites are in play?
+ *
+ * The email list still wins outright — that is how you let yourself in without
+ * minting yourself a code, and how you keep a deployment that never turns
+ * invites on working exactly as it did. Failing that, a live invite is the
+ * other way in.
+ */
+export function letIn(email: string | null, invite: Invite | null, allowed = process.env.AI_ALLOWED_EMAILS): boolean {
+  if (onTheList(email, allowed)) {
+    // …unless the list is empty *and* invites are the rule, in which case
+    // "no list" must not mean "everybody", or turning invites on would have
+    // let in exactly the people it was meant to keep out.
+    if (!list(allowed).length && invitesRule()) return !!invite
+    return true
+  }
+  return !!invite
+}
+
+/**
+ * …and what that person may spend.
+ *
+ * An invite's own number beats the deployment's guest default, so one tester
+ * can be given more rope than another without touching config. It can only
+ * ever lower the full cap — `Math.min` — for the same reason `capForUser`
+ * does: a guest list is not a way to hand somebody a bigger budget than the
+ * deployment has.
+ */
+export function capWithInvite(email: string | null, invite: Invite | null, full: number): number {
+  const base = capForUser(email, full)
+  const own = Number(invite?.usd_cap)
+  return Number.isFinite(own) && own > 0 ? Math.min(own, full) : base
+}

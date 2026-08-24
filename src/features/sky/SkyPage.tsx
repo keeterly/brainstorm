@@ -282,6 +282,15 @@ export interface MapRow {
   blocked: boolean
   /** what it waits on, named — empty when it is free to start */
   waits: string
+  /**
+   * The verb the app offers for this step, if it offers one.
+   *
+   * On the node rather than in a list underneath it. The brief used to draw
+   * both: the map, and then "what to do about it" over the same step-children,
+   * so a plan of three said everything twice and the page came out longer than
+   * the one this replaced — which was the whole complaint.
+   */
+  act: string
 }
 
 /*
@@ -317,6 +326,7 @@ export function briefMapHtml(rows: MapRow[]): string {
           `<span class="t"></span>` +
           (r.dots ? `<span class="e${r.guessed ? ' guessed' : ''}"></span>` : '') +
           `<span class="w" hidden></span>` +
+          (r.act ? `<span class="go" role="button" tabindex="0" data-act="${esc(r.id)}" hidden></span>` : '') +
           `</button>`,
       )
       .join('') +
@@ -3704,8 +3714,8 @@ function mountSky(root: HTMLDivElement) {
         svg.setAttribute('viewBox', `0 0 ${Math.round(box.width)} ${Math.round(box.height)}`)
         svg.setAttribute('width', String(Math.round(box.width)))
         svg.setAttribute('height', String(Math.round(box.height)))
-        // the gutter's centre line — the same 14px the dot is inset by
-        const X = 14
+        // the gutter's centre line — the same inset the dot is drawn at
+        const X = 24
         const bits: string[] = []
         for (const e of sh.edges) {
           const a = at.get(e.from)
@@ -3724,8 +3734,16 @@ function mountSky(root: HTMLDivElement) {
              * something six rows back reads as a longer reach than one waiting
              * on the row above it.
              */
+            /*
+             * Far enough out to be its own line.
+             *
+             * The first draft bowed 5 to 11 pixels into a 14-pixel gutter, and
+             * at that width the curve ran along the spine rather than beside
+             * it — two lines in one place, which is what the spine/branch
+             * split exists to avoid. The gutter is wider now and so is the bow.
+             */
             const span = Math.abs(b - a)
-            const out = Math.max(5, Math.min(11, span / 12))
+            const out = Math.max(10, Math.min(19, span / 7))
             bits.push(
               `<path class="branch" d="M ${X} ${a} C ${X - out} ${a + (b - a) * 0.25}, ` +
                 `${X - out} ${a + (b - a) * 0.75}, ${X} ${b}" />`,
@@ -3735,43 +3753,6 @@ function mountSky(root: HTMLDivElement) {
         svg.innerHTML = bits.join('')
       }
 
-      /*
-       * …and what to do about it.
-       *
-       * ⚡ goes away for the best part of a minute, comes back with a good
-       * reading and a set of real steps — and the brief was where the trail
-       * went cold. It said what to do and gave you no way to do any of it:
-       * close the page, find the drop it belongs to in a sky that has moved,
-       * open its moons, and only then does the agent offer to help. Four moves
-       * between a recommendation and acting on it, and the agent had just
-       * spent a minute earning the right to be believed.
-       *
-       * Each row carries the one act the app would take on that step, decided
-       * by the same `getOnWithIt` the moons use — `answer it` on a question,
-       * `do it` on something makeable, `work it` on anything that has to be
-       * worked out first. It is the funnel, one tap from where you read it.
-       */
-      const next = S()
-        .relationships.filter((r) => r.type === 'part_of' && r.to_id === tl.t.id)
-        .map((r) => view.byId.get(r.from_id))
-        .filter((n): n is TL => !!n && n.t.status === 'open')
-        // Not the pictures. A reference wall's brief listed its own four
-        // photographs with "work it" beside each one, which is the app
-        // offering to go away and research a photograph. What follows from a
-        // wall is what rain makes of it, and those arrive here as real steps.
-        .filter((n) => !faceOf(n.t))
-        .slice(0, 8)
-      const rows = next.map((n) => ({ tl: n, act: getOnWithIt(n) }))
-      const todo = rows.length
-        ? `<div class="lab">what to do about it</div>` +
-          rows
-            .map(
-              (_r, i) =>
-                `<div class="todo" data-i="${i}"><div class="v"></div>` +
-                `<button class="ctl go" data-i="${i}"></button></div>`,
-            )
-            .join('')
-        : ''
       /*
        * The steps, from the graph rather than from the write-up.
        *
@@ -3803,6 +3784,11 @@ function mountSky(root: HTMLDivElement) {
         ? shape.nodes.map((nd) => {
             const t = kids.find((k) => k.id === nd.id) as Thought
             const r = mrows.get(nd.id)
+            const mtl = view.byId.get(nd.id)
+            // The one act the app would take on this step, from the same
+            // `getOnWithIt` the moons use. It rides the node so that the list
+            // that used to carry it can go — see below.
+            const act = mtl && t.status !== 'done' ? getOnWithIt(mtl) : null
             return {
               id: nd.id,
               title: label(t),
@@ -3812,9 +3798,47 @@ function mountSky(root: HTMLDivElement) {
               done: t.status === 'done',
               blocked: nd.blocked,
               waits: r?.waits ?? '',
+              act: act && !act.dim ? act.lb : '',
             }
           })
         : []
+      /*
+       * …and what to do about it.
+       *
+       * ⚡ goes away for the best part of a minute, comes back with a good
+       * reading and a set of real steps — and the brief was where the trail
+       * went cold. It said what to do and gave you no way to do any of it:
+       * close the page, find the drop it belongs to in a sky that has moved,
+       * open its moons, and only then does the agent offer to help. Four moves
+       * between a recommendation and acting on it, and the agent had just
+       * spent a minute earning the right to be believed.
+       *
+       * Each row carries the one act the app would take on that step, decided
+       * by the same `getOnWithIt` the moons use — `answer it` on a question,
+       * `do it` on something makeable, `work it` on anything that has to be
+       * worked out first. It is the funnel, one tap from where you read it.
+       */
+      const next = S()
+        .relationships.filter((r) => r.type === 'part_of' && r.to_id === tl.t.id)
+        .map((r) => view.byId.get(r.from_id))
+        .filter((n): n is TL => !!n && n.t.status === 'open')
+        // Not the pictures. A reference wall's brief listed its own four
+        // photographs with "work it" beside each one, which is the app
+        // offering to go away and research a photograph. What follows from a
+        // wall is what rain makes of it, and those arrive here as real steps.
+        .filter((n) => !faceOf(n.t))
+        .slice(0, 8)
+      const rows = next.map((n) => ({ tl: n, act: getOnWithIt(n) }))
+      const todo = rows.length && !mapRows.length
+        ? `<div class="lab">what to do about it</div>` +
+          rows
+            .map(
+              (_r, i) =>
+                `<div class="todo" data-i="${i}"><div class="v"></div>` +
+                `<button class="ctl go" data-i="${i}"></button></div>`,
+            )
+            .join('')
+        : ''
       pageA.innerHTML = briefHtml(
         art?.content_md ?? '',
         art?.sources ?? [],
@@ -3844,13 +3868,37 @@ function mountSky(root: HTMLDivElement) {
           'aria-label',
           `${r.title}${r.done ? ', finished' : r.blocked ? `, ${r.waits}` : ''}`,
         )
-        if (!w.textContent) el.setAttribute('aria-disabled', 'true')
+        if (!w.textContent && !r.act) el.setAttribute('aria-disabled', 'true')
+        /*
+         * …and the act, under the reason, once you have unfolded it.
+         *
+         * Not on the closed row. A verb sitting on every line of a map turns
+         * the picture into a menu, and the point of one line per step was that
+         * you can read the shape without reading the words. It appears where
+         * you have already stopped to look.
+         */
+        const go = el.querySelector('.go') as HTMLElement | null
+        if (go) {
+          go.textContent = r.act
+          go.setAttribute('aria-label', `${r.act} — ${r.title}`)
+          go.addEventListener('click', (ev) => {
+            ev.stopPropagation()
+            const mtl = view.byId.get(r.id)
+            if (!mtl) return
+            // the same walk the brief's own rows made: leave the reading
+            // surface, go to the thing, and let the act say what it is doing
+            closePage(false)
+            focusOn(posOf(r.id))
+            setTimeout(() => getOnWithIt(mtl).run(), reduced ? 0 : 160)
+          })
+        }
         el.addEventListener('click', (ev) => {
           ev.stopPropagation()
-          if (!w.textContent) return
+          if (!w.textContent && !go) return
           const open = el.getAttribute('aria-expanded') === 'true'
           el.setAttribute('aria-expanded', String(!open))
-          w.hidden = open
+          w.hidden = open || !w.textContent
+          if (go) go.hidden = open
           // the rows just changed height, so the wires between them are wrong
           paintWires()
         })

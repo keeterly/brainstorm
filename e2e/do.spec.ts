@@ -293,8 +293,10 @@ describe('the brief is a map, not a wall', () => {
         // …and nothing may run out the side of it on a phone
         over: nodes.filter((n) => n.scrollWidth > n.clientWidth + 1).map((n) => n.textContent?.slice(0, 30)),
         titles: nodes.map((n) => (n.querySelector('.t')?.textContent ?? '').slice(0, 28)),
-        // the numbered list it replaced is gone
+        // the numbered list it replaced is gone, and so is the row list that
+        // used to draw the very same step-children underneath it
         steps: document.querySelectorAll('[data-sky="pageA"] .step').length,
+        todos: document.querySelectorAll('[data-sky="pageA"] .todo').length,
       }
     })
     console.log(`  map: ${JSON.stringify(map)}`)
@@ -309,6 +311,19 @@ describe('the brief is a map, not a wall', () => {
     expect(m.h, 'the wires were drawn into a box with no height').toBeGreaterThan(20)
     expect(m.over, 'a step ran out the side of the map').toEqual([])
     expect(m.steps, 'the numbered list is still there under the map').toBe(0)
+    expect(m.todos, 'the brief is drawing the same steps twice').toBe(0)
+
+    // …and the act is on the node, which is what let the second list go
+    await tap(page, '.map .mnode')
+    await page.waitForTimeout(400)
+    const opened = await page.evaluate(() => {
+      const n = document.querySelector('.map .mnode[aria-expanded="true"]')
+      const go = n?.querySelector('.go') as HTMLElement | null
+      return { open: !!n, verb: go && !go.hidden ? (go.textContent ?? '').trim() : '' }
+    })
+    console.log(`  tapping a step offers: “${opened.verb}”`)
+    expect(opened.open, 'tapping a step on the map did nothing').toBe(true)
+    expect(opened.verb, 'the step offers no way to get on with it').not.toBe('')
     await backToSky(page)
   }, 240_000)
 })

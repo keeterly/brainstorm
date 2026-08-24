@@ -18,6 +18,7 @@ import type {
   ThoughtStatus,
   ThoughtType,
 } from '@/domain/types'
+import { EXAMPLES, markSeeded, shouldSeed } from '@/lib/first-sky'
 
 export interface NewThought {
   id?: string
@@ -169,6 +170,20 @@ export const useGraph = create<GraphState>((set, get) => ({
         hydrated: true,
         offline: false,
       })
+      /*
+       * …and if this is somebody's first morning, put something in the sky.
+       *
+       * Here rather than in a component, because it has to happen exactly once
+       * per empty account and a component can mount twice. `shouldSeed` is the
+       * whole of the judgement and it refuses on anything but a hydrated,
+       * online, genuinely empty store — see first-sky.ts, where the reason
+       * that condition is written first is that getting it wrong drops four
+       * examples on top of somebody's real work.
+       */
+      if (shouldSeed(get(), userId)) {
+        markSeeded(userId)
+        for (const e of EXAMPLES) get().addThought(e)
+      }
       scheduleSnapshot(get)
     } catch {
       // Offline (or server unreachable): open from the local snapshot.

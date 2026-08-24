@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { readAllowance, type Allowance } from '@/ai/allowance'
@@ -105,8 +106,15 @@ export default function RunsPage() {
     <div className="page">
       <h1 className="page-title">AI activity</h1>
       {mine && !mine.allowed && (
+        // …and where to go about it. It used to state the fact and stop there,
+        // which leaves somebody who was handed a code with nowhere to put it.
         <p className="faint" style={{ fontSize: 'var(--fs-label)', marginBottom: 'var(--sp-3)' }} role="status">
-          This account is not on the list for AI actions. Everything else in the app works.
+          This account is not on the list for AI actions. Everything else in the app works — and if
+          somebody gave you a code,{' '}
+          <Link to="/settings" style={{ color: 'rgba(var(--accent-rgb), 0.9)' }}>
+            put it in here
+          </Link>
+          .
         </p>
       )}
       {today !== null && (
