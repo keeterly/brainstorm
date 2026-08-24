@@ -342,6 +342,17 @@ export const DEMO_OUTPUT: Record<string, unknown> = {
         effort: 1,
         dependsOn: ['d1'],
       },
+      // …and one that waits on the first rather than on the one in front of it.
+      // The sequence already carries d1 → d2, so that is the spine; this is the
+      // only kind of dependency the spine cannot say, and without one in here
+      // the demo cannot exercise a branch at all — see briefMap.
+      {
+        tempId: 'd3',
+        title: 'Grade the test frames against the reference wall',
+        why: 'the roll is the only thing that can settle whether the look holds',
+        effort: 2,
+        dependsOn: ['d1'],
+      },
     ],
     watchOuts: ['Mixing batches, so the test tells you nothing about the shoot'],
     sources: [{ title: 'Shooting expired film', url: 'https://filmphotographyproject.com/expired-film' }],

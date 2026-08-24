@@ -1106,7 +1106,70 @@ body.sky-dragging .sky-undo.show {
 /* A finding is two things: what it is, and why it matters. They were one line
    at one size, so a brief read as a paragraph with some bold in it. */
 .sky-page .pans .a .h { font-size: 15px; font-weight: 550; line-height: 1.35; color: #131a24; }
-.sky-page .pans .a .d { font-size: 13px; line-height: 1.5; color: var(--paper-soft, #5b6b7e); margin-top: 3px; }
+/*
+ * The reason under a finding, capped.
+ *
+ * Eight findings at 280 characters of point and 240 of reason is four
+ * kilobytes, and nothing in the brief was clamped — not the point, not the
+ * reason, not the watch-outs. It scrolled as one column and you read the whole
+ * thing to find the one number you came for.
+ *
+ * Two lines, and the rest on a tap. Not hidden: a research brief whose reasons
+ * are all folded away is a list of assertions, and the reason is what makes a
+ * fact worth believing. Two lines is enough to know whether you want the third.
+ */
+.sky-page .pans .a .d {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--paper-soft, #5b6b7e);
+  margin-top: 3px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.sky-page .pans .a.open .d { -webkit-line-clamp: unset; }
+/* Only the ones that have more to give say so. */
+.sky-page .pans .a.more { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sky-page .pans .a.more:active { opacity: 0.6; }
+.sky-page .pans .a.more .d::after {
+  content: ' more';
+  color: rgba(42, 127, 184, 0.85);
+  font-weight: 500;
+}
+.sky-page .pans .a.open .d::after { content: ''; }
+
+/*
+ * A watch-out.
+ *
+ * "Where this goes wrong" is up to four plain sentences of 220 characters, and
+ * they were set as bare body text — same size, same colour, no marker — under
+ * a heading, immediately below the reasons, which are also bare body text. The
+ * section read as more of the same paragraph.
+ *
+ * A marker and a clamp. The app already had this exact pattern for the
+ * check-list in the working pill; it just was not used here.
+ */
+.sky-page .pans .a.note {
+  position: relative;
+  padding-left: 15px;
+  color: var(--paper-soft, #5b6b7e);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.sky-page .pans .a.note::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 1.32em;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(19, 26, 36, 0.3);
+}
+.sky-page .pans .a.note.open { -webkit-line-clamp: unset; }
 .sky-page .pans img { max-width: 120px; border-radius: 12px; display: block; margin-bottom: 8px; }
 /* The thumbnail is a way in. It was a picture sitting on a page doing nothing,
    which on a drop that *is* a photograph is the whole content of the thing. */
@@ -2473,6 +2536,128 @@ body.sky-dragging .sky-undo.show {
 .sky-page .bot .later.show { display: inline-flex; }
 .sky-page .bot .later svg { width: 17px; height: 17px; flex-shrink: 0; }
 .sky-page .bot .later:active { transform: scale(0.96); }
+
+/*
+ * The brief, drawn.
+ *
+ * `deepen` returns the steps with an effort each and a dependsOn list between
+ * them, and `applyDeepen` writes both into the graph as real thoughts and real
+ * edges — and the page then rendered a markdown summary that mentioned neither.
+ * Nine kilobytes of uncapped prose over a single hairline rule, out of a thing
+ * that already knew its own shape.
+ *
+ * Dots in a left gutter with the wires drawn in it, the way a version-control
+ * graph does it, and for the same reason: it stays a list you read top to
+ * bottom, and the lines cost the words none of their width. On 393pt that is
+ * worth more than a cleverer picture.
+ */
+.sky-page .pans .map {
+  position: relative;
+  margin: 2px 0 4px;
+}
+.sky-page .pans .map .wires {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+/* The sequence. Faint, because it is the thing you already assumed — steps come
+   in an order — and the branches are what you did not know. */
+.sky-page .pans .map .wires .spine {
+  stroke: rgba(19, 26, 36, 0.16);
+  stroke-width: 1.5;
+}
+/* …and a dependency the order does not already carry. Dashed and in the
+   accent, the same two moves the sky uses to tell a thread from a resemblance
+   — see line.bond. */
+.sky-page .pans .map .wires .branch {
+  stroke: rgba(42, 127, 184, 0.5);
+  stroke-width: 1.3;
+  stroke-dasharray: 1 3.5;
+  fill: none;
+}
+
+.sky-page .pans .map .mnode {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 2px 10px;
+  width: 100%;
+  padding: 9px 0 9px 32px;
+  background: none;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+/* On the line the title starts on, not the middle of a row whose height
+   depends on whether the reason underneath it is unfolded. */
+.sky-page .pans .map .mnode .dot {
+  position: absolute;
+  left: 14px;
+  top: 16px;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%;
+  background: var(--paper, #dbe3ec);
+  box-shadow: inset 0 0 0 1.5px rgba(42, 127, 184, 0.75);
+}
+/* One line. That is the whole of this change — the brief was a wall — so the
+   title clamps and the reason waits behind a tap. */
+.sky-page .pans .map .mnode .t {
+  font-size: 14.5px;
+  line-height: 1.4;
+  font-weight: 500;
+  color: #131a24;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sky-page .pans .map .mnode .e {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--paper-ink, #3d4b5c);
+  opacity: 0.34;
+  white-space: nowrap;
+}
+.sky-page .pans .map .mnode .e.guessed { opacity: 0.26; font-size: 11px; }
+/* The reason, and what it waits on. Unfolded, so it is there when you want it
+   and is not the page when you do not. */
+.sky-page .pans .map .mnode .w {
+  grid-column: 1 / -1;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--paper-soft, #5b6b7e);
+  white-space: normal;
+}
+.sky-page .pans .map .mnode[aria-expanded='true'] .t { white-space: normal; }
+/* Waiting is dimmed rather than hidden — the same rule the group page uses.
+   You still want to see it coming, and a plan that hides what is blocked
+   cannot tell you why nothing is happening. */
+.sky-page .pans .map .mnode.waiting .t { color: var(--paper-soft, #5b6b7e); }
+.sky-page .pans .map .mnode.waiting .dot { box-shadow: inset 0 0 0 1.5px rgba(19, 26, 36, 0.22); }
+/* Finished: filled in, struck through, and still on the map. A path you have
+   walked half of should show you the half you walked. */
+.sky-page .pans .map .mnode.done .t {
+  color: var(--paper-soft, #8fa3b6);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-color: rgba(19, 26, 36, 0.28);
+}
+.sky-page .pans .map .mnode.done .dot {
+  background: rgba(42, 127, 184, 0.75);
+  box-shadow: none;
+}
+.sky-page .pans .map .mnode[aria-disabled='true'] { cursor: default; }
+.sky-page .pans .map .mnode:active .t { opacity: 0.6; }
 
 /* the path — rain resolves into a quiet page */
 .sky-page.path .pans { max-height: none; flex: 1; padding-top: 6px; }

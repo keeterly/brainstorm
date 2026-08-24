@@ -1147,6 +1147,51 @@ describe('writing is no longer a secret', () => {
     expect(page).toMatch(/`☁ \$\{resting \+ aside\} aside`/)
   })
 
+  it('the brief draws its steps instead of listing them', () => {
+    /*
+     * `deepen` returns each step with an effort and a dependsOn list, and
+     * `applyDeepen` writes both into the graph as real thoughts and real edges.
+     * Then `briefMarkdown` flattened the lot into a string mentioning neither
+     * and this page re-parsed that string into numbered paragraphs — the app
+     * built a graph, wrote sentences about it, and showed you the sentences.
+     */
+    expect(page).toMatch(/const kids = branchesOf\(tl\.t\.id, true\)/)
+    expect(page).toMatch(/const shape = briefMap\(/)
+    // the map goes in where the numbered list was, and the list goes
+    expect(page).toMatch(/if \(map\) \{\n\s*if \(n === 1\) out\.push\(map\)\n\s*continue/)
+    // …and it is never dropped when the write-up had no numbered line at all
+    expect(page).toMatch(/if \(map && !out\.includes\(map\)\) out\.push\(map\)/)
+    // gutter, spine, branch
+    expect(sky).toMatch(/\.sky-page \.pans \.map \.wires \.spine \{/)
+    expect(sky).toMatch(/\.sky-page \.pans \.map \.wires \.branch \{/)
+    expect(sky).toMatch(/stroke-dasharray: 1 3\.5/)
+  })
+
+  it('measures the wires rather than assuming a row height', () => {
+    // a title wraps differently at another text size and unfolding a reason
+    // makes its row taller; geometry from a constant is wrong the first time
+    // either happens
+    const fn = page.slice(page.indexOf('function paintWires('))
+    const body = fn.slice(0, fn.indexOf('\n      }'))
+    expect(body).toMatch(/getBoundingClientRect\(\)/)
+    expect(body).toMatch(/svg\.setAttribute\('viewBox'/)
+    // and an edge whose other end is not drawn is not drawn either
+    expect(body).toMatch(/if \(a === undefined \|\| b === undefined\) continue/)
+  })
+
+  it('caps the reasons and marks the caveats', () => {
+    // eight findings at 280 + 240 characters, four watch-outs at 220, and not
+    // one clamp anywhere in the brief
+    const d = sky.slice(sky.indexOf('.sky-page .pans .a .d {'))
+    expect(d.slice(0, 400)).toMatch(/-webkit-line-clamp: 2/)
+    expect(sky).toMatch(/\.sky-page \.pans \.a\.open \.d \{ -webkit-line-clamp: unset; \}/)
+    const note = sky.slice(sky.indexOf('.sky-page .pans .a.note {'))
+    expect(note.slice(0, 400)).toMatch(/-webkit-line-clamp: 2/)
+    expect(note.slice(0, 400)).toMatch(/padding-left: 15px/)
+    // "more" only where there is more — measured, not guessed
+    expect(page).toMatch(/if \(!inner \|\| inner\.scrollHeight <= inner\.clientHeight \+ 1\) continue/)
+  })
+
   it('does not stand the undo bar on top of the pen', () => {
     /*
      * The undo bar was measured off the tab bar and the pen off the water line,

@@ -217,3 +217,98 @@ describe('when it cannot reach the engine', () => {
     expect(app.errors, app.errors.join(' | ')).toHaveLength(0)
   })
 })
+
+/*
+ * What ⚡ brings back, drawn rather than written.
+ *
+ * `deepen` returns its steps with an effort each and a `dependsOn` list between
+ * them, and `applyDeepen` writes both into the graph as real thoughts and real
+ * edges. The brief then rendered a markdown summary that mentioned neither —
+ * the app built a graph, wrote sentences about it, and showed you the sentences.
+ */
+describe('the brief is a map, not a wall', () => {
+  it('draws the steps with the wires between them', async () => {
+    // Something with nothing under it yet — that is what `work it` is for, and
+    // it is the branch of getOnWithIt that reaches `deepen`.
+    await backToSky(page)
+    await openGroup(page, group)
+    const all = await rows(page)
+    // Found rather than named. Which of the plan's steps reaches `deepen`
+    // depends on what `rain` happened to write, and a check that hard-codes one
+    // title fails looking like the map is broken when the plan simply came out
+    // differently.
+    let idea: Row | undefined
+    for (const r of all) {
+      await openMember(page, group, r.id)
+      if (/work it/i.test(await primaryVerb(page))) {
+        idea = r
+        break
+      }
+    }
+    expect(idea, `nothing here reaches ⚡ — the plan holds: ${all.map((r) => r.title).join(' | ')}`).toBeTruthy()
+    console.log(`  working out: “${(idea as Row).title}”`)
+
+    const heard = await runVerb(page, 120_000)
+    console.log(`  while working it out: ${heard.map((h) => `“${h}”`).join(', ') || '(nothing)'}`)
+
+    /*
+     * …and then read it.
+     *
+     * Not through the primary verb. Working something out gives it steps, which
+     * makes it a group — so `onwith` now offers what you do with a group, and
+     * tapping it opened the plan rather than the brief. The way to the brief is
+     * the button that exists for it, which only appears once there is one.
+     */
+    await openMember(page, group, (idea as Row).id)
+    const readIt = await page.evaluate(
+      () => document.querySelector('.pans [data-act="brief"]')?.textContent?.trim() ?? '',
+    )
+    expect(readIt, 'nothing offers to read what came back').not.toBe('')
+    await tap(page, '.pans [data-act="brief"]')
+    await page.waitForTimeout(2500)
+
+    const why = await page.evaluate(() => {
+      const pg = document.querySelector('[data-sky="page"]') as HTMLElement | null
+      const pa = document.querySelector('[data-sky="pageA"]')
+      return {
+        mode: pg?.dataset.mode ?? '(none)',
+        on: pg?.classList.contains('on'),
+        kids: pa?.children.length ?? 0,
+        classes: [...(pa?.children ?? [])].map((c) => c.className).slice(0, 12),
+        text: (pa?.textContent ?? '').slice(0, 160),
+      }
+    })
+    console.log(`  page: ${JSON.stringify(why)}`)
+    const map = await page.evaluate(() => {
+      const el = document.querySelector('[data-sky="map"]')
+      if (!el) return null
+      const svg = el.querySelector('[data-sky="wires"]') as SVGSVGElement | null
+      const nodes = [...el.querySelectorAll('.mnode')] as HTMLElement[]
+      return {
+        nodes: nodes.length,
+        spine: svg?.querySelectorAll('.spine').length ?? 0,
+        branch: svg?.querySelectorAll('.branch').length ?? 0,
+        // the picture has to have a size, or it is drawn into nothing
+        h: Math.round(svg?.getBoundingClientRect().height ?? 0),
+        // …and nothing may run out the side of it on a phone
+        over: nodes.filter((n) => n.scrollWidth > n.clientWidth + 1).map((n) => n.textContent?.slice(0, 30)),
+        titles: nodes.map((n) => (n.querySelector('.t')?.textContent ?? '').slice(0, 28)),
+        // the numbered list it replaced is gone
+        steps: document.querySelectorAll('[data-sky="pageA"] .step').length,
+      }
+    })
+    console.log(`  map: ${JSON.stringify(map)}`)
+
+    expect(map, 'the brief drew no map at all').toBeTruthy()
+    const m = map as NonNullable<typeof map>
+    expect(m.nodes, 'a map with nothing on it').toBeGreaterThan(1)
+    expect(m.spine, 'the steps are not joined to each other').toBeGreaterThan(0)
+    // the demo's third step waits on the first, which the sequence cannot say —
+    // see DEMO_OUTPUT.deepen
+    expect(m.branch, 'the dependency the order does not carry was not drawn').toBeGreaterThan(0)
+    expect(m.h, 'the wires were drawn into a box with no height').toBeGreaterThan(20)
+    expect(m.over, 'a step ran out the side of the map').toEqual([])
+    expect(m.steps, 'the numbered list is still there under the map').toBe(0)
+    await backToSky(page)
+  }, 240_000)
+})

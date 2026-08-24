@@ -37,6 +37,8 @@ import { canAgentDo } from '@/domain/doable'
 import { takeWanted } from '@/features/roadmap/handoff'
 import { addDays, todayISO as localToday } from '@/domain/prioritize-prepass'
 import { effortDots, hasPlan, orderTree, waitingOn } from '@/domain/plan'
+import { planRows } from '@/domain/row'
+import { briefMap, worthDrawing } from '@/domain/brief-map'
 import {
   addTo,
   bin,
@@ -268,11 +270,76 @@ export const esc = (t: string) =>
 /** A label written for a small disc, standing up as a button on a page. */
 export const sentence = (t: string) => (t ? t[0].toUpperCase() + t.slice(1) : t)
 
+/** One step on the map, as the markup needs it. */
+export interface MapRow {
+  id: string
+  title: string
+  /** `•••`, or `◦◦` where nobody sized it — see effortDots */
+  dots: string
+  guessed: boolean
+  why: string
+  done: boolean
+  blocked: boolean
+  /** what it waits on, named — empty when it is free to start */
+  waits: string
+}
+
+/*
+ * The steps, drawn.
+ *
+ * A vertical run with the dots in a left gutter and the wires between them
+ * drawn in that gutter — the shape a version-control graph uses, for the same
+ * reason: it is a list you can still read top to bottom, and the lines are
+ * somewhere that does not cost the words any width. On a 393pt screen that
+ * matters more than the picture being clever.
+ *
+ * One line per step. That is the whole point of this — the brief was nine
+ * kilobytes of uncapped prose — so the title clamps and the reason lives behind
+ * a tap rather than under every row at all times.
+ *
+ * The wires are not in here. They are painted from the real element positions
+ * once this is in the DOM (see paintWires), because a row's height depends on
+ * the font, the text, and whether you have unfolded it — and a geometry
+ * computed from an assumed row height is a geometry that is wrong the first
+ * time somebody turns their text size up.
+ */
+export function briefMapHtml(rows: MapRow[]): string {
+  if (rows.length < 2) return ''
+  return (
+    `<div class="map" data-sky="map">` +
+    `<svg class="wires" data-sky="wires" aria-hidden="true"></svg>` +
+    rows
+      .map(
+        (r, i) =>
+          `<button class="mnode${r.done ? ' done' : ''}${r.blocked ? ' waiting' : ''}" ` +
+          `type="button" data-id="${esc(r.id)}" data-i="${i}" aria-expanded="false">` +
+          `<span class="dot" aria-hidden="true"></span>` +
+          `<span class="t"></span>` +
+          (r.dots ? `<span class="e${r.guessed ? ' guessed' : ''}"></span>` : '') +
+          `<span class="w" hidden></span>` +
+          `</button>`,
+      )
+      .join('') +
+    `</div>`
+  )
+}
+
 export function briefHtml(
   md: string,
   sources: { title: string; url: string }[],
   /** Live rows to slot in ahead of the sources — see whatToDoNext. */
   extra = '',
+  /*
+   * The map, if there is one to draw.
+   *
+   * When it is here it *replaces* the numbered steps rather than joining them:
+   * it carries everything the list did plus the effort and the dependencies the
+   * list never showed, so keeping both would make the page longer, which is the
+   * opposite of the complaint. It goes in where the first numbered line was, so
+   * it lands under whatever heading the brief gave that section without this
+   * having to match on the words.
+   */
+  map = '',
 ): string {
   // **lead** — the rest, which is the one bit of inline markup it uses
   const inline = (t: string) =>
@@ -323,13 +390,26 @@ export function briefHtml(
       // a source list is rendered from the sources array instead, with links
       if (/^- \[.+\]\(.+\)$/.test(line)) continue
       const l = lead(line.slice(2))
+      /*
+       * A bullet with no bold lead is not a point-and-reason — it is a
+       * watch-out, written as a plain sentence up to 220 characters long, and
+       * it was set as an unmarked run of body text indistinguishable from the
+       * reasons above it. `note` is what makes it a caveat you can see is a
+       * caveat: one marker, two lines, and the rest behind a tap.
+       */
       out.push(
         l
           ? `<div class="a"><div class="h">${l.head}</div>${l.why ? `<div class="d">${l.why}</div>` : ''}</div>`
-          : `<div class="a">${inline(line.slice(2))}</div>`,
+          : `<div class="a note">${inline(line.slice(2))}</div>`,
       )
     } else if (/^\d+\.\s/.test(line)) {
       n++
+      // The map says all of this and says the two things the list could not.
+      // First numbered line is where it goes; the rest are dropped.
+      if (map) {
+        if (n === 1) out.push(map)
+        continue
+      }
       const body = line.replace(/^\d+\.\s*/, '')
       const l = lead(body)
       out.push(
@@ -341,6 +421,18 @@ export function briefHtml(
       out.push(`<div class="a">${inline(line)}</div>`)
     }
   }
+  /*
+   * …and if the write-up had no numbered steps in it, the map still goes in.
+   *
+   * It is slotted in where the first numbered line was, so that it lands under
+   * whatever heading that section had without matching on the words. But a
+   * brief is not obliged to have that section — `deepen` can come back with
+   * findings and no sequence, and an older one may have been written before the
+   * steps existed — and in that case the loop above never reaches a numbered
+   * line, so the map was silently dropped while the graph it draws was sitting
+   * right there.
+   */
+  if (map && !out.includes(map)) out.push(map)
   // Before the sources, after the reading: what you might actually do about
   // any of it. A brief that ends in a bibliography is a document; a brief that
   // ends in a button is the agent finishing the job it started.
@@ -3582,6 +3674,68 @@ function mountSky(root: HTMLDivElement) {
       pageN.textContent = when ? `found ${when}` : ''
       pageA.style.display = 'block'
       /*
+       * The wires, from where the dots actually landed.
+       *
+       * Not from an assumed row height. A step's title wraps differently at a
+       * different text size, unfolding a reason makes its row taller, and a
+       * geometry computed from a constant is wrong the first time either
+       * happens. It reads the elements and draws between them.
+       *
+       * Held in the closure rather than passed around because the tap handlers
+       * on each node need it too — unfolding a row moves every row under it.
+       */
+      let wireShape: ReturnType<typeof briefMap> | null = null
+      function paintWires(shape?: ReturnType<typeof briefMap>) {
+        if (shape) wireShape = shape
+        const sh = wireShape
+        const wrap = pageA.querySelector('[data-sky="map"]') as HTMLElement | null
+        const svg = pageA.querySelector('[data-sky="wires"]') as SVGSVGElement | null
+        if (!sh || !wrap || !svg) return
+        const box = wrap.getBoundingClientRect()
+        if (!box.height) return
+        // where each dot sits, in the wrapper's own coordinates
+        const at = new Map<string, number>()
+        for (const el of [...wrap.querySelectorAll('.mnode')] as HTMLElement[]) {
+          const dot = el.querySelector('.dot') as HTMLElement | null
+          if (!dot) continue
+          const d = dot.getBoundingClientRect()
+          at.set(el.dataset.id as string, d.top - box.top + d.height / 2)
+        }
+        svg.setAttribute('viewBox', `0 0 ${Math.round(box.width)} ${Math.round(box.height)}`)
+        svg.setAttribute('width', String(Math.round(box.width)))
+        svg.setAttribute('height', String(Math.round(box.height)))
+        // the gutter's centre line — the same 14px the dot is inset by
+        const X = 14
+        const bits: string[] = []
+        for (const e of sh.edges) {
+          const a = at.get(e.from)
+          const b = at.get(e.to)
+          if (a === undefined || b === undefined) continue
+          if (e.kind === 'spine') {
+            bits.push(`<line class="spine" x1="${X}" y1="${a}" x2="${X}" y2="${b}" />`)
+          } else {
+            /*
+             * A dependency the sequence does not already carry, bowed out into
+             * the gutter so it is visibly not the spine. Out to the left, where
+             * there is nothing to collide with — bowing right would cross the
+             * words, which is the one thing a diagram on a phone must not do.
+             *
+             * The bow grows with the distance it spans, so a step waiting on
+             * something six rows back reads as a longer reach than one waiting
+             * on the row above it.
+             */
+            const span = Math.abs(b - a)
+            const out = Math.max(5, Math.min(11, span / 12))
+            bits.push(
+              `<path class="branch" d="M ${X} ${a} C ${X - out} ${a + (b - a) * 0.25}, ` +
+                `${X - out} ${a + (b - a) * 0.75}, ${X} ${b}" />`,
+            )
+          }
+        }
+        svg.innerHTML = bits.join('')
+      }
+
+      /*
        * …and what to do about it.
        *
        * ⚡ goes away for the best part of a minute, comes back with a good
@@ -3618,7 +3772,114 @@ function mountSky(root: HTMLDivElement) {
             )
             .join('')
         : ''
-      pageA.innerHTML = briefHtml(art?.content_md ?? '', art?.sources ?? [], todo)
+      /*
+       * The steps, from the graph rather than from the write-up.
+       *
+       * `deepen` returns each step with an effort and a `dependsOn` list, and
+       * `applyDeepen` turns every one of them into a real thought with real
+       * `depends_on` edges. Then `briefMarkdown` flattened the lot into a
+       * string that mentions neither, and this page re-parsed that string back
+       * into numbered paragraphs. The app built a graph, wrote sentences about
+       * it, and showed you the sentences.
+       *
+       * So it reads the graph. Two things follow that the markdown could never
+       * do: the effort shows, and ticking a step changes the picture — the old
+       * brief was a photograph of what the model said on the day, for ever.
+       *
+       * `branchesOf` with `withDone` so finished steps stay on the map. A path
+       * you have walked half of should show you the half you walked.
+       */
+      const kids = branchesOf(tl.t.id, true).map((b) => b.t)
+      const mrels = S().relationships
+      const mrows = planRows(kids, mrels, true)
+      const mBlocked = new Map(kids.map((k) => [k.id, mrows.get(k.id)?.blocked ?? false] as const))
+      const mDeps = waitingOn(new Map(kids.map((k) => [k.id, k] as const)), mrels)
+      const shape = briefMap(
+        kids.map((k) => k.id),
+        mDeps,
+        new Set([...mBlocked].filter(([, b]) => b).map(([id]) => id)),
+      )
+      const mapRows: MapRow[] = worthDrawing(shape)
+        ? shape.nodes.map((nd) => {
+            const t = kids.find((k) => k.id === nd.id) as Thought
+            const r = mrows.get(nd.id)
+            return {
+              id: nd.id,
+              title: label(t),
+              dots: r?.dots ?? '',
+              guessed: r?.guessed ?? false,
+              why: r?.why ?? '',
+              done: t.status === 'done',
+              blocked: nd.blocked,
+              waits: r?.waits ?? '',
+            }
+          })
+        : []
+      pageA.innerHTML = briefHtml(
+        art?.content_md ?? '',
+        art?.sources ?? [],
+        todo,
+        briefMapHtml(mapRows),
+      )
+      // …and the words go in as text, never as markup. Same rule as everywhere
+      // else on this page: these are the model's sentences and the user's.
+      ;[...pageA.querySelectorAll('.mnode')].forEach((el, i) => {
+        const r = mapRows[i]
+        if (!r) return
+        ;(el.querySelector('.t') as HTMLElement).textContent = r.title
+        const e = el.querySelector('.e') as HTMLElement | null
+        if (e) {
+          e.textContent = r.dots
+          e.setAttribute(
+            'aria-label',
+            r.guessed ? 'never sized — counted as 2' : `${r.dots.length} of 5 for size`,
+          )
+        }
+        const w = el.querySelector('.w') as HTMLElement
+        // What it is waiting on comes first: on a blocked step that is the only
+        // useful thing to read, because the reason it exists is not actionable
+        // until the thing in front of it is done.
+        w.textContent = [r.waits, r.why].filter(Boolean).join(' — ')
+        el.setAttribute(
+          'aria-label',
+          `${r.title}${r.done ? ', finished' : r.blocked ? `, ${r.waits}` : ''}`,
+        )
+        if (!w.textContent) el.setAttribute('aria-disabled', 'true')
+        el.addEventListener('click', (ev) => {
+          ev.stopPropagation()
+          if (!w.textContent) return
+          const open = el.getAttribute('aria-expanded') === 'true'
+          el.setAttribute('aria-expanded', String(!open))
+          w.hidden = open
+          // the rows just changed height, so the wires between them are wrong
+          paintWires()
+        })
+      })
+      /*
+       * …and the clamped ones open on a tap.
+       *
+       * Only the ones that are actually cut off get the affordance — `.more` is
+       * decided by measurement, not by guessing at a character count, because
+       * whether two lines is enough depends on the font, the width and the
+       * reader's own text size. A "more" on something already fully visible is
+       * a lie you can see.
+       */
+      requestAnimationFrame(() => {
+        for (const el of [...pageA.querySelectorAll('.a')] as HTMLElement[]) {
+          const inner = (el.querySelector('.d') as HTMLElement | null) ?? (el.classList.contains('note') ? el : null)
+          if (!inner || inner.scrollHeight <= inner.clientHeight + 1) continue
+          el.classList.add('more')
+          el.addEventListener('click', () => {
+            el.classList.toggle('open')
+            // the findings sit above the map, so opening one moves every dot
+            paintWires()
+          })
+        }
+      })
+      // Drawn from where the dots actually landed, not from an assumed row
+      // height — a row wraps differently at another text size, and a geometry
+      // that assumes otherwise is wrong the first time somebody turns theirs up.
+      requestAnimationFrame(() => paintWires(shape))
       // textContent, always: these are the user's own words and the model's,
       // and neither belongs in innerHTML
       ;[...pageA.querySelectorAll('.todo')].forEach((row, i) => {
