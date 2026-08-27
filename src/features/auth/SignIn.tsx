@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { supabase } from '@/lib/supabase'
+import { WhereThingsGoBrief } from '@/features/settings/WhereThingsGo'
 
 type Mode = 'magic' | 'password' | 'signup' | 'reset'
 // which template sent the code the user is about to type
@@ -170,6 +171,8 @@ export function SignIn() {
           </button>
         )}
       </div>
+
+      <WhereThingsGoBrief />
     </div>
   )
 }

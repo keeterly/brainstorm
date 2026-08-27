@@ -90,9 +90,19 @@ export function totalCap(v = process.env.AI_TOTAL_USD_CAP): number | null {
  *
  * Read with the *user's own* token. They may select the invite they redeemed
  * and nothing else (see migration 0008), so this cannot be used to enumerate
- * anybody else's, and — the part that matters — they cannot UPDATE it. A cap
- * you can raise yourself is not a cap, which is exactly why this does not live
- * on `profiles`, where the owner has `for all`.
+ * anybody else's, and — the part that matters — they cannot UPDATE it (0009
+ * takes the privilege away outright). A cap you can raise yourself is not a
+ * cap, which is exactly why this does not live on `profiles`, where the owner
+ * has `for all`.
+ *
+ * `userId` rather than `used_by=not.is.null`, which is what this asked first
+ * and is wrong for exactly one person: whoever minted the code. Two policies
+ * match an invite — the redeemer's, and `read my own invites` — so the moment
+ * a tester used a code, the owner's own lookup came back holding *the tester's
+ * row* and `capWithInvite` quietly dropped the owner's day from six dollars to
+ * one fifty. Ask about yourself and it cannot happen. The `order` is for the
+ * case that should not arise but would be silent if it did: two invites
+ * redeemed by one account, of which the latest is the one that counts.
  */
 export interface Invite {
   code: string
@@ -100,10 +110,11 @@ export interface Invite {
   expires_at: string | null
 }
 
-export async function inviteFor(userToken: string): Promise<Invite | null> {
+export async function inviteFor(userToken: string, userId: string): Promise<Invite | null> {
   const url =
     `${process.env.SUPABASE_URL}/rest/v1/invites` +
-    `?select=code,usd_cap,expires_at&used_by=not.is.null&limit=1`
+    `?select=code,usd_cap,expires_at&used_by=eq.${encodeURIComponent(userId)}` +
+    `&order=used_at.desc&limit=1`
   const r = await fetch(url, {
     headers: {
       apikey: process.env.SUPABASE_ANON_KEY || '',

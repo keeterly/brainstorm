@@ -182,7 +182,13 @@ export async function runAction<O = unknown>(
         if (ev.type === 'delta' && ev.chunk) opts.onDelta?.(ev.chunk)
         if (ev.type === 'result') result = { runId: ev.runId ?? null, output: ev.output as O }
         if (ev.type === 'error') {
-          errMsg = ev.message ?? 'AI action failed'
+          // Through the phrasebook, like the other two paths. This one did not:
+          // netlify/functions/ai.ts sends `String(e.message)` on the stream, so
+          // whatever the SDK threw — a JSON error envelope, an overloaded_error,
+          // a sentence written for a log — went on screen verbatim. The streamed
+          // actions are the long ones, which makes this the failure somebody has
+          // waited a minute to read.
+          errMsg = whyItFailed(null, ev.message ?? null)
           errRun = ev.runId ?? null
         }
       }

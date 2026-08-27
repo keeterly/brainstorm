@@ -13,7 +13,17 @@
  *
  * The cap lives on the invite rather than on the person's profile on purpose:
  * `profiles` is `for all` to its owner, so a cap kept there is a cap they can
- * raise. Nobody can write their own invite — see migration 0008.
+ * raise. Nobody can write their own invite — see migration 0009.
+ *
+ * Two halves, and only one of them is yours:
+ *
+ *   <Invites />    minting and revoking. Owner only. Until 0009 this rendered
+ *                  for everybody, and the button *worked* for everybody, which
+ *                  meant the way into the AI was: sign up, mint, paste. The
+ *                  database is what stops that now (`app_owners`); this is
+ *                  only about not showing a tester a control for handing out
+ *                  access they do not have.
+ *   <RedeemCode /> pasting the code you were given. Everybody who has not.
  */
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -43,8 +53,32 @@ function mintCode(): string {
   return `${s.slice(0, 3)}-${s.slice(3, 6)}-${s.slice(6, 9)}`
 }
 
+/*
+ * Am I the one who hands out access?
+ *
+ * A row or no row. `app_owners` is readable only where `id = auth.uid()`
+ * (migration 0009), so this asks about the asker and cannot be used to find out
+ * who else is one. `null` while we are still asking, which both callers treat
+ * as "not yet" — a card that flashes into view and then disappears is worse
+ * than one that arrives a beat late.
+ *
+ * An error counts as no. The likely cause is the migration not having been run,
+ * and hiding a card beats showing one whose button cannot work.
+ */
+function useIsOwner(): boolean | null {
+  const [owner, setOwner] = useState<boolean | null>(null)
+  useEffect(() => {
+    void (async () => {
+      const { data, error } = await supabase.from('app_owners').select('id').limit(1)
+      setOwner(!error && (data ?? []).length > 0)
+    })()
+  }, [])
+  return owner
+}
+
 export default function Invites() {
   const [rows, setRows] = useState<Invite[] | null>(null)
+  const owner = useIsOwner()
   const [busy, setBusy] = useState(false)
   const [said, setSaid] = useState('')
   const [note, setNote] = useState('')
@@ -62,8 +96,8 @@ export default function Invites() {
   }, [])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    if (owner) void load()
+  }, [owner, load])
 
   async function mint() {
     setBusy(true)
@@ -118,6 +152,9 @@ export default function Invites() {
 
   const live = rows?.filter((r) => !r.used_by) ?? []
   const taken = rows?.filter((r) => r.used_by) ?? []
+
+  // …and nothing at all for anybody else, including while we are still asking.
+  if (!owner) return null
 
   return (
     <section className="card" style={{ marginBottom: 16 }}>
@@ -217,13 +254,25 @@ export default function Invites() {
  */
 export function RedeemCode() {
   const [has, setHas] = useState<boolean | null>(null)
+  const owner = useIsOwner()
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [said, setSaid] = useState('')
 
   useEffect(() => {
     void (async () => {
-      const { data, error } = await supabase.from('invites').select('code').not('used_by', 'is', null).limit(1)
+      const { data: s } = await supabase.auth.getSession()
+      const me = s.session?.user?.id
+      if (!me) return
+      /*
+       * `used_by = me`, not `used_by is not null`.
+       *
+       * Two policies can hand back a row here — the one you redeemed, and the
+       * ones you minted (0009) — so "any invite with somebody on it" is the
+       * wrong question for exactly one person: whoever hands out the codes
+       * would be answering it about their testers.
+       */
+      const { data, error } = await supabase.from('invites').select('code').eq('used_by', me).limit(1)
       // before the migration is applied there is no table; say nothing rather
       // than showing a box that cannot work
       if (error) setHas(true)
@@ -231,7 +280,11 @@ export function RedeemCode() {
     })()
   }, [])
 
-  if (has !== false) return null
+  // …and not to the person handing the codes out, who is on the email list and
+  // will never redeem one. Without this they get "Have a code?" sitting on top
+  // of their own mint card for ever — which is what asking `used_by is not
+  // null` used to hide by accident, for the wrong reason.
+  if (has !== false || owner !== false) return null
 
   return (
     <section className="card" style={{ marginBottom: 16 }}>

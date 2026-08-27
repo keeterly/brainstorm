@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { capForUser, capWithInvite, invitesRule, letIn, onTheList, totalCap } from '../_lib/who'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { capForUser, capWithInvite, inviteFor, invitesRule, letIn, onTheList, totalCap } from '../_lib/who'
 
 // Handing the app to a few people on their own phones without handing them the
 // bill. Three ceilings, because they fail in different directions.
@@ -149,5 +149,66 @@ describe('what an invite lets you spend', () => {
     for (const bad of [0, -5, Number.NaN]) {
       expect(capWithInvite('them@x.com', { code: 'a', usd_cap: bad, expires_at: null }, 6)).toBe(6)
     }
+  })
+})
+
+/*
+ * …and asking about the right person.
+ *
+ * This is the one that was wrong in a way no unit test would have caught by
+ * accident, because it only misfires for a single account: the one that minted
+ * the codes.
+ */
+describe('looking up the invite somebody redeemed', () => {
+  const ME = 'e2a60e03-0000-0000-0000-000000000001'
+  let asked: string[] = []
+  const reply = (status: number, body: unknown) =>
+    vi.fn(async (url: string) => {
+      asked.push(url)
+      return { ok: status < 400, status, json: async () => body } as unknown as Response
+    })
+
+  beforeEach(() => {
+    asked = []
+    process.env.SUPABASE_URL = 'https://db.test'
+    process.env.SUPABASE_ANON_KEY = 'anon'
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('asks about the caller, not about anybody who has redeemed anything', async () => {
+    /*
+     * It asked `used_by=not.is.null` and let RLS do the scoping. Two policies
+     * match an invite, though — the redeemer's and the minter's — so the
+     * moment a tester used a code, the owner's own lookup came back holding
+     * the tester's row and quietly took the owner's day down to the tester's
+     * cap. Ask about yourself and it cannot happen.
+     */
+    vi.stubGlobal('fetch', reply(200, []))
+    await inviteFor('tok', ME)
+    expect(asked).toHaveLength(1)
+    expect(asked[0]).toContain(`used_by=eq.${ME}`)
+    expect(asked[0]).not.toContain('not.is.null')
+    // and newest first, for the case that should not arise but would be silent
+    expect(asked[0]).toContain('order=used_at.desc')
+  })
+
+  it('returns the invite when there is one', async () => {
+    vi.stubGlobal('fetch', reply(200, [{ code: 'ABC', usd_cap: 1.5, expires_at: null }]))
+    expect(await inviteFor('tok', ME)).toEqual({ code: 'ABC', usd_cap: 1.5, expires_at: null })
+  })
+
+  it('treats one that has run out as no invite at all', async () => {
+    const gone = new Date(Date.now() - 60_000).toISOString()
+    vi.stubGlobal('fetch', reply(200, [{ code: 'ABC', usd_cap: 1.5, expires_at: gone }]))
+    expect(await inviteFor('tok', ME)).toBeNull()
+  })
+
+  it('throws rather than saying "no invite" when it could not ask', async () => {
+    // "no invite" and "could not ask" are different answers, and the gate has
+    // to fail closed on the second one — see allowRun
+    vi.stubGlobal('fetch', reply(500, {}))
+    await expect(inviteFor('tok', ME)).rejects.toThrow(/invite read failed/)
   })
 })

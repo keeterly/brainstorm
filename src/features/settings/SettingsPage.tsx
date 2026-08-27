@@ -16,6 +16,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import Invites, { RedeemCode } from './Invites'
+import { WhereThingsGo } from './WhereThingsGo'
 import { useGraph } from '@/store/graph'
 import { exportMarkdown } from '@/domain/export-markdown'
 import { clearSnapshot } from '@/lib/idb'
@@ -319,6 +320,8 @@ export default function SettingsPage() {
       <RedeemCode />
 
       <Invites />
+
+      <WhereThingsGo />
 
       <AccountSection />
 

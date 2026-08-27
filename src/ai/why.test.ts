@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { whyItFailed } from './why'
 
@@ -50,5 +51,35 @@ describe('telling someone it did not work', () => {
     ] as [string | null, string | null][]) {
       expect(whyItFailed(s, e).length).toBeGreaterThan(10)
     }
+  })
+})
+
+/*
+ * …and that it is actually reached.
+ *
+ * The phrasebook was applied on two of the three ways a run can fail. The
+ * streamed one — which is every long action, the ones somebody has waited a
+ * minute for — took the SSE `message` verbatim and threw it, so whatever
+ * netlify/functions/ai.ts had stringified out of the SDK went on screen: a
+ * JSON error envelope, an `overloaded_error`, a sentence written for a log.
+ *
+ * A source pin rather than a mocked stream, because what went wrong was one
+ * branch being forgotten, and this is the shape of test that notices a branch
+ * being forgotten again.
+ */
+describe('every way a run can fail goes through it', () => {
+  const src = readFileSync('src/ai/client.ts', 'utf8')
+
+  it('is applied on the streamed path', () => {
+    expect(src).toMatch(/errMsg = whyItFailed\(/)
+  })
+
+  it('does not put a raw stream message on screen', () => {
+    expect(src).not.toMatch(/errMsg = ev\.message/)
+  })
+
+  it('is applied on the buffered path too', () => {
+    // three call sites: the finished-run branch, the stream, and the 5xx body
+    expect(src.match(/whyItFailed\(/g) ?? []).toHaveLength(3)
   })
 })

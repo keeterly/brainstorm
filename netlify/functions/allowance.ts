@@ -12,7 +12,16 @@
 import { corsHeaders, originAllowed } from './_lib/guard'
 import { verifyUser } from './_lib/auth'
 import { spentToday, spentTodayEverybody } from './_lib/runs'
-import { capForUser, onTheList, totalCap } from './_lib/who'
+import {
+  capForUser,
+  capWithInvite,
+  inviteFor,
+  invitesRule,
+  letIn,
+  onTheList,
+  totalCap,
+  type Invite,
+} from './_lib/who'
 import { DAILY_USD_CAP } from '../../shared/ai/pricing'
 
 const json = (status: number, body: unknown, cors: Record<string, string>) =>
@@ -46,8 +55,38 @@ export default async (req: Request): Promise<Response> => {
   const user = await verifyUser(req)
   if (!user) return json(401, { error: 'Sign in first' }, cors)
 
-  const allowed = onTheList(user.email)
-  const capUSD = capForUser(user.email, DAILY_USD_CAP)
+  /*
+   * The same decision the gate makes, made the same way.
+   *
+   * It was not. This asked `onTheList` and `capForUser` and knew nothing about
+   * invites, while allowRun (see _lib/runs.ts) asked `letIn` and
+   * `capWithInvite` — so with AI_INVITES on, the two disagreed in both
+   * directions at once. A tester who had not redeemed anything was told
+   * `allowed: true` and then had every action refused with no explanation on
+   * the page that exists to explain; and one who *had* redeemed was quoted the
+   * deployment's $6 rather than the $1.50 their code actually bought. Worse,
+   * the one pointer in the app to the redeem box is drawn on `!allowed`, so it
+   * never appeared in the exact configuration it was written for.
+   *
+   * Four helpers, one source of truth, and if the rule ever changes it changes
+   * in who.ts for both of them.
+   */
+  let invite: Invite | null = null
+  // Whether we managed to ask at all. The gate fails *closed* on this and
+  // should; a report must not, or a tester whose invite could not be read this
+  // second is told they are not on the list — which is both wrong and the most
+  // discouraging thing this page can say. So we fall back to the answer that
+  // does not involve invites and let the action itself be the authority.
+  let asked = true
+  if (invitesRule()) {
+    try {
+      invite = await inviteFor(user.token, user.id)
+    } catch {
+      asked = false
+    }
+  }
+  const allowed = asked ? letIn(user.email, invite) : onTheList(user.email)
+  const capUSD = asked ? capWithInvite(user.email, invite, DAILY_USD_CAP) : capForUser(user.email, DAILY_USD_CAP)
 
   let spentUSD = 0
   let runs = 0

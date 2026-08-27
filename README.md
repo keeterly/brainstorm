@@ -30,8 +30,21 @@ netlify dev                # serves Vite + /api/ai with your .env
 
 Database: create a Supabase project, then apply **every** file in
 `supabase/migrations/` in order (`supabase db push`, or paste them into the SQL editor one
-after another). There are seven; `0001_init.sql` alone is not enough — `0007` in particular
-creates the function that backs the global spend cap.
+after another). There are nine, and `0001_init.sql` alone is not enough. The last three are
+the ones that stop a guest list being decorative: `0007` creates the function behind the
+global spend cap, `0008` makes the run ledger append-only and adds the invite table, and
+`0009` is what makes an invite mean anything — without it, anybody signed in can mint
+themselves a code and redeem it on the same screen.
+
+`0009` seeds `app_owners` with the oldest account in `auth.users`, which is you if you
+applied it after signing in and nobody if you applied it before. Nobody can mint until
+there is a row, and there is no way to add one through the API on purpose — put yourself
+there from the SQL editor:
+
+```sql
+insert into public.app_owners (id)
+select id from auth.users where email = 'you@example.com';
+```
 
 ## Scripts
 
@@ -57,7 +70,10 @@ reformats whole files and breaks a few hundred source-pin assertions.
 3. **Set the spend controls before the URL leaves your hands.** All of them are optional and
    all of them default to wide open: with none set, anybody who signs up may spend your API
    budget, and there is no ceiling over the day. See `.env.example` for what each does —
-   `AI_ALLOWED_EMAILS`, `AI_OWNER_EMAILS`, `AI_GUEST_USD_CAP`, `AI_TOTAL_USD_CAP`.
+   `AI_ALLOWED_EMAILS`, `AI_OWNER_EMAILS`, `AI_GUEST_USD_CAP`, `AI_TOTAL_USD_CAP`, and
+   `AI_INVITES` if you want to hand out codes instead of editing config per tester.
+   None of these bound the month; only a spend limit in the Anthropic Console does, and it
+   is the one ceiling that does not depend on this app's own code being right.
 4. Optional, for push notifications — all four, or none: `VAPID_PUBLIC_KEY`,
    `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, and the client-side `VITE_VAPID_PUBLIC_KEY`, which
    must match the public one. Push is simply unavailable if they are unset.

@@ -167,7 +167,7 @@ export async function allowRun(
   let invite: Invite | null = null
   if (invitesRule()) {
     try {
-      invite = await inviteFor(userToken)
+      invite = await inviteFor(userToken, userId)
     } catch {
       return { ok: false, status: 503, error: 'Could not check the guest list. Try again in a moment.' }
     }
