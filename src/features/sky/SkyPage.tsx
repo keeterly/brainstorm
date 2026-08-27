@@ -4386,19 +4386,51 @@ function mountSky(root: HTMLDivElement) {
        * how you put away something you did not mean to.
        */
       const finBtn = pageA.querySelector('.ctl.fin') as HTMLButtonElement | null
-      let hidingDone = false
+      /*
+       * Two facts, not one flag.
+       *
+       * This was a single `hidingDone`, and `picking` wrote to it — so entering
+       * Select and leaving again *consumed* your choice and left the list
+       * unfolded for the rest of the sitting. Your preference and the mode's
+       * override are different things and only one of them is yours.
+       */
+      let showDone = false
+      /*
+       * …and what you ticked since this page opened.
+       *
+       * Finished work is folded away on arrival, which is the whole point — but
+       * the page has a standing rule that a row you just ticked strikes through
+       * under your finger rather than vanishing out from under it, and a fold
+       * that swallows the tick you are still making breaks it. These stay,
+       * sunk to the bottom, until you leave. Open the group tomorrow and they
+       * are away with the rest.
+       */
+      const justTicked = new Set<string>()
       const refreshFin = () => {
         if (!finBtn) return
-        const n = [...pageA.querySelectorAll('.row.ticked')].length
+        const ticked = [...pageA.querySelectorAll('.row.ticked')] as HTMLElement[]
+        // Choosing rows you cannot see is how you put away something you did
+        // not mean to, so the picker forces it open — without spending the
+        // choice, which is what the old single flag got wrong.
+        const folded = !showDone && !picking
+        pageA.classList.toggle('nodone', folded)
+        /*
+         * The number says what the tap will do.
+         *
+         * Folded, that is only what the fold actually covers — the ones you
+         * ticked a moment ago are already on screen, so counting them would
+         * promise to reveal rows that are not hidden. It also means ticking
+         * something does not make the number jump, which it otherwise would
+         * while nothing appeared to change.
+         */
+        const n = folded ? ticked.filter((r) => !r.classList.contains('just')).length : ticked.length
         finBtn.hidden = !n || picking
-        if (picking) hidingDone = false
-        pageA.classList.toggle('nodone', hidingDone && !picking)
-        finBtn.textContent = hidingDone ? `show ${n} done` : `hide ${n} done`
-        finBtn.setAttribute('aria-pressed', String(hidingDone))
+        finBtn.textContent = folded ? `show ${n} done` : `hide ${n} done`
+        finBtn.setAttribute('aria-pressed', String(folded))
       }
       finBtn?.addEventListener('click', (e) => {
         e.stopPropagation()
-        hidingDone = !hidingDone
+        showDone = !showDone
         refreshFin()
       })
       // …and its first count is taken after the rows are drawn, not here: the
@@ -4601,6 +4633,12 @@ function mountSky(root: HTMLDivElement) {
           const nowDone = S().thoughts.find((t) => t.id === m.id)?.status === 'done'
           tick.setAttribute('aria-checked', String(nowDone))
           row.classList.toggle('ticked', nowDone)
+          // yours, this sitting — see justTicked. Un-ticking gives it back, so
+          // a row you ticked and thought better of does not linger as an
+          // exception to a fold it is no longer part of.
+          if (nowDone) justTicked.add(m.id)
+          else justTicked.delete(m.id)
+          row.classList.toggle('just', justTicked.has(m.id))
           nameTick(tick)
           // one line, or back to its full height — measured after the class
           // flips, because that is what the measurement now depends on

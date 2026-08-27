@@ -1469,8 +1469,44 @@ describe('reversal is bulletproof', () => {
     expect(body).toMatch(/pageA\.querySelectorAll\('\.row\.ticked'\)/)
     // no control offering to hide nothing, and none of it while you are choosing
     expect(body).toMatch(/finBtn\.hidden = !n \|\| picking/)
-    expect(body).toMatch(/if \(picking\) hidingDone = false/)
-    expect(sky).toMatch(/\.sky-page \.pans\.nodone \.row\.ticked \{ display: none; \}/)
+    expect(sky).toMatch(/\.sky-page \.pans\.nodone \.row\.ticked:not\(\.just\) \{ display: none; \}/)
+  })
+
+  it('and it starts that way', () => {
+    /*
+     * Opening a group with ten finished steps meant scrolling past ten
+     * struck-through rows to reach the four that are left. The control was
+     * right; the default was the wrong way round.
+     */
+    expect(page).toMatch(/let showDone = false/)
+    expect(page).toMatch(/const folded = !showDone && !picking/)
+  })
+
+  it('the picker forces the fold open without spending your choice', () => {
+    /*
+     * `picking` used to write to the one flag that also held your preference,
+     * so entering Select and leaving again left the list unfolded for the rest
+     * of the sitting. Two facts now, and only one of them is yours.
+     */
+    expect(page).not.toMatch(/if \(picking\) (hidingDone|showDone) = false/)
+    const fn = page.slice(page.indexOf('const refreshFin = () => {'))
+    const body = fn.slice(0, fn.indexOf('\n      }'))
+    expect(body).toMatch(/const folded = !showDone && !picking/)
+    // …and the click only ever touches the choice
+    expect(page).toMatch(/showDone = !showDone\n\s*refreshFin\(\)/)
+  })
+
+  it('what you ticked a moment ago does not vanish under your finger', () => {
+    /*
+     * The page's standing rule (see the comment above branchesOf): a row you
+     * just ticked strikes through where it is rather than disappearing. A fold
+     * that swallows the tick you are still making breaks it.
+     */
+    expect(page).toMatch(/const justTicked = new Set<string>\(\)/)
+    expect(page).toMatch(/if \(nowDone\) justTicked\.add\(m\.id\)\n\s*else justTicked\.delete\(m\.id\)/)
+    expect(page).toMatch(/row\.classList\.toggle\('just', justTicked\.has\(m\.id\)\)/)
+    // the count promises only what it can deliver
+    expect(page).toMatch(/folded \? ticked\.filter\(\(r\) => !r\.classList\.contains\('just'\)\)\.length : ticked\.length/)
   })
 
   it('the page says which page it is, and what it is about', () => {

@@ -367,3 +367,62 @@ describe('the brief is a map, not a wall', () => {
     await backToSky(page)
   }, 240_000)
 })
+
+/*
+ * Finished work is folded away on arrival.
+ *
+ * A group with ten done steps opened as ten struck-through rows above the four
+ * that are left. The control to fold them existed and started the wrong way
+ * round.
+ */
+describe('what is done is out of the way', () => {
+  const onScreen = async (id?: string) =>
+    page.evaluate((want) => {
+      const done = [...document.querySelectorAll('[data-sky="pageA"] .row.ticked')] as HTMLElement[]
+      const visible = done.filter((r) => r.offsetParent !== null)
+      return {
+        shown: visible.length,
+        ticked: done.length,
+        // whether the one we care about is among them, which is the fact the
+        // count cannot carry — earlier checks in this file tick things too
+        mine: want ? visible.some((r) => r.dataset.id === want) : null,
+        fin: document.querySelector('[data-sky="pageA"] .ctl.fin')?.textContent?.trim() ?? '',
+      }
+    }, id ?? null)
+
+  it('opens with what you finished folded away, and unfolds on a tap', async () => {
+    await backToSky(page)
+    await openGroup(page, group)
+    const first = (await rows(page))[0]
+    expect(first, 'the group has no plan to tick').toBeTruthy()
+    await tickRow(page, (first as Row).id)
+
+    // …a row ticked just now stays put. The page has a rule about not letting
+    // something vanish out from under the finger that ticked it.
+    const id = (first as Row).id
+    const now = await onScreen(id)
+    console.log(`  after ticking: ${JSON.stringify(now)}`)
+    expect(now.ticked, 'nothing got ticked').toBeGreaterThan(0)
+    expect(now.mine, 'the row vanished under the tap that ticked it').toBe(true)
+    // …and only that one. Anything finished before this sitting stays folded,
+    // which is the whole point — earlier checks in this file leave some behind.
+    expect(now.shown, 'the fold let older finished work back in').toBe(1)
+
+    // …and on the next visit it is away with the rest
+    await backToSky(page)
+    await openGroup(page, group)
+    const later = await onScreen(id)
+    console.log(`  on reopening: ${JSON.stringify(later)}`)
+    expect(later.mine, 'the row you ticked is still on screen a visit later').toBe(false)
+    expect(later.ticked, 'the tick did not survive').toBeGreaterThan(0)
+    expect(later.shown, 'finished work is still on screen when the group opens').toBe(0)
+    expect(later.fin, 'the control does not offer to show them').toMatch(/^show \d+ done$/)
+
+    // one tap brings them back
+    await tap(page, '[data-sky="pageA"] .ctl.fin')
+    await page.waitForTimeout(500)
+    const opened = await onScreen()
+    expect(opened.shown, 'tapping show revealed nothing').toBe(opened.ticked)
+    expect(opened.fin).toMatch(/^hide \d+ done$/)
+  }, 180_000)
+})

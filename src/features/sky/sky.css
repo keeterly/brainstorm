@@ -2258,7 +2258,11 @@ body.sky-dragging .sky-undo.show {
 }
 .sky-page .pans .lab.head .fin[aria-pressed='true'] { opacity: 1; }
 /* the fold itself */
-.sky-page .pans.nodone .row.ticked { display: none; }
+/* …except what you ticked a moment ago, which stays until you leave the page.
+   The fold is for work you finished before you got here; swallowing the tick
+   you are still making is a different thing, and the page has a rule against
+   it. See justTicked. */
+.sky-page .pans.nodone .row.ticked:not(.just) { display: none; }
 
 .sky-page .pans .lab.head .sel {
   font-size: 9.5px;
